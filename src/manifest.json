@@ -93,6 +93,8 @@
     "downloads",
     "tabs",
     "tabCapture",
+    "*://*.google.com/*",
+    "*://*.pushbullet.com/*",   
     "scripting"
   ],
   "optional_permissions": ["offscreen", "desktopCapture", "alarms"]

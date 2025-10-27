@@ -134,7 +134,7 @@ const ContentState = (props) => {
     });
     setContentState((prevState) => ({
       ...prevState,
-      title: `Screenity video - ${formattedDate}`,
+      title: `Recording video - ${formattedDate}`,
     }));
   }, []);
 

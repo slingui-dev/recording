@@ -5,6 +5,9 @@ import JSZip from "jszip";
 
 import { ReactSVG } from "react-svg";
 
+import { login, logout, getUser } from "../../../../utils/slingui-auth";
+import { upload, UploadStrategyPathEnum } from "../../../../utils/slingui-upload";
+
 const EXT_URL =
   "chrome-extension://" + chrome.i18n.getMessage("@@extension_id") + "/assets/";
 
@@ -17,6 +20,8 @@ import { ContentStateContext } from "../../context/ContentState"; // Import the 
 
 const RightPanel = () => {
   const [contentState, setContentState] = useContext(ContentStateContext); // Access the ContentState context
+  const [slingUser, setSlingUser] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
   const contentStateRef = useRef(contentState);
   const consoleErrorRef = useRef([]);
 
@@ -25,6 +30,17 @@ const RightPanel = () => {
     console.error = (error) => {
       consoleErrorRef.current.push(error);
     };
+
+    const checkUser = async () => {
+      const user = await getUser();
+      if (user && !user.expired) {
+        setSlingUser(user);
+      }
+    };
+    checkUser();
+
+
+
   }, []);
 
   useEffect(() => {
@@ -489,6 +505,17 @@ const RightPanel = () => {
             <div className={styles.sectionTitle}>
               {chrome.i18n.getMessage("sandboxSaveTitle")}
             </div>
+            {slingUser ? (
+              <div
+                className={styles.buttonLogout}
+                onClick={async () => {
+                  await logout();
+                  setSlingUser(null);
+                }}
+              >
+                Sair da SlingUI ({slingUser.profile.email})
+              </div>
+            ) : null}
             {contentState.driveEnabled && (
               <div
                 className={styles.buttonLogout}
@@ -500,6 +527,87 @@ const RightPanel = () => {
               </div>
             )}
             <div className={styles.buttonWrap}>
+            {slingUser ? (
+              <div
+                role="button"
+                className={styles.button}
+                onClick={async () => {
+                  const blobToUpload = (contentState.mp4ready && contentState.blob) ? contentState.blob : contentState.webm;
+                  console.log('AAA');
+                  
+                  if (!blobToUpload) {
+                    console.error("No blob available to upload");
+                    return;
+                  }
+                  setIsUploading(true);
+                  try {
+                  console.log('BBB');
+
+                    const result = await upload(
+                      {
+                        contentType: blobToUpload.type.split('/')[1].split(';')[0],
+                        strategy: UploadStrategyPathEnum.RECORDING,
+                      },
+                      blobToUpload,
+                      slingUser.access_token
+                    );
+                    console.log("Upload successful", result);
+                    // Maybe open the URL of the uploaded file
+                    window.open(result.urlFile, "_blank");
+                  } catch (error) {
+                    console.error("Upload failed", error);
+                  } finally {
+                    setIsUploading(false);
+                  }
+                }}
+                disabled={isUploading || (!contentState.blob && !contentState.webm)}
+              >
+                <div className={styles.buttonLeft}>
+                  <ReactSVG src={EXT_URL + "editor/icons/drive.svg"} />
+                </div>
+                <div className={styles.buttonMiddle}>
+                  <div className={styles.buttonTitle}>
+                    {isUploading
+                      ? "Salvando..."
+                      : "Salvar na Slingui"}
+                  </div>
+                  <div className={styles.buttonDescription}>
+                    {contentState.mp4ready
+                      ? "Salvar o vídeo MP4 na sua conta Slingui"
+                      : "Salvar o vídeo WEBM na sua conta Slingui"}
+                  </div>
+                </div>
+                <div className={styles.buttonRight}>
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
+                </div>
+              </div>
+            ) : (
+              <div
+                role="button"
+                className={styles.button}
+                onClick={async () => {
+                  try {
+                    const user = await login();
+                    setSlingUser(user);
+                  } catch (error) {
+                    console.error("Login failed:", error);
+                  }
+                }}
+              >
+                <div className={styles.buttonLeft}>
+                  <ReactSVG src={EXT_URL + "editor/icons/drive.svg"} />
+                </div>
+                <div className={styles.buttonMiddle}>
+                  <div className={styles.buttonTitle}>Entrar com a SlingUI</div>
+                  <div className={styles.buttonDescription}>
+                    Salve seus vídeos na nuvem
+                  </div>
+                </div>
+                <div className={styles.buttonRight}>
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
+                </div>
+              </div>
+            )}
               <div
                 role="button"
                 className={styles.button}

@@ -50,7 +50,7 @@ const PopupContainer = (props) => {
   const recordTabRef = useRef(null);
   const videoTabRef = useRef(null);
   const pillRef = useRef(null);
-  const [URL, setURL] = useState("https://help.screenity.io/");
+  const [URL, setURL] = useState("https://docs.slingui.com/recording-help/");
 
   useEffect(() => {
     // Check chrome storage
@@ -65,7 +65,7 @@ const PopupContainer = (props) => {
     const locale = chrome.i18n.getMessage("@@ui_locale");
     if (!locale.includes("en")) {
       setURL(
-        `https://translate.google.com/translate?sl=en&tl=${locale}&u=https://help.screenity.io/`
+        `https://translate.google.com/translate?sl=en&tl=${locale}&u=https://docs.slingui.com/recording-help/`
       );
     }
   }, []);

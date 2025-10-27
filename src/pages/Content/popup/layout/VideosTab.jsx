@@ -14,6 +14,7 @@ import {
 
 const VideosTab = () => {
   const [URL, SetURL] = useState("https://tally.so/r/npojNV");
+  const [shortcut, setShortcut] = useState("Ctrl+D");
 
   useEffect(() => {
     const locale = chrome.i18n.getMessage("@@ui_locale");
@@ -21,6 +22,10 @@ const VideosTab = () => {
       SetURL(
         `https://translate.google.com/translate?sl=en&tl=${locale}&u=https://tally.so/r/npojNV`
       );
+    }
+
+    if (window.navigator.platform.toUpperCase().indexOf("MAC") >= 0) {
+      setShortcut("⌘+D");
     }
   }, []);
 
@@ -39,34 +44,12 @@ const VideosTab = () => {
 
   return (
     <div className="video-ui">
-      <div className="ModalSoon">
-        <div className="ModalSoonEmoji">👋</div>
-        <div className="ModalSoonTitle">
-          {chrome.i18n.getMessage("shareModalSandboxTitle")}
-        </div>
-        <div className="ModalSoonDescription">
-          {chrome.i18n.getMessage("shareModalSandboxDescription")}
-        </div>
-        <a className="ModalSoonButton" href={URL} target="_blank">
-          {chrome.i18n.getMessage("shareModalSandboxButton")}
-        </a>
-      </div>
       <Tabs.Root className="TabsRoot" defaultValue="personal">
         <Tabs.List className="TabsList" aria-label="Manage your account">
           <div className="TabsTriggerWrap">
             <Tabs.Trigger className="TabsTrigger" value="personal">
               <div className="TabsTriggerLabel">
                 <span>Personal</span>
-              </div>
-            </Tabs.Trigger>
-            <Tabs.Trigger className="TabsTrigger" value="team">
-              <div className="TabsTriggerLabel">
-                <span>Team</span>
-              </div>
-            </Tabs.Trigger>
-            <Tabs.Trigger className="TabsTrigger" value="shared">
-              <div className="TabsTriggerLabel">
-                <span>Shared</span>
               </div>
             </Tabs.Trigger>
           </div>
@@ -94,15 +77,9 @@ const VideosTab = () => {
               tabIndex="0"
             >
               <span className="main-button-label">Go to dashboard</span>
-              <span className="main-button-shortcut">Ctrl+D</span>
+              <span className="main-button-shortcut">{shortcut}</span>
             </button>
           </div>
-        </Tabs.Content>
-        <Tabs.Content className="TabsContent" value="team">
-          Temp
-        </Tabs.Content>
-        <Tabs.Content className="TabsContent" value="shared">
-          Temp
         </Tabs.Content>
       </Tabs.Root>
     </div>

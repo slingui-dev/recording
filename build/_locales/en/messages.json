@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Screenity - Screen Recorder & Annotation Tool",
+    "message": "Slingui Screen Recorder & Annotation Tool",
     "description": "Extension name"
   },
   "extDesc": {
@@ -8,11 +8,11 @@
     "description": "Extension description"
   },
   "recordTab": {
-    "message": "Record",
+    "message": "Recording",
     "description": "Record tab label on popup"
   },
   "videosTab": {
-    "message": "Your videos",
+    "message": "Your recordings",
     "description": "Videos tab label on popup"
   },
   "screenType": {

@@ -1639,19 +1639,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     createTab("https://alyssax.substack.com/", false, true);
   } else if (request.type === "open-processing-info") {
     createTab(
-      "https://help.screenity.io/editing-and-exporting/dJRFpGq56JFKC7k8zEvsqb/why-is-there-a-5-minute-limit-for-editing/ddy4e4TpbnrFJ8VoRT37tQ",
+      "https://docs.slingui.com/recording-help/editing-and-exporting/dJRFpGq56JFKC7k8zEvsqb/why-is-there-a-5-minute-limit-for-editing/ddy4e4TpbnrFJ8VoRT37tQ",
       true,
       true
     );
   } else if (request.type === "upgrade-info") {
     createTab(
-      "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9",
+      "https://docs.slingui.com/recording-help/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9",
       true,
       true
     );
   } else if (request.type === "trim-info") {
     createTab(
-      "https://help.screenity.io/editing-and-exporting/dJRFpGq56JFKC7k8zEvsqb/how-to-cut-trim-or-mute-parts-of-your-video/svNbM7YHYY717MuSWXrKXH",
+      "https://docs.slingui.com/recording-help/editing-and-exporting/dJRFpGq56JFKC7k8zEvsqb/how-to-cut-trim-or-mute-parts-of-your-video/svNbM7YHYY717MuSWXrKXH",
       true,
       true
     );
@@ -1659,7 +1659,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     createTab("https://tally.so/r/npojNV", true, true);
   } else if (request.type === "chrome-update-info") {
     createTab(
-      "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9",
+      "https://docs.slingui.com/recording-help/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9",
       true,
       true
     );
@@ -1674,10 +1674,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === "sign-out-drive") {
     handleSignOutDrive();
   } else if (request.type === "open-help") {
-    createTab("https://help.screenity.io/", true, true);
+    createTab("https://docs.slingui.com/recording-help/", true, true);
   } else if (request.type === "memory-limit-help") {
     createTab(
-      "https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/what-does-%E2%80%9Cmemory-limit-reached%E2%80%9D-mean-when-recording/8WkwHbt3puuXunYqQnyPcb",
+      "https://docs.slingui.com/recording-help/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/what-does-%E2%80%9Cmemory-limit-reached%E2%80%9D-mean-when-recording/8WkwHbt3puuXunYqQnyPcb",
       true,
       true
     );
