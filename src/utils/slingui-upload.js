@@ -6,7 +6,7 @@ export const UploadStrategyPathEnum = {
 };
 
 export async function getSignedUrl(data, token) {
-  const API_BASE = 'https://dev.api.slingui.com';
+  const API_BASE = 'https://api.slingui.com';
   const res = await fetch(`${API_BASE}/storage/upload`, {
     method: 'PUT',
     headers: {

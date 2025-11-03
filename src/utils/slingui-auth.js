@@ -1,7 +1,7 @@
 // src/utils/slingui-auth.js
 
 const config = {
-  authority: 'https://dev.api.slingui.com/auth/oidc',
+  authority: 'https://api.slingui.com/auth/oidc',
   client_id: 'screenity-extension',
   scope: 'openid profile email',
 };
@@ -79,7 +79,7 @@ export function login() {
     });
 
     const authURL = `${config.authority}/auth?${authParams.toString()}`;
-
+    console.log('Launching auth flow:', authURL);
     chrome.identity.launchWebAuthFlow({ url: authURL, interactive: true }, async (responseUrl) => {
       if (chrome.runtime.lastError || !responseUrl) {
         return reject(new Error(chrome.runtime.lastError?.message || "Authentication flow failed."));

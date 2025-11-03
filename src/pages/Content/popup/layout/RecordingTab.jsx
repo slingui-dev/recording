@@ -37,7 +37,7 @@ const RecordingTab = (props) => {
     <div className="recording-ui">
       <Tabs.Root
         className="TabsRoot"
-        defaultValue="screen"
+        defaultValue="region"
         onValueChange={onValueChange}
         value={contentState.recordingType}
       >
@@ -86,26 +86,6 @@ const RecordingTab = (props) => {
                 />
               </div>
               <span>{chrome.i18n.getMessage("cameraType")}</span>
-            </div>
-          </Tabs.Trigger>
-          <Tabs.Trigger
-            className="TabsTrigger"
-            value="mockup"
-            tabIndex={0}
-            disabled
-            style={{ pointerEvents: "none", opacity: 0.5 }}
-          >
-            <div className="TabsTriggerLabel">
-              <div className="TabsTriggerIcon">
-                <img
-                  src={
-                    contentState.recordingType === "mockup"
-                      ? MockupTabOn
-                      : MockupTabOff
-                  }
-                />
-              </div>
-              <span>{chrome.i18n.getMessage("MockupType")}</span>
             </div>
           </Tabs.Trigger>
         </Tabs.List>

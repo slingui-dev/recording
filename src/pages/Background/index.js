@@ -1682,7 +1682,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       true
     );
   } else if (request.type === "open-home") {
-    createTab("https://screenity.io/", false, true);
+    createTab("https://slingui.com/", false, true);
   } else if (request.type === "report-bug") {
     createTab(
       "https://tally.so/r/3ElpXq?version=" +

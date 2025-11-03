@@ -28,7 +28,7 @@ const PlayerNav = () => {
           aria-label="home"
           className={styles.navLeft}
         >
-          <img src={URL + "editor/logo.svg"} alt="Slingui Logo" />
+          <img src={URL + "logo.png"} alt="Slingui Logo" />
         </div>
         <div className={styles.navRight}>
           <button
@@ -39,15 +39,6 @@ const PlayerNav = () => {
           >
             <ReactSVG src={StarIcon} />
             {chrome.i18n.getMessage("getHelpNav")}
-          </button>
-          <button
-            className="button primaryButton"
-            onClick={() => {
-              chrome.runtime.sendMessage({ type: "follow-twitter" });
-            }}
-          >
-            <ReactSVG src={HeartIcon} />{" "}
-            {chrome.i18n.getMessage("followForUpdates")}
           </button>
         </div>
       </div>

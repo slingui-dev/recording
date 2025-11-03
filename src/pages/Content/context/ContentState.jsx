@@ -510,11 +510,11 @@ const ContentState = (props) => {
           setContentState((prevContentState) => ({
             ...prevContentState,
             defaultVideoInput: videoInput[0].deviceId,
-            cameraActive: true,
+            cameraActive: false,
           }));
           chrome.storage.local.set({
             defaultVideoInput: videoInput[0].deviceId,
-            cameraActive: true,
+            cameraActive: false,
           });
         }
         if (audioInput.length > 0 || videoInput.length > 0) {
@@ -639,7 +639,7 @@ const ContentState = (props) => {
     showExtension: false,
     showPopup: false,
     blurMode: false,
-    recordingType: "screen",
+    recordingType: "region",
     customRegion: false,
     regionWidth: 800,
     surface: "default",

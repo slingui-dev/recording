@@ -54,7 +54,7 @@ const CropNav = () => {
             chrome.runtime.sendMessage({ type: "open-home" });
           }}
         >
-          <img src={URL + "editor/logo.svg"} alt="Logo" />
+          <img src={URL + "logo.png"} alt="Logo" />
         </div>
         <div className={styles.editorNavCenter}>
           <div className={styles.editorNavTitle}>
