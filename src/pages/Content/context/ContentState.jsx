@@ -28,13 +28,13 @@ const ContentState = (props) => {
     if (!locale.includes("en")) {
       setURL(
         "https://translate.google.com/translate?sl=en&tl=" +
-          locale +
-          "&u=https://docs.slingui.com/recording-help/getting-started/77KizPC8MHVGfpKpqdux9D/why-does-screenity-ask-for-permissions/9AAE8zJ6iiUtCAtjn4SUT1"
+        locale +
+        "&u=https://docs.slingui.com/recording-help/getting-started/77KizPC8MHVGfpKpqdux9D/why-does-screenity-ask-for-permissions/9AAE8zJ6iiUtCAtjn4SUT1"
       );
       setURL2(
         "https://translate.google.com/translate?sl=en&tl=" +
-          locale +
-          "&u=https://docs.slingui.com/recording-help/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9"
+        locale +
+        "&u=https://docs.slingui.com/recording-help/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9"
       );
     }
   }, []);
@@ -136,7 +136,7 @@ const ContentState = (props) => {
       if (!dismiss) {
         contentStateRef.current.openToast(
           chrome.i18n.getMessage("pausedRecordingToast"),
-          function () {}
+          function () { }
         );
       }
     }, 100);
@@ -233,7 +233,6 @@ const ContentState = (props) => {
         if (data.quota < 524288000) {
           if (typeof contentStateRef.current.openModal === "function") {
             let clear = null;
-            let clearAction = () => {};
             // Add help link to modal
             const locale = chrome.i18n.getMessage("@@ui_locale");
             let helpURL =
@@ -262,7 +261,7 @@ const ContentState = (props) => {
                   clear,
                   chrome.i18n.getMessage("permissionsModalDismiss"),
                   clearAction,
-                  () => {},
+                  () => { },
                   null,
                   chrome.i18n.getMessage("learnMoreDot"),
                   helpURL
@@ -302,7 +301,7 @@ const ContentState = (props) => {
                 await checkChromeCapturePermissionsSW();
                 startStreaming();
               },
-              () => {},
+              () => { },
               null,
               chrome.i18n.getMessage("learnMoreDot"),
               URL,
@@ -362,7 +361,7 @@ const ContentState = (props) => {
                   pipEnded: false,
                 }));
               },
-              () => {},
+              () => { },
               false,
               false,
               false,
@@ -539,7 +538,7 @@ const ContentState = (props) => {
           chrome.i18n.getMessage("permissionsModalDescription"),
           chrome.i18n.getMessage("permissionsModalDismiss"),
           chrome.i18n.getMessage("permissionsModalNoShowAgain"),
-          () => {},
+          () => { },
           () => {
             noMorePermissions();
           },
@@ -563,6 +562,7 @@ const ContentState = (props) => {
 
   useEffect(() => {
     const handleMessage = (event) => {
+      console.log("Received message:", event.data);
       if (event.data.type === "screenity-permissions") {
         handleDevicePermissions(event.data);
       } else if (event.data.type === "screenity-permissions-loaded") {
@@ -575,6 +575,8 @@ const ContentState = (props) => {
           ...prevContentState,
           showExtension: !prevContentState.showExtension,
           hasOpenedBefore: true,
+          micActive: true,
+          cameraActive: false,
           showPopup: true,
         }));
         setTimer(0);
@@ -609,23 +611,7 @@ const ContentState = (props) => {
     return () => {
       window.removeEventListener("message", handleMessage);
     };
-  }, [contentState.defaultAudioInput]);
-
-  useEffect(() => {
-    if (contentState.micActive) {
-      window.postMessage({ type: "microphone-unmuted" }, "*");
-    } else {
-      window.postMessage({ type: "microphone-muted" }, "*");
-    }
-  }, [contentState.micActive]);
-
-  useEffect(() => {
-    if (contentState.showPopup) {
-      window.postMessage({ type: "popup-opened" }, "*");
-    } else {
-      window.postMessage({ type: "popup-closed" }, "*");
-    }
-  }, [contentState.showPopup]);
+  }, [contentState]);
 
   // These settings are available throughout the Content
   const [contentState, setContentState] = useState({
@@ -738,6 +724,7 @@ const ContentState = (props) => {
     fpsValue: "30",
   });
   contentStateRef.current = contentState;
+
 
   // Check Chrome version
   useEffect(() => {
@@ -1335,17 +1322,17 @@ const ContentState = (props) => {
               : prevContentState.videoInput,
           defaultAudioInput:
             result.defaultAudioInput !== undefined &&
-            result.defaultAudioInput !== null
+              result.defaultAudioInput !== null
               ? result.defaultAudioInput
               : prevContentState.defaultAudioInput,
           defaultVideoInput:
             result.defaultVideoInput !== undefined &&
-            result.defaultVideoInput !== null
+              result.defaultVideoInput !== null
               ? result.defaultVideoInput
               : prevContentState.defaultVideoInput,
           cameraDimensions:
             result.cameraDimensions !== undefined &&
-            result.cameraDimensions !== null
+              result.cameraDimensions !== null
               ? result.cameraDimensions
               : prevContentState.cameraDimensions,
           cameraFlipped:
@@ -1362,17 +1349,17 @@ const ContentState = (props) => {
               : prevContentState.micActive,
           backgroundEffect:
             result.backgroundEffect !== undefined &&
-            result.backgroundEffect !== null
+              result.backgroundEffect !== null
               ? result.backgroundEffect
               : prevContentState.backgroundEffect,
           backgroundEffectsActive:
             result.backgroundEffectsActive !== undefined &&
-            result.backgroundEffectsActive !== null
+              result.backgroundEffectsActive !== null
               ? result.backgroundEffectsActive
               : prevContentState.backgroundEffectsActive,
           toolbarPosition:
             result.toolbarPosition !== undefined &&
-            result.toolbarPosition !== null
+              result.toolbarPosition !== null
               ? result.toolbarPosition
               : prevContentState.toolbarPosition,
           countdown:
@@ -1421,12 +1408,12 @@ const ContentState = (props) => {
               : prevContentState.alarmTime,
           pendingRecording:
             result.pendingRecording !== undefined &&
-            result.pendingRecording !== null
+              result.pendingRecording !== null
               ? result.pendingRecording
               : prevContentState.pendingRecording,
           askForPermissions:
             result.askForPermissions !== undefined &&
-            result.askForPermissions !== null
+              result.askForPermissions !== null
               ? result.askForPermissions
               : prevContentState.askForPermissions,
           cursorMode:
@@ -1447,7 +1434,7 @@ const ContentState = (props) => {
               : prevContentState.askMicrophone,
           offscreenRecording:
             result.offscreenRecording !== undefined &&
-            result.offscreenRecording !== null
+              result.offscreenRecording !== null
               ? result.offscreenRecording
               : prevContentState.offscreenRecording,
           setDevices:
@@ -1573,6 +1560,13 @@ const ContentState = (props) => {
   useEffect(() => {
     updateFromStorage();
   }, []);
+  useEffect(() => {
+    if (contentState?.micActive) {
+      window.postMessage({ type: "microphone-unmuted" }, "*");
+    } else {
+      window.postMessage({ type: "microphone-muted" }, "*");
+    }
+  }, [contentState?.micActive]);
 
   return (
     // this is the provider providing state

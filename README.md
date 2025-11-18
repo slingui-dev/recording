@@ -17,6 +17,10 @@ Made by [Alyssa X](https://alyssax.com)
 
 > ❗️ Screenity has been rebuilt from the ground up, and updated to MV3. [Click here](https://docs.slingui.com/recording-help/getting-started/77KizPC8MHVGfpKpqdux9D/what%E2%80%99s-changed-in-the-new-version-of-screenity/bDtvcwAtw9PPesQeNH4zjE) to here to learn more about why, and what's changed in the new version. Also note that **the license has changed to [GPLv3](https://github.com/alyssaxuu/screenity/blob/master/LICENSE)**, but the older MV2 version remains MIT licensed. Make sure you read the license and the [Terms of Service](https://screenity.io/en/terms/) regarding intellectual property.
 
+```bash
+ zip -r extension.zip ./
+```
+
 ## Table of contents
 
 - [Features](#features)
