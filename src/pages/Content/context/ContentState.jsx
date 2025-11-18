@@ -570,6 +570,37 @@ const ContentState = (props) => {
           ...prevContentState,
           permissionsLoaded: true,
         }));
+      } else if (event.data.type === "open-screenity-popup") {
+        setContentState((prevContentState) => ({
+          ...prevContentState,
+          showExtension: !prevContentState.showExtension,
+          hasOpenedBefore: true,
+          showPopup: true,
+        }));
+        setTimer(0);
+        updateFromStorage();
+      } else if (event.data.type === "mute-microphone") {
+        setContentState((prevContentState) => ({
+          ...prevContentState,
+          micActive: false,
+        }));
+        chrome.storage.local.set({ micActive: false });
+        chrome.runtime.sendMessage({
+          type: "set-mic-active-tab",
+          active: false,
+          defaultAudioInput: contentState.defaultAudioInput,
+        });
+      } else if (event.data.type === "unmute-microphone") {
+        setContentState((prevContentState) => ({
+          ...prevContentState,
+          micActive: true,
+        }));
+        chrome.storage.local.set({ micActive: true });
+        chrome.runtime.sendMessage({
+          type: "set-mic-active-tab",
+          active: true,
+          defaultAudioInput: contentState.defaultAudioInput,
+        });
       }
     };
 
@@ -578,7 +609,23 @@ const ContentState = (props) => {
     return () => {
       window.removeEventListener("message", handleMessage);
     };
-  }, []);
+  }, [contentState.defaultAudioInput]);
+
+  useEffect(() => {
+    if (contentState.micActive) {
+      window.postMessage({ type: "microphone-unmuted" }, "*");
+    } else {
+      window.postMessage({ type: "microphone-muted" }, "*");
+    }
+  }, [contentState.micActive]);
+
+  useEffect(() => {
+    if (contentState.showPopup) {
+      window.postMessage({ type: "popup-opened" }, "*");
+    } else {
+      window.postMessage({ type: "popup-closed" }, "*");
+    }
+  }, [contentState.showPopup]);
 
   // These settings are available throughout the Content
   const [contentState, setContentState] = useState({
