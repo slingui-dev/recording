@@ -1582,6 +1582,8 @@ const checkAvailableMemory = (sendResponse) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "desktop-capture") {
     desktopCapture(request);
+  } else if (request.type === "ping-screenity") {
+    sendMessageTab(sender.tab.id, { type: "screenity-pong" });
   } else if (request.type === "backup-created") {
     offscreenDocument(request.request, request.tabId);
   } else if (request.type === "write-file") {

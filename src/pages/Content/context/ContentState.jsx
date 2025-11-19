@@ -67,6 +67,7 @@ const ContentState = (props) => {
 
     // This cannot be triggered from here because the user might not have the page focused
     //chrome.runtime.sendMessage({ type: "start-recording" });
+    window.postMessage({ type: "recording-started" }, "*");
   }, [contentStateRef.current]);
 
   const restartRecording = useCallback(() => {
@@ -123,6 +124,7 @@ const ContentState = (props) => {
     const audio = new Audio(chrome.runtime.getURL("/assets/sounds/beep.mp3"));
     audio.volume = 0.5;
     audio.play();
+    window.postMessage({ type: "recording-stopped" }, "*");
   });
 
   const pauseRecording = useCallback((dismiss) => {
@@ -561,6 +563,8 @@ const ContentState = (props) => {
   });
 
   useEffect(() => {
+    window.postMessage({ type: "screenity-pong" }, "*");
+
     const handleMessage = (event) => {
       console.log("Received message:", event.data);
       if (event.data.type === "screenity-permissions") {
@@ -570,6 +574,9 @@ const ContentState = (props) => {
           ...prevContentState,
           permissionsLoaded: true,
         }));
+      } else if (event.data.type === "ping-screenity") {
+        window.postMessage({ type: "screenity-pong" }, "*");
+
       } else if (event.data.type === "open-screenity-popup") {
         setContentState((prevContentState) => ({
           ...prevContentState,
@@ -579,8 +586,6 @@ const ContentState = (props) => {
           cameraActive: false,
           showPopup: true,
         }));
-        setTimer(0);
-        updateFromStorage();
       } else if (event.data.type === "mute-microphone") {
         setContentState((prevContentState) => ({
           ...prevContentState,
