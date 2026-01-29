@@ -141,11 +141,25 @@ export function login() {
   });
 }
 
+export function isTokenExpired(user) {
+  if (!user || !user.expires_at) {
+    if (user && user.profile && user.profile.exp) {
+      return Date.now() >= user.profile.exp * 1000;
+    }
+    return true;
+  }
+  return Date.now() >= user.expires_at * 1000;
+}
+
 export function getUser() {
   return new Promise((resolve) => {
     if (chrome && chrome.storage) {
       chrome.storage.local.get('user', (result) => {
-        resolve(result.user || null);
+        const user = result.user || null;
+        if (user) {
+          user.expired = isTokenExpired(user);
+        }
+        resolve(user);
       });
     } else {
       resolve(null);

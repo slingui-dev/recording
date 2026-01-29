@@ -244,6 +244,17 @@ const RightPanel = () => {
   };
 
   const handleSlinguiUpload = async (user) => {
+    let currentUser = user;
+    if (currentUser.expired) {
+      try {
+        currentUser = await login();
+        setSlingUser(currentUser);
+      } catch (error) {
+        console.error("Re-authentication failed", error);
+        return;
+      }
+    }
+
     const blobToUpload = (contentStateRef.current.mp4ready && contentStateRef.current.blob) ? contentStateRef.current.blob : contentStateRef.current.webm;
     if (!blobToUpload) {
       console.error("No blob available to upload");
@@ -256,7 +267,7 @@ const RightPanel = () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + user.access_token,
+          Authorization: 'Bearer ' + currentUser.access_token,
         },
         body: JSON.stringify({
           contentType: blobToUpload.type.split('/')[1].split(';')[0],
@@ -291,7 +302,7 @@ const RightPanel = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + user.access_token,
+          Authorization: 'Bearer ' + currentUser.access_token,
         },
         body: JSON.stringify({
           name: contentStateRef.current.title || 'Untitled Recording',

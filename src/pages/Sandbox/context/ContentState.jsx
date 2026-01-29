@@ -255,81 +255,39 @@ const ContentState = (props) => {
       duration: recordingDuration / 1000,
     }));
 
-    // Check if user is in Windows 10
-    const isWindows10 = navigator.userAgent.match(/Windows NT 10.0/);
-
     try {
       if (recordingDuration > 0 && recordingDuration !== null) {
-        if (!isWindows10) {
-          // FLAG: Library seems unstable, using fallback for everyone for now
-          // if (false) {
-          fixWebmDuration(
-            blob,
-            recordingDuration,
-            async (fixedWebm) => {
-              if (
-                contentStateRef.current.fallback ||
-                contentStateRef.current.updateChrome ||
-                contentStateRef.current.noffmpeg ||
-                (contentStateRef.current.duration >
-                  contentStateRef.current.editLimit &&
-                  !contentStateRef.current.override)
-              ) {
-                setContentState((prevState) => ({
-                  ...prevState,
-                  webm: fixedWebm,
-                  ready: true,
-                }));
-                chrome.runtime.sendMessage({ type: "recording-complete" });
-                return;
-              }
+        const fixedWebm = await fixWebmDurationFallback(blob, {
+          type: "video/webm; codecs=vp8, opus",
+        });
 
-              const reader = new FileReader();
-              reader.onloadend = function () {
-                const base64data = reader.result;
-                setContentState((prevContentState) => ({
-                  ...prevContentState,
-                  base64: base64data,
-                  driveEnabled: driveEnabled,
-                }));
-              };
-              reader.readAsDataURL(fixedWebm);
-            },
-            { logger: false }
-          );
-        } else {
-          const fixedWebm = await fixWebmDurationFallback(blob, {
-            type: "video/webm; codecs=vp8, opus",
-          });
-
-          if (
-            contentStateRef.current.fallback ||
-            contentStateRef.current.updateChrome ||
-            contentStateRef.current.noffmpeg ||
-            (contentStateRef.current.duration >
-              contentStateRef.current.editLimit &&
-              !contentStateRef.current.override)
-          ) {
-            setContentState((prevState) => ({
-              ...prevState,
-              webm: fixedWebm,
-              ready: true,
-            }));
-            chrome.runtime.sendMessage({ type: "recording-complete" });
-            return;
-          }
-
-          const reader = new FileReader();
-          reader.onloadend = function () {
-            const base64data = reader.result;
-            setContentState((prevContentState) => ({
-              ...prevContentState,
-              base64: base64data,
-              driveEnabled: driveEnabled,
-            }));
-          };
-          reader.readAsDataURL(fixedWebm);
+        if (
+          contentStateRef.current.fallback ||
+          contentStateRef.current.updateChrome ||
+          contentStateRef.current.noffmpeg ||
+          (contentStateRef.current.duration >
+            contentStateRef.current.editLimit &&
+            !contentStateRef.current.override)
+        ) {
+          setContentState((prevState) => ({
+            ...prevState,
+            webm: fixedWebm,
+            ready: true,
+          }));
+          chrome.runtime.sendMessage({ type: "recording-complete" });
+          return;
         }
+
+        const reader = new FileReader();
+        reader.onloadend = function () {
+          const base64data = reader.result;
+          setContentState((prevContentState) => ({
+            ...prevContentState,
+            base64: base64data,
+            driveEnabled: driveEnabled,
+          }));
+        };
+        reader.readAsDataURL(fixedWebm);
       } else {
         /// Skip fixing duration
         if (
