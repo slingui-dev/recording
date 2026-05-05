@@ -236,6 +236,9 @@ const Recorder = () => {
   const audioOutputSource = useRef(null);
   const audioInputGain = useRef(null);
   const audioOutputGain = useRef(null);
+  const externalAudioSource = useRef(null);
+  const externalAudioStream = useRef(null);
+  const externalAudioPeerConnection = useRef(null);
 
   const recorder = useRef(null);
   const useWebCodecs = useRef(false);
@@ -2090,6 +2093,122 @@ const Recorder = () => {
     audioOutputGain.current.gain.value = volume;
   }
 
+  function cleanupExternalAudio() {
+    if (externalAudioSource.current) {
+      try {
+        externalAudioSource.current.disconnect();
+      } catch {}
+      externalAudioSource.current = null;
+    }
+
+    externalAudioStream.current = null;
+
+    if (externalAudioPeerConnection.current) {
+      try {
+        externalAudioPeerConnection.current.ontrack = null;
+        externalAudioPeerConnection.current.onconnectionstatechange = null;
+        externalAudioPeerConnection.current.close();
+      } catch {}
+      externalAudioPeerConnection.current = null;
+    }
+  }
+
+  async function handleExternalAudioOffer(message, sender, sendResponse) {
+    if (!aCtx.current || !destination.current) {
+      debugWarn("Received external audio offer before audio mixer was ready");
+      sendResponse?.({
+        ok: false,
+        error: "audio-mixer-not-ready",
+      });
+      return true;
+    }
+
+    if (!message?.sdp) {
+      sendResponse?.({ ok: false, error: "missing-sdp" });
+      return true;
+    }
+
+    try {
+      cleanupExternalAudio();
+
+      const peerConnection = new RTCPeerConnection();
+      externalAudioPeerConnection.current = peerConnection;
+
+      peerConnection.ontrack = (event) => {
+        const remoteStream = event.streams?.[0];
+        debug("External audio track received", {
+          hasStream: !!remoteStream,
+          audioTracks: remoteStream?.getAudioTracks?.().length ?? 0,
+        });
+
+        if (!remoteStream || !aCtx.current || !destination.current) {
+          return;
+        }
+
+        if (externalAudioSource.current) {
+          try {
+            externalAudioSource.current.disconnect();
+          } catch {}
+        }
+
+        externalAudioStream.current = remoteStream;
+        externalAudioSource.current = aCtx.current.createMediaStreamSource(
+          remoteStream,
+        );
+        externalAudioSource.current.connect(destination.current);
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        debug("External audio peer connection state", {
+          connectionState: peerConnection.connectionState,
+        });
+
+        if (
+          ["failed", "closed", "disconnected"].includes(
+            peerConnection.connectionState,
+          )
+        ) {
+          cleanupExternalAudio();
+        }
+      };
+
+      await peerConnection.setRemoteDescription(message.sdp);
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+
+      const localDescription = peerConnection.localDescription;
+      if (!localDescription?.sdp || !localDescription?.type) {
+        throw new Error("missing-local-description");
+      }
+
+      const responsePayload = {
+        ok: true,
+        type: "ANSWER_CHIME_AUDIO",
+        sdp: {
+          type: localDescription.type,
+          sdp: localDescription.sdp,
+        },
+      };
+
+      sendResponse?.(responsePayload);
+
+      if (sender?.tab?.id) {
+        chrome.tabs
+          .sendMessage(sender.tab.id, responsePayload)
+          .catch((err) => debugWarn("Failed to forward ANSWER_CHIME_AUDIO", err));
+      }
+    } catch (err) {
+      debugError("Failed to handle external audio offer", err);
+      cleanupExternalAudio();
+      sendResponse?.({
+        ok: false,
+        error: String(err?.message || err),
+      });
+    }
+
+    return true;
+  }
+
   const setMic = async (result) => {
     debug("setMic()", result);
     if (helperAudioStream.current != null) {
@@ -2608,6 +2727,7 @@ const Recorder = () => {
       resetGateState();
       stopTabKeepAlive();
       stopSessionHeartbeat();
+      cleanupExternalAudio();
     };
   }, []);
 
@@ -2782,6 +2902,24 @@ const Recorder = () => {
       debug("Removing chrome.runtime.onMessage listener (stable)");
       slLog("listener-remove");
       chrome.runtime.onMessage.removeListener(stableHandler);
+    };
+  }, []);
+
+  useEffect(() => {
+    const externalHandler = (message, sender, sendResponse) => {
+      if (message?.type === "OFFER_CHIME_AUDIO") {
+        return handleExternalAudioOffer(message, sender, sendResponse);
+      }
+
+      return undefined;
+    };
+
+    debug("Adding chrome.runtime.onMessageExternal listener");
+    chrome.runtime.onMessageExternal.addListener(externalHandler);
+
+    return () => {
+      debug("Removing chrome.runtime.onMessageExternal listener");
+      chrome.runtime.onMessageExternal.removeListener(externalHandler);
     };
   }, []);
 

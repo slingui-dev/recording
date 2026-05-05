@@ -22,6 +22,15 @@ Screenity is a powerful privacy-friendly screen recorder and annotation tool to 
 
 Made by [Alyssa X](https://alyssax.com)
 
+<a href="https://www.producthunt.com/posts/screenity?utm_source=badge-top-post-badge&utm_medium=badge&utm_souce=badge-screenity" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=275308&theme=light&period=daily" alt="Slingui The most powerful screen recorder for Chrome | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+<a href="https://news.ycombinator.com/item?id=25150804" target="_blank"><img height=53 src="https://hackerbadge.now.sh/api?id=25150804&type=orange" alt="Featured on HackerNews"></a>
+
+> ❗️ Screenity has been rebuilt from the ground up, and updated to MV3. [Click here](https://docs.slingui.com/recording-help/getting-started/77KizPC8MHVGfpKpqdux9D/what%E2%80%99s-changed-in-the-new-version-of-screenity/bDtvcwAtw9PPesQeNH4zjE) to here to learn more about why, and what's changed in the new version. Also note that **the license has changed to [GPLv3](https://github.com/alyssaxuu/screenity/blob/master/LICENSE)**, but the older MV2 version remains MIT licensed. Make sure you read the license and the [Terms of Service](https://screenity.io/en/terms/) regarding intellectual property.
+
+```bash
+ zip -r extension.zip ./
+```
+
 ## Table of contents
 - [Screenity](#screenity)
 	- [Table of contents](#table-of-contents)
@@ -83,7 +92,9 @@ You can create it accessing [Google Cloud Console](https://console.cloud.google.
 
 ## Acknowledgements
 
-- Thanks to [HelpKit](https://www.helpkit.so/) for sponsoring this project by hosting the [Screenity Help Center](https://help.screenity.io/).
+- Thanks to [HelpKit](https://www.helpkit.so/) for sponsoring this project by hosting the [Screenity Help Center](https://docs.slingui.com/recording-help/).
 - Thanks to [Mei Xuan](https://www.behance.net/meixuanloo) for helping with the Chinese translation of the extension.
 
-If you need any help, or want to become a Screenity expert, you can browse articles and guides in the [help center](https://help.screenity.io). You can also submit any feedback or ideas in this [form](https://tally.so/r/3ElpXq), or contact through [this page](https://help.screenity.io/contact)
+If you need any help, or want to become a Screenity expert, you can browse articles and guides in the [help center](https://docs.slingui.com/recording-help). You can also submit any feedback or ideas in this [form](https://tally.so/r/3ElpXq), or contact through [this page](https://docs.slingui.com/recording-help/contact)
+
+Feel free to reach out to me through email at hi@alyssax.com or [on Twitter](https://twitter.com/alyssaxuu) if you have any questions or feedback! Hope you find this useful 💜

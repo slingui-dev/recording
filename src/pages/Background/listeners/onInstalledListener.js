@@ -55,7 +55,7 @@ export const onInstalledListener = () => {
       }
 
       const updateQs = await supportContextQuery({ source: "uninstall" });
-      const updateUrl = `https://tally.so/r/3Ex6kX?${updateQs}`;
+      const updateUrl = `https://slingui.com`;
       chrome.runtime.setUninstallURL(
         locale.includes("en")
           ? updateUrl

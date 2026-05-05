@@ -90,19 +90,7 @@ const Title = () => {
                 styles={{ display: "inline-block" }}
               />
             </h1>
-            {/* <div
-              className={styles.shareButton}
-              onClick={() => {
-                chrome.runtime.sendMessage({ type: "handle-login" });
-              }}
-            >
-              <ReactSVG
-                src={URL + "editor/icons/link.svg"}
-                className={styles.shareIcon}
-              />
-              {chrome.i18n.getMessage("shareUnlockButton") ||
-                "Sign in to share (pro)"}
-            </div> */}
+            
           </>
         ) : (
           <input

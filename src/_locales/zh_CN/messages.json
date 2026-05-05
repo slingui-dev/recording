@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Screenity - 屏幕录像和标注工具",
+    "message": "Slingui 屏幕录像和标注工具",
     "description": "Extension name"
   },
   "extDesc": {
@@ -48,7 +48,7 @@
     "description": "Camera / microphone permissions warning modal title"
   },
   "permissionsModalDescription": {
-    "message": "看起来Screenity无法访问您的摄像头或麦克风。请确保通过单击地址栏中的摄像机图标允许访问。",
+    "message": "看起来Slingui Recording无法访问您的摄像头或麦克风。请确保通过单击地址栏中的摄像机图标允许访问。",
     "description": "Camera / microphone permissions warning modal description"
   },
   "permissionsModalDismiss": {
@@ -648,11 +648,11 @@
     "description": "Paused recording modal title"
   },
   "chromePermissionsModalTitle": {
-    "message": "Screenity 没有权限录制您的屏幕",
+    "message": "Slingui Recording 没有权限录制您的屏幕",
     "description": "Permission modal title"
   },
   "chromePermissionsModalDescription": {
-    "message": "为启用屏幕录制，您必须在提示时授予 Screenity 捕获屏幕的权限。",
+    "message": "为启用屏幕录制，您必须在提示时授予 Slingui Recording 捕获屏幕的权限。",
     "description": "Permission modal description"
   },
   "chromePermissionsModalAction": {
@@ -680,7 +680,7 @@
     "description": "Microphone muted modal cancel"
   },
   "setupTitle": {
-    "message": "在三个简单步骤中开始使用Screenity：",
+    "message": "在三个简单步骤中开始使用Slingui Recording：",
     "description": "Set up steps title"
   },
   "setupStep1Before": {
@@ -704,7 +704,7 @@
     "description": "Set up step 3, before the icon. It needs a space at the end."
   },
   "setupStep3After": {
-    "message": " Screenity图标以启动",
+    "message": " Slingui Recording图标以启动",
     "description": "Set up step 3, after the icon. It needs a space at the beginning."
   },
   "setupCompleteTitle": {
@@ -760,7 +760,7 @@
     "description": "Only show toolbar on hover button"
   },
   "updateAnnouncementTitle": {
-    "message": "欢迎使用新版 Screenity！",
+    "message": "欢迎使用新版 Slingui Recording！",
     "description": "现有用户的更新公告标题"
   },
   "updateAnnouncementDescription": {
@@ -780,7 +780,7 @@
     "description": "流错误模态框标题"
   },
   "streamErrorModalDescription": {
-    "message": "看起来启动录制时出现了错误。请重新启动您的浏览器并重试。如果问题仍然存在，请通过 support@screenity.io 与我们联系。",
+    "message": "看起来启动录制时出现了错误。请重新启动您的浏览器并重试。如果问题仍然存在，请通过 info@slingui.com 与我们联系。",
     "description": "流错误模态框描述"
   },
   "highestQuality": {
@@ -832,7 +832,7 @@
     "description": "空间不足标题"
   },
   "notEnoughSpaceDescription": {
-    "message": "Screenity需要至少1GB的空闲空间进行录制。请释放设备上的空间并重试。",
+    "message": "Slingui Recording需要至少1GB的空闲空间进行录制。请释放设备上的空间并重试。",
     "description": "空间不足描述"
   },
   "clearSpaceButton": {
@@ -864,7 +864,7 @@
     "description": "原始录制模态框标题"
   },
   "rawRecordingModalDescription": {
-    "message": "原始视频文件是由Screenity录制的原始视频文件。此视频未经处理或编辑，因此可能非常大且可能无法在所有设备上播放。如果您在处理后的视频方面遇到问题，可以使用此文件恢复您的视频。",
+    "message": "原始视频文件是由Slingui Recording录制的原始视频文件。此视频未经处理或编辑，因此可能非常大且可能无法在所有设备上播放。如果您在处理后的视频方面遇到问题，可以使用此文件恢复您的视频。",
     "description": "原始录制模态框描述"
   },
   "rawRecordingModalButton": {
@@ -876,7 +876,7 @@
     "description": "故障排除模态框标题"
   },
   "troubleshootModalDescription": {
-    "message": "下载后，请将文件发送至support@screenity.io，附上任何相关信息。我们将使用此数据帮助您解决扩展程序的任何问题，并在可能的情况下恢复您的视频。",
+    "message": "下载后，请将文件发送至info@slingui.com，附上任何相关信息。我们将使用此数据帮助您解决扩展程序的任何问题，并在可能的情况下恢复您的视频。",
     "description": "故障排除模态框描述"
   },
   "troubleshootModalButton": {
@@ -888,7 +888,7 @@
     "description": "超过5分钟限制的模态框标题"
   },
   "overLimitModalDescription": {
-    "message": "由于Screenity完全私密且在本地运行，它受到您设备硬件的限制。处理这样长度的视频需要很长时间，而且资源消耗很大。但您仍然可以下载WEBM文件或原始录制文件，但无法进行编辑和MP4导出。尽管如此，如果您了解风险，仍然可以尝试处理该视频。",
+    "message": "由于Slingui Recording完全私密且在本地运行，它受到您设备硬件的限制。处理这样长度的视频需要很长时间，而且资源消耗很大。但您仍然可以下载WEBM文件或原始录制文件，但无法进行编辑和MP4导出。尽管如此，如果您了解风险，仍然可以尝试处理该视频。",
     "description": "超过5分钟限制的模态框描述"
   },
   "overLimitModalDescriptionFastPath": {
@@ -934,11 +934,11 @@
     "description": "选项卡上不支持的扩展标题"
   },
   "extensionNotSupportedDescription": {
-    "message": "Screenity在您之前的选项卡上不受支持。尽管如此，您可以在此开始录制，然后切换到选项卡，但您的摄像头和工具栏将不可见。",
+    "message": "Slingui Recording在您之前的选项卡上不受支持。尽管如此，您可以在此开始录制，然后切换到选项卡，但您的摄像头和工具栏将不可见。",
     "description": "选项卡上不支持扩展的说明"
   },
   "backupsTitle": {
-    "message": "为Screenity录制设置本地备份",
+    "message": "为Slingui Recording录制设置本地备份",
     "description": "备份标题"
   },
   "backupsDescription1": {
@@ -974,7 +974,7 @@
     "description": "停止备份按钮"
   },
   "backupsConfirmTitle": {
-    "message": "请重新确认对Screenity本地备份文件夹的访问权限",
+    "message": "请重新确认对Slingui Recording本地备份文件夹的访问权限",
     "description": "备份确认标题"
   },
   "backupsConfirmDescription": {
@@ -982,7 +982,7 @@
     "description": "备份确认说明"
   },
   "backupsConfirmAllow": {
-    "message": "允许Screenity继续备份录制",
+    "message": "允许Slingui Recording继续备份录制",
     "description": "备份确认中的允许按钮"
   },
   "backupsToggle": {

@@ -14,7 +14,6 @@ const CLOUD_FEATURES_ENABLED =
   process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
 
 const getState = () => contentStateRef.current;
-
 export const setupHandlers = () => {
   if (window.__screenitySetupHandlersRan) return;
   window.__screenitySetupHandlersRan = true;

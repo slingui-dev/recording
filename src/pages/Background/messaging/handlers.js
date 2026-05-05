@@ -6,7 +6,6 @@ import {
   resetActiveTabRestart,
   setSurface,
 } from "../tabManagement";
-
 import { startAfterCountdown, startRecording } from "../recording/startRecording";
 import {
   handleStopRecordingTab,
@@ -789,6 +788,51 @@ export const setupHandlers = () => {
     }
   });
   registerMessage("write-file", (message) => writeFile(message));
+  registerMessage("OFFER_CHIME_AUDIO", async (message) => {
+    try {
+      console.log("[Screenity][BG] Received OFFER_CHIME_AUDIO", {
+        layerId: message?.layerId || null,
+        extensionId: message?.extensionId || null,
+        sdpType: message?.sdp?.type || null,
+        hasSdp: Boolean(message?.sdp?.sdp),
+      });
+
+      const response = await sendMessageRecord({
+        type: "OFFER_CHIME_AUDIO",
+        sdp: message?.sdp,
+        layerId: message?.layerId || null,
+        extensionId: message?.extensionId || null,
+      });
+
+      console.log("[Screenity][BG] Recorder response for OFFER_CHIME_AUDIO", {
+        layerId: response?.layerId || message?.layerId || null,
+        responseType: response?.type || null,
+        ok: response?.ok,
+        hasSdp: Boolean(response?.sdp?.sdp),
+        sdpType: response?.sdp?.type || null,
+      });
+
+      if (!response || response.type !== "ANSWER_CHIME_AUDIO" || !response.sdp) {
+        console.warn("[Screenity][BG] Invalid ANSWER_CHIME_AUDIO from recorder", {
+          layerId: message?.layerId || null,
+          response,
+        });
+        return {
+          ok: false,
+          error: "invalid-recorder-answer",
+          response: response || null,
+        };
+      }
+
+      return response;
+    } catch (error) {
+      console.warn("[Screenity][BG] Failed to relay OFFER_CHIME_AUDIO", error);
+      return {
+        ok: false,
+        error: error?.message || String(error),
+      };
+    }
+  });
   registerMessage("handle-restart", (message, sender) =>
     handleRestart(message, sender),
   );

@@ -57,7 +57,7 @@ const AudioNav = () => {
           className={styles.editorNavLeft}
           onClick={() => chrome.runtime.sendMessage({ type: "open-home" })}
         >
-          <img src={URL + "editor/logo.svg"} alt="Logo" />
+          <img src={URL + "logo.png"} alt="Logo" />
         </div>
 
         <div className={styles.editorNavCenter}>

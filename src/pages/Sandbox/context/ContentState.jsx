@@ -824,9 +824,6 @@ const ContentState = (props) => {
       duration: safeDuration / 1000,
     }));
 
-    // Check if user is in Windows 10
-    const isWindows10 = navigator.userAgent.match(/Windows NT 10.0/);
-
     try {
       if (safeDuration > 0) {
         if (!isWindows10) {
@@ -898,6 +895,17 @@ const ContentState = (props) => {
           };
           reader.readAsDataURL(fixedWebm);
         }
+
+        const reader = new FileReader();
+        reader.onloadend = function () {
+          const base64data = reader.result;
+          setContentState((prevContentState) => ({
+            ...prevContentState,
+            base64: base64data,
+            driveEnabled: driveEnabled,
+          }));
+        };
+        reader.readAsDataURL(fixedWebm);
       } else {
         // Duration unknown — skip fixing, use raw blob as-is
         console.warn(

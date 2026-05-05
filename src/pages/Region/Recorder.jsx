@@ -100,6 +100,29 @@ const getCodecLabel = (mimeType) => {
   return "unknown";
 };
 
+const waitForIceGatheringComplete = async (peerConnection) => {
+  if (!peerConnection || peerConnection.iceGatheringState === "complete") {
+    return;
+  }
+
+  await new Promise((resolve) => {
+    const onIceGatheringStateChange = () => {
+      if (peerConnection.iceGatheringState === "complete") {
+        peerConnection.removeEventListener(
+          "icegatheringstatechange",
+          onIceGatheringStateChange,
+        );
+        resolve();
+      }
+    };
+
+    peerConnection.addEventListener(
+      "icegatheringstatechange",
+      onIceGatheringStateChange,
+    );
+  });
+};
+
 const Recorder = () => {
   const isRestarting = useRef(false);
   const isDismissing = useRef(false);
@@ -130,6 +153,9 @@ const Recorder = () => {
   const audioOutputSource = useRef(null);
   const audioInputGain = useRef(null);
   const audioOutputGain = useRef(null);
+  const externalAudioSource = useRef(null);
+  const externalAudioStream = useRef(null);
+  const externalAudioPeerConnection = useRef(null);
 
   const recorder = useRef(null);
   const useWebCodecs = useRef(false);
@@ -1374,6 +1400,8 @@ const Recorder = () => {
       });
       helperAudioStream.current = null;
     }
+
+    cleanupExternalAudio();
   }
 
   const dismissRecording = async () => {
@@ -1417,6 +1445,8 @@ const Recorder = () => {
       });
       helperAudioStream.current = null;
     }
+
+    cleanupExternalAudio();
   };
 
   const restartRecording = async () => {
@@ -1477,6 +1507,7 @@ const Recorder = () => {
     pending.current = [];
     pendingBytes.current = 0;
     await chunksStore.clear();
+    cleanupExternalAudio();
     await setRecordingTimingState({
       recording: false,
       paused: false,
@@ -1565,6 +1596,154 @@ const Recorder = () => {
   function setAudioOutputVolume(volume) {
     if (!audioOutputGain.current) return;
     audioOutputGain.current.gain.value = volume;
+  }
+
+  function cleanupExternalAudio() {
+    if (externalAudioSource.current) {
+      try {
+        externalAudioSource.current.disconnect();
+      } catch {}
+      externalAudioSource.current = null;
+    }
+
+    externalAudioStream.current = null;
+
+    if (externalAudioPeerConnection.current) {
+      try {
+        externalAudioPeerConnection.current.ontrack = null;
+        externalAudioPeerConnection.current.onconnectionstatechange = null;
+        externalAudioPeerConnection.current.close();
+      } catch {}
+      externalAudioPeerConnection.current = null;
+    }
+  }
+
+  async function handleExternalAudioOffer(message, sender, sendResponse) {
+    if (!aCtx.current || !destination.current) {
+      debugWarn("Received external audio offer before audio mixer was ready");
+      sendResponse?.({
+        ok: false,
+        error: "audio-mixer-not-ready",
+      });
+      return true;
+    }
+
+    if (!message?.sdp) {
+      debugWarn("Received external audio offer without SDP", {
+        layerId: message?.layerId,
+      });
+      sendResponse?.({ ok: false, error: "missing-sdp" });
+      return true;
+    }
+
+    try {
+      debug("Handling external audio offer", {
+        layerId: message?.layerId || null,
+        senderTabId: sender?.tab?.id || null,
+        extensionId: message?.extensionId || null,
+        sdpType: message?.sdp?.type || null,
+        hasSdp: Boolean(message?.sdp?.sdp),
+      });
+
+      cleanupExternalAudio();
+
+      const peerConnection = new RTCPeerConnection();
+      externalAudioPeerConnection.current = peerConnection;
+
+      peerConnection.ontrack = (event) => {
+        const remoteStream = event.streams?.[0];
+        debug("External audio track received", {
+          hasStream: !!remoteStream,
+          audioTracks: remoteStream?.getAudioTracks?.().length ?? 0,
+        });
+
+        if (!remoteStream || !aCtx.current || !destination.current) {
+          return;
+        }
+
+        if (externalAudioSource.current) {
+          try {
+            externalAudioSource.current.disconnect();
+          } catch {}
+        }
+
+        externalAudioStream.current = remoteStream;
+        externalAudioSource.current = aCtx.current.createMediaStreamSource(
+          remoteStream,
+        );
+        externalAudioSource.current.connect(destination.current);
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        debug("External audio peer connection state", {
+          connectionState: peerConnection.connectionState,
+        });
+
+        if (
+          ["failed", "closed", "disconnected"].includes(
+            peerConnection.connectionState,
+          )
+        ) {
+          cleanupExternalAudio();
+        }
+      };
+
+      await peerConnection.setRemoteDescription(message.sdp);
+      debug("Applied remote description for external audio offer", {
+        layerId: message?.layerId || null,
+        remoteDescriptionType: message?.sdp?.type || null,
+      });
+
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      await waitForIceGatheringComplete(peerConnection);
+
+      const localDescription = peerConnection.localDescription;
+      if (!localDescription?.sdp || !localDescription?.type) {
+        throw new Error("missing-local-description");
+      }
+
+      const responsePayload = {
+        layerId: message.layerId,
+        ok: true,
+        type: "ANSWER_CHIME_AUDIO",
+        sdp: {
+          type: localDescription.type,
+          sdp: localDescription.sdp,
+        },
+      };
+
+      debug("Created ANSWER_CHIME_AUDIO payload", {
+        layerId: message?.layerId || null,
+        sdpType: responsePayload.sdp?.type || null,
+        hasSdp: Boolean(responsePayload.sdp?.sdp),
+      });
+
+      sendResponse?.(responsePayload);
+
+      debug("Sent ANSWER_CHIME_AUDIO via sendResponse", {
+        layerId: message?.layerId || null,
+      });
+
+      if (sender?.tab?.id) {
+        debug("Forwarding ANSWER_CHIME_AUDIO to sender tab", {
+          layerId: message?.layerId || null,
+          senderTabId: sender.tab.id,
+        });
+        chrome.tabs
+          .sendMessage(sender.tab.id, responsePayload)
+          .catch((err) => debugWarn("Failed to forward ANSWER_CHIME_AUDIO", err));
+      }
+    } catch (error) {
+      cleanupExternalAudio();
+      debugError("Failed to handle external audio offer", error);
+      sendResponse?.({
+        ok: false,
+        error: error?.message || String(error),
+      });
+    }
+
+    return true;
   }
 
   async function startStreaming(data) {
@@ -1818,6 +1997,15 @@ const Recorder = () => {
 
   const onMessage = useCallback(
     (request, sender, sendResponse) => {
+      if (request?.type === "OFFER_CHIME_AUDIO") {
+        debug("Recorder onMessage received OFFER_CHIME_AUDIO", {
+          layerId: request?.layerId || null,
+          senderTabId: sender?.tab?.id || null,
+          extensionId: request?.extensionId || null,
+        });
+        return handleExternalAudioOffer(request, sender, sendResponse);
+      }
+
       if (request.type === "loaded") {
         backupRef.current = request.backup;
         if (request.region) {
@@ -1909,6 +2097,7 @@ const Recorder = () => {
 
     return () => {
       clearStartRetry();
+      cleanupExternalAudio();
       chrome.runtime.onMessage.removeListener(onMessage);
     };
   }, []);

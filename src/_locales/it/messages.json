@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Screenity - Registra lo schermo e annota",
+    "message": "Slingui Registra lo schermo e annota",
     "description": "Nome dell'estensione"
   },
   "extDesc": {
@@ -48,7 +48,7 @@
     "description": "Titolo del modulo di avviso dei permessi per fotocamera/microfono"
   },
   "permissionsModalDescription": {
-    "message": "Sembra che Screenity non possa accedere alla tua fotocamera o al tuo microfono. Consenti l'accesso facendo clic sull'icona della fotocamera nella barra degli indirizzi.",
+    "message": "Sembra che Slingui Recording non possa accedere alla tua fotocamera o al tuo microfono. Consenti l'accesso facendo clic sull'icona della fotocamera nella barra degli indirizzi.",
     "description": "Descrizione del modulo di avviso dei permessi per fotocamera/microfono"
   },
   "permissionsModalDismiss": {
@@ -648,11 +648,11 @@
     "description": "Titolo del modalità di registrazione in pausa"
   },
   "chromePermissionsModalTitle": {
-    "message": "Screenity non ha il permesso di registrare il tuo schermo",
+    "message": "Slingui Recording non ha il permesso di registrare il tuo schermo",
     "description": "Titolo del modalità di autorizzazioni"
   },
   "chromePermissionsModalDescription": {
-    "message": "Per abilitare la registrazione dello schermo, devi concedere le autorizzazioni a Screenity.",
+    "message": "Per abilitare la registrazione dello schermo, devi concedere le autorizzazioni a Slingui Recording.",
     "description": "Descrizione del modalità di autorizzazioni"
   },
   "chromePermissionsModalAction": {
@@ -680,7 +680,7 @@
     "description": "Annulla del modalità di microfono spento"
   },
   "setupTitle": {
-    "message": "Inizia a usare Screenity con tre semplici passaggi:",
+    "message": "Inizia a usare Slingui Recording con tre semplici passaggi:",
     "description": "Titolo dei passaggi di configurazione"
   },
   "setupStep1Before": {
@@ -700,7 +700,7 @@
     "description": "Passaggio 2 di configurazione, dopo l'icona. Richiede uno spazio all'inizio."
   },
   "setupStep3Before": {
-    "message": "3- Fai clic sull'icona di Screenity",
+    "message": "3- Fai clic sull'icona di Slingui Recording",
     "description": "Passaggio 3 di configurazione, prima dell'icona. Richiede uno spazio alla fine."
   },
   "setupStep3After": {
@@ -764,7 +764,7 @@
     "description": "Pulsante per interrompere la registrazione nella schermata di registrazione"
   },
   "updateAnnouncementTitle": {
-    "message": "Benvenuto nella nuova versione di Screenity!",
+    "message": "Benvenuto nella nuova versione di Slingui Recording!",
     "description": "Titolo dell'annuncio di aggiornamento per gli utenti esistenti"
   },
   "updateAnnouncementDescription": {
@@ -784,7 +784,7 @@
     "description": "Titolo del modalità di errore di streaming"
   },
   "streamErrorModalDescription": {
-    "message": "Si è verificato un errore durante l'avvio della registrazione. Riavvia il tuo browser e riprova. Se il problema persiste, contattaci all'indirizzo support@screenity.io.",
+    "message": "Si è verificato un errore durante l'avvio della registrazione. Riavvia il tuo browser e riprova. Se il problema persiste, contattaci all'indirizzo info@slingui.com.",
     "description": "Descrizione del modalità di errore di streaming"
   },
   "highestQuality": {
@@ -836,7 +836,7 @@
     "description": "Titolo di spazio insufficiente"
   },
   "notEnoughSpaceDescription": {
-    "message": "Screenity richiede almeno 1 GB di spazio libero per la registrazione. Per favore, libera spazio e riprova.",
+    "message": "Slingui Recording richiede almeno 1 GB di spazio libero per la registrazione. Per favore, libera spazio e riprova.",
     "description": "Descrizione di spazio insufficiente"
   },
   "clearSpaceButton": {
@@ -868,7 +868,7 @@
     "description": "Titolo del modulo registrazione grezza"
   },
   "rawRecordingModalDescription": {
-    "message": "Il file video grezzo è il file originale registrato da Screenity. Questo video non è stato elaborato o modificato, quindi potrebbe essere molto grande e potrebbe non essere riproducibile su tutti i dispositivi. Se stai riscontrando problemi con il video elaborato, puoi utilizzare questo file per recuperare il tuo video.",
+    "message": "Il file video grezzo è il file originale registrato da Slingui Recording. Questo video non è stato elaborato o modificato, quindi potrebbe essere molto grande e potrebbe non essere riproducibile su tutti i dispositivi. Se stai riscontrando problemi con il video elaborato, puoi utilizzare questo file per recuperare il tuo video.",
     "description": "Descrizione del modulo registrazione grezza"
   },
   "rawRecordingModalButton": {
@@ -880,7 +880,7 @@
     "description": "Titolo del modulo di risoluzione dei problemi"
   },
   "troubleshootModalDescription": {
-    "message": "Dopo il download, invia il file a support@screenity.io con qualsiasi informazione pertinente. Utilizzeremo questi dati per aiutarti a risolvere eventuali problemi che riscontri con l'estensione e, se possibile, recuperare il tuo video.",
+    "message": "Dopo il download, invia il file a info@slingui.com con qualsiasi informazione pertinente. Utilizzeremo questi dati per aiutarti a risolvere eventuali problemi che riscontri con l'estensione e, se possibile, recuperare il tuo video.",
     "description": "Descrizione del modulo di risoluzione dei problemi"
   },
   "troubleshootModalButton": {
@@ -918,11 +918,11 @@
     "description": "Titolo dell'estensione non supportata sulla scheda"
   },
   "extensionNotSupportedDescription": {
-    "message": "Screenity non è stato supportato nella tua scheda precedente. Puoi comunque iniziare la registrazione qui e passare alla scheda, ma la tua fotocamera e la barra degli strumenti non saranno visibili.",
+    "message": "Slingui Recording non è stato supportato nella tua scheda precedente. Puoi comunque iniziare la registrazione qui e passare alla scheda, ma la tua fotocamera e la barra degli strumenti non saranno visibili.",
     "description": "Descrizione dell'estensione non supportata sulla scheda"
   },
   "backupsTitle": {
-    "message": "Configura un backup locale per le registrazioni di Screenity",
+    "message": "Configura un backup locale per le registrazioni di Slingui Recording",
     "description": "Titolo dei backup"
   },
   "backupsDescription1": {
@@ -958,7 +958,7 @@
     "description": "Pulsante Arresta i backup"
   },
   "backupsConfirmTitle": {
-    "message": "Conferma nuovamente l'accesso alla cartella di backup locale di Screenity",
+    "message": "Conferma nuovamente l'accesso alla cartella di backup locale di Slingui Recording",
     "description": "Titolo della conferma dei backup"
   },
   "backupsConfirmDescription": {
@@ -966,7 +966,7 @@
     "description": "Descrizione della conferma dei backup"
   },
   "backupsConfirmAllow": {
-    "message": "Consenti a Screenity di continuare a fare backup delle registrazioni",
+    "message": "Consenti a Slingui Recording di continuare a fare backup delle registrazioni",
     "description": "Pulsante Consenti nella conferma dei backup"
   },
   "backupsToggle": {

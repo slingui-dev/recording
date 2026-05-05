@@ -58,7 +58,7 @@ const PopupContainer = (props) => {
   const recordTabRef = useRef(null);
   const videoTabRef = useRef(null);
   const pillRef = useRef(null);
-  const [URL, setURL] = useState("https://help.screenity.io/");
+  const [URL, setURL] = useState("https://docs.slingui.com/recording-help/");
   const isCloudBuild = process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
   const wasCameraActiveRef = useRef(null);
 
@@ -77,10 +77,11 @@ const PopupContainer = (props) => {
   }, [setContentState]);
 
   useEffect(() => {
-    if (contentState.isLoggedIn) {
-      setOnboarding(false);
-      setShowProSplash(false);
-      return;
+    const locale = chrome.i18n.getMessage("@@ui_locale");
+    if (!locale.includes("en")) {
+      setURL(
+        `https://translate.google.com/translate?sl=en&tl=${locale}&u=https://docs.slingui.com/recording-help/`
+      );
     }
     setOnboarding(Boolean(contentState.onboarding));
     setShowProSplash(Boolean(contentState.showProSplash));
@@ -658,23 +659,6 @@ const PopupContainer = (props) => {
                       />
                     </div>
                     {chrome.i18n.getMessage("recordTab")}
-                  </Tabs.Trigger>
-                  <Tabs.Trigger
-                    className="TabsTrigger tl"
-                    value="dashboard"
-                    ref={videoTabRef}
-                    tabIndex={0}
-                  >
-                    <div className="TabsTriggerIcon">
-                      <img
-                        src={
-                          tab === "dashboard"
-                            ? VideoTabActive
-                            : VideoTabInactive
-                        }
-                      />
-                    </div>
-                    {chrome.i18n.getMessage("videosTab")}
                   </Tabs.Trigger>
                 </Tabs.List>
                 <Tabs.Content className="TabsContent tl" value="record">
