@@ -1,0 +1,1504 @@
+const API_BASE = process.env.SCREENITY_API_BASE_URL;
+
+export async function getThumbnailFromBlob(blob, seekTo = 0.1) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.crossOrigin = "anonymous";
+
+    const url = URL.createObjectURL(blob);
+    video.src = url;
+
+    let timeoutId = setTimeout(() => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Thumbnail timed out"));
+    }, 2000);
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      URL.revokeObjectURL(url);
+    };
+
+    video.onerror = () => {
+      cleanup();
+      reject(new Error("Failed to load video for thumbnail"));
+    };
+
+    video.onloadedmetadata = () => {
+      if (video.duration === Infinity) {
+        video.currentTime = 0;
+      }
+      const targetTime = Math.min(seekTo, video.duration - 0.01);
+      video.currentTime = targetTime;
+    };
+
+    video.onseeked = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(
+        (thumbnailBlob) => {
+          cleanup();
+          if (thumbnailBlob) resolve(thumbnailBlob);
+          else reject(new Error("Failed to create thumbnail blob"));
+        },
+        "image/jpeg",
+        0.8,
+      );
+    };
+  });
+}
+
+export default class BunnyTusUploader {
+  constructor(options = {}) {
+    this.CHUNK_SIZE = options.chunkSize || 512 * 1024; // 512KB default
+    this.MAX_RETRIES = options.maxRetries || 5;
+    this.RETRY_DELAY = options.retryDelay || 1000;
+    this.UPLOAD_TIMEOUT_MS = options.uploadTimeoutMs || 20000;
+    this.HEARTBEAT_INTERVAL_MS = options.heartbeatIntervalMs || 10000;
+    this.HEARTBEAT_LAG_MS = options.heartbeatLagMs || 30000;
+    this.TOKEN_REFRESH_THRESHOLD = options.tokenRefreshThreshold || 300;
+    this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
+    this.onProgress = options.onProgress || null;
+    this.onStall = options.onStall || null;
+    this.onTelemetry = options.onTelemetry || null;
+    this.onStateChange = options.onStateChange || null;
+    this.trackType = options.trackType || null;
+
+    this.totalBytes = 0;
+    this.uploadUrl = null;
+    this.offset = 0;
+    this.projectId = null;
+    this.videoId = null;
+    this.mediaId = null;
+    this.signature = null;
+    this.expires = null;
+    this.libraryId = null;
+    this.status = "idle";
+    this.error = null;
+    this.isFinalizing = false;
+    this.isPaused = false;
+    this.metadata = {};
+    this.pendingUploads = [];
+    this.userToken = null;
+    this.heartbeatTimer = null;
+    this.lastProgressAt = Date.now();
+    this.stalled = false;
+
+    this.chunkQueue = [];
+    this.isProcessingQueue = false;
+    this.queueProcessingPromise = null;
+    this.queuedBytes = 0;
+    this._hasExtractedMeta = true; // Skip in-flight thumbnail extraction to avoid timeouts/noise
+    this.sessionId = options.sessionId || null;
+    this.journalKey = null;
+    this.journalLookupKey = null;
+    this.fingerprint = null;
+    this.metaWidth = null;
+    this.metaHeight = null;
+    this.lastJournalPersistAt = 0;
+    this.journalPersistTimer = null;
+    this.JOURNAL_WRITE_INTERVAL_MS = options.journalWriteIntervalMs || 4000;
+    this.PROGRESS_EVENT_INTERVAL_MS =
+      options.progressEventIntervalMs || 5000;
+    this.createdAt = null;
+    this.readyAt = null;
+    this.firstByteAt = null;
+    this.lastChunkQueuedAt = null;
+    this.lastErrorAt = null;
+    this.lastErrorCode = null;
+    this.finalizeStartedAt = null;
+    this.finalizedAt = null;
+    this.resumeCount = 0;
+    this.lastServerOffset = 0;
+    this.hasEmittedClientStarted = false;
+    this.hasEmittedFirstByte = false;
+    this.lastProgressEventAt = 0;
+    this.initializedFromResume = false;
+  }
+
+  debugLog(message, payload = null) {
+    if (!this.debug) return;
+    if (payload) {
+      console.info(`[BunnyTusUploader] ${message}`, payload);
+      return;
+    }
+    console.info(`[BunnyTusUploader] ${message}`);
+  }
+
+  getUploaderType() {
+    return this.trackType || this.metadata?.type || null;
+  }
+
+  emitTelemetry(event, payload = {}) {
+    if (typeof this.onTelemetry !== "function") return;
+    try {
+      this.onTelemetry(event, {
+        projectId: this.projectId || null,
+        sceneId: this.sceneId || null,
+        recordingSessionId: this.sessionId || null,
+        mediaId: this.mediaId || null,
+        bunnyVideoId: this.videoId || null,
+        trackType: this.getUploaderType(),
+        uploaderType: "bunny_tus",
+        status: this.status,
+        offset: this.offset || 0,
+        totalBytes: this.totalBytes || 0,
+        queuedBytes: this.queuedBytes || 0,
+        ...payload,
+      });
+    } catch (err) {
+      console.warn("Upload telemetry callback failed:", err);
+    }
+  }
+
+  notifyStateChange(reason = null, extra = {}) {
+    if (typeof this.onStateChange !== "function") return;
+    try {
+      this.onStateChange({
+        reason: reason || null,
+        ...this.getResumeState(),
+        ...extra,
+      });
+    } catch (err) {
+      console.warn("Upload state callback failed:", err);
+    }
+  }
+
+  setUploaderError(errorCode, err = null) {
+    this.status = "error";
+    this.error = errorCode || err?.message || "upload-error";
+    this.lastErrorAt = Date.now();
+    this.lastErrorCode = errorCode || null;
+    this.emitTelemetry("upload_error", {
+      errorCode: errorCode || null,
+      message: err?.message || this.error || "upload-error",
+    });
+    this.scheduleJournalPersist({ force: true });
+  }
+
+  async setSessionId(sessionId) {
+    this.sessionId = sessionId || null;
+    await this.persistUploadJournal({ force: true });
+    this.notifyStateChange("session-updated");
+  }
+
+  getResumeState() {
+    return {
+      projectId: this.projectId || null,
+      sceneId: this.sceneId || null,
+      type: this.metadata?.type || null,
+      trackType: this.getUploaderType(),
+      sessionId: this.sessionId || null,
+      videoId: this.videoId || null,
+      mediaId: this.mediaId || null,
+      uploadUrl: this.uploadUrl || null,
+      offset: this.offset || 0,
+      totalBytes: this.totalBytes || 0,
+      status: this.status,
+      error: this.error || null,
+      stalled: this.stalled,
+      queueLength: this.chunkQueue.length,
+      queuedBytes: this.queuedBytes,
+      lastProgressAt: this.lastProgressAt || null,
+      journalKey: this.journalKey || null,
+      journalLookupKey: this.journalLookupKey || null,
+      resumeCount: this.resumeCount || 0,
+      firstByteAt: this.firstByteAt || null,
+      readyAt: this.readyAt || null,
+      createdAt: this.createdAt || null,
+      finalizedAt: this.finalizedAt || null,
+      lastErrorAt: this.lastErrorAt || null,
+      lastErrorCode: this.lastErrorCode || null,
+      updatedAt: Date.now(),
+    };
+  }
+
+  scheduleJournalPersist({ force = false } = {}) {
+    if (force) {
+      if (this.journalPersistTimer) {
+        clearTimeout(this.journalPersistTimer);
+        this.journalPersistTimer = null;
+      }
+      void this.persistUploadJournal({ force: true });
+      return;
+    }
+
+    const sinceLastPersist = Date.now() - this.lastJournalPersistAt;
+    if (sinceLastPersist >= this.JOURNAL_WRITE_INTERVAL_MS) {
+      void this.persistUploadJournal({ force: false });
+      return;
+    }
+
+    if (this.journalPersistTimer) return;
+    const waitMs = this.JOURNAL_WRITE_INTERVAL_MS - sinceLastPersist;
+    this.journalPersistTimer = setTimeout(() => {
+      this.journalPersistTimer = null;
+      void this.persistUploadJournal({ force: false });
+    }, Math.max(250, waitMs));
+  }
+
+  getJournalKey(mediaId) {
+    return mediaId ? `uploadJournal-${mediaId}` : null;
+  }
+
+  getJournalLookupKey(projectId, sceneId, type) {
+    return `uploadJournalLookup-${projectId}-${sceneId || "none"}-${type}`;
+  }
+
+  getVideoMapKey(projectId, sceneId, type) {
+    return `bunnyVideoMap-${projectId}-${sceneId || "none"}-${type || "none"}`;
+  }
+
+  async getVideoMap(projectId, sceneId, type) {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) return null;
+    const key = this.getVideoMapKey(projectId, sceneId, type);
+    const result = await chrome.storage.local.get([key]);
+    const entry = result?.[key];
+    if (!entry || !entry.videoId || !entry.mediaId) return null;
+    return { ...entry, key };
+  }
+
+  async persistVideoMap({
+    projectId,
+    sceneId,
+    type,
+    videoId,
+    mediaId,
+    sessionId,
+  }) {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+    if (!projectId || !videoId || !mediaId) return;
+    const key = this.getVideoMapKey(projectId, sceneId, type);
+    await chrome.storage.local.set({
+      [key]: {
+        projectId,
+        sceneId: sceneId || null,
+        type: type || null,
+        trackType: this.getUploaderType(),
+        videoId,
+        mediaId,
+        sessionId: sessionId || null,
+        updatedAt: Date.now(),
+      },
+    });
+  }
+
+  buildFingerprint({ projectId, sceneId, type, width, height, fingerprint }) {
+    if (fingerprint) return fingerprint;
+    return `${projectId || "none"}:${sceneId || "none"}:${type || "none"}:${
+      width || "na"
+    }x${height || "na"}`;
+  }
+
+  async clearUploadJournal(journal = null) {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+    const keysToRemove = [];
+    const mediaId = journal?.mediaId || this.mediaId || null;
+    const journalKey = journal?.key || this.getJournalKey(mediaId);
+    const lookupKey = journal?.lookupKey || this.journalLookupKey;
+
+    if (journalKey) keysToRemove.push(journalKey);
+    if (lookupKey) keysToRemove.push(lookupKey);
+    if (!keysToRemove.length) return;
+
+    try {
+      await chrome.storage.local.remove(keysToRemove);
+      this.debugLog("Cleared upload journal", {
+        keys: keysToRemove,
+      });
+      if (!journal || !journal.key || journal.key === this.journalKey) {
+        this.journalKey = null;
+      }
+      this.notifyStateChange("journal-cleared");
+    } catch (err) {
+      this.debugLog("Failed to clear upload journal", {
+        error: err?.message || err,
+        keys: keysToRemove,
+      });
+    }
+  }
+
+  async persistUploadJournal({ force = false } = {}) {
+    if (
+      typeof chrome === "undefined" ||
+      !chrome.storage?.local ||
+      !this.mediaId
+    )
+      return;
+    if (this.journalPersistTimer && force) {
+      clearTimeout(this.journalPersistTimer);
+      this.journalPersistTimer = null;
+    }
+
+    if (
+      !force &&
+      Date.now() - this.lastJournalPersistAt < this.JOURNAL_WRITE_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    const journalKey = this.journalKey || this.getJournalKey(this.mediaId);
+    this.journalKey = journalKey;
+
+    const inferredLookupKey =
+      this.projectId && this.metadata?.type
+        ? this.getJournalLookupKey(
+            this.projectId,
+            this.sceneId,
+            this.metadata.type,
+          )
+        : null;
+    const lookupKey = this.journalLookupKey || inferredLookupKey;
+    this.journalLookupKey = lookupKey;
+
+    const updatedAt = Date.now();
+    const payload = {
+      journalVersion: 2,
+      key: journalKey,
+      projectId: this.projectId || null,
+      sceneId: this.sceneId || null,
+      type: this.metadata.type || null,
+      trackType: this.getUploaderType(),
+      width: this.metaWidth || null,
+      height: this.metaHeight || null,
+      fingerprint: this.fingerprint || null,
+      sessionId: this.sessionId || null,
+      uploadUrl: this.uploadUrl || null,
+      signature: this.signature || null,
+      expires: this.expires || null,
+      libraryId: this.libraryId || null,
+      offset: this.offset,
+      totalBytes: this.totalBytes,
+      updatedAt,
+      videoId: this.videoId,
+      mediaId: this.mediaId,
+      stalled: this.stalled,
+      status: this.status,
+      error: this.error || null,
+      queueLength: this.chunkQueue.length,
+      queuedBytes: this.queuedBytes,
+      lastProgressAt: this.lastProgressAt || null,
+      createdAt: this.createdAt || null,
+      readyAt: this.readyAt || null,
+      firstByteAt: this.firstByteAt || null,
+      lastChunkQueuedAt: this.lastChunkQueuedAt || null,
+      finalizeStartedAt: this.finalizeStartedAt || null,
+      finalizedAt: this.finalizedAt || null,
+      lastErrorAt: this.lastErrorAt || null,
+      lastErrorCode: this.lastErrorCode || null,
+      lastServerOffset: this.lastServerOffset || 0,
+      resumeCount: this.resumeCount || 0,
+    };
+
+    const toStore = {
+      [journalKey]: payload,
+    };
+    if (lookupKey) {
+      toStore[lookupKey] = {
+        mediaId: this.mediaId,
+        key: journalKey,
+        updatedAt: payload.updatedAt,
+      };
+    }
+    try {
+      await chrome.storage.local.set(toStore);
+      this.lastJournalPersistAt = updatedAt;
+      this.notifyStateChange("journal-persisted");
+    } catch (err) {
+      this.debugLog("Failed to persist upload journal", {
+        error: err?.message || err,
+        mediaId: this.mediaId,
+      });
+    }
+  }
+
+  isResumeJournalStale(updatedAt) {
+    if (!updatedAt) return true;
+    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    return Date.now() - updatedAt > MAX_AGE_MS;
+  }
+
+  validateResumeJournal(
+    journal,
+    { projectId, sceneId, type, fingerprint, allowSceneMismatch = false },
+  ) {
+    if (
+      !journal ||
+      !journal.mediaId ||
+      !journal.videoId ||
+      !journal.uploadUrl
+    ) {
+      return { valid: false, reason: "missing-required-fields" };
+    }
+    if (journal.projectId !== projectId) {
+      return { valid: false, reason: "project-mismatch" };
+    }
+    if (journal.type !== type) {
+      return { valid: false, reason: "type-mismatch" };
+    }
+    if (
+      !allowSceneMismatch &&
+      sceneId &&
+      journal.sceneId &&
+      journal.sceneId !== sceneId
+    ) {
+      return { valid: false, reason: "scene-mismatch" };
+    }
+    if (
+      fingerprint &&
+      journal.fingerprint &&
+      journal.fingerprint !== fingerprint
+    ) {
+      return { valid: false, reason: "fingerprint-mismatch" };
+    }
+    if (this.isResumeJournalStale(journal.updatedAt)) {
+      return { valid: false, reason: "stale-journal" };
+    }
+    return { valid: true, reason: "ok" };
+  }
+
+  async getResumeJournal({
+    projectId,
+    sceneId,
+    type,
+    fingerprint,
+    reuse = null,
+  }) {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) return null;
+    const lookupKey = this.getJournalLookupKey(projectId, sceneId, type);
+    const candidates = [];
+
+    if (reuse?.mediaId) {
+      const reuseKey = this.getJournalKey(reuse.mediaId);
+      const reuseResult = await chrome.storage.local.get([reuseKey]);
+      if (reuseResult[reuseKey]) {
+        candidates.push({
+          journal: reuseResult[reuseKey],
+          key: reuseKey,
+          lookupKey,
+          allowSceneMismatch: true,
+        });
+      }
+    }
+
+    const lookupResult = await chrome.storage.local.get([lookupKey]);
+    const mappedMediaId = lookupResult?.[lookupKey]?.mediaId || null;
+    if (mappedMediaId) {
+      const mappedKey = this.getJournalKey(mappedMediaId);
+      const mappedResult = await chrome.storage.local.get([mappedKey]);
+      if (mappedResult[mappedKey]) {
+        candidates.push({
+          journal: mappedResult[mappedKey],
+          key: mappedKey,
+          lookupKey,
+          allowSceneMismatch: false,
+        });
+      }
+    }
+
+    if (!candidates.length) return null;
+
+    for (const candidate of candidates) {
+      const validation = this.validateResumeJournal(candidate.journal, {
+        projectId,
+        sceneId,
+        type,
+        fingerprint,
+        allowSceneMismatch: candidate.allowSceneMismatch,
+      });
+      if (validation.valid) {
+        this.debugLog("Found valid upload journal for resume", {
+          mediaId: candidate.journal.mediaId,
+          projectId,
+          sceneId,
+          type,
+          offset: candidate.journal.offset || 0,
+        });
+        return {
+          ...candidate.journal,
+          key: candidate.key,
+          lookupKey: candidate.lookupKey,
+        };
+      }
+
+      this.debugLog("Discarding invalid upload journal", {
+        reason: validation.reason,
+        mediaId: candidate.journal?.mediaId || null,
+        projectId,
+        sceneId,
+        type,
+      });
+      await this.clearUploadJournal({
+        key: candidate.key,
+        lookupKey: candidate.lookupKey,
+        mediaId: candidate.journal?.mediaId || null,
+      });
+    }
+
+    return null;
+  }
+
+  async getServerOffset() {
+    if (!this.uploadUrl) return null;
+    try {
+      const headRes = await fetch(this.uploadUrl, {
+        method: "HEAD",
+        headers: {
+          "Tus-Resumable": "1.0.0",
+          AuthorizationSignature: this.signature,
+          AuthorizationExpire: String(this.expires),
+          LibraryId: String(this.libraryId),
+          VideoId: this.videoId,
+        },
+      });
+
+      if (!headRes.ok) {
+        this.debugLog("HEAD offset check failed", {
+          status: headRes.status,
+        });
+        return null;
+      }
+
+      const serverOffset = parseInt(
+        headRes.headers.get("Upload-Offset") || "0",
+        10,
+      );
+      return Number.isFinite(serverOffset) ? serverOffset : null;
+    } catch (err) {
+      this.debugLog("HEAD offset check threw", {
+        error: err?.message || err,
+      });
+      return null;
+    }
+  }
+  async initialize(
+    projectId,
+    {
+      title,
+      type,
+      width = null,
+      height = null,
+      linkedMediaId = null,
+      reuse = null,
+      sceneId = null,
+      sessionId = null,
+    },
+  ) {
+    if (this.status !== "idle" && this.status !== "error") {
+      throw new Error("Uploader has already been initialized");
+    }
+
+    try {
+      this.projectId = projectId;
+      this.metadata = { title, type, linkedMediaId, sceneId };
+      this.trackType = this.trackType || type || null;
+      this.sceneId = sceneId;
+      this.metaWidth = width;
+      this.metaHeight = height;
+      this.sessionId = sessionId || this.sessionId || null;
+      this.journalLookupKey = this.getJournalLookupKey(projectId, sceneId, type);
+      this.createdAt = this.createdAt || Date.now();
+
+      this.status = "initializing";
+      this.error = null;
+      this.offset = 0;
+      this.totalBytes = 0;
+      this.lastErrorAt = null;
+      this.lastErrorCode = null;
+      this.initializedFromResume = false;
+
+      // Build fingerprint for resume journal matching
+      const fingerprint = this.buildFingerprint({
+        projectId,
+        sceneId,
+        type,
+        width,
+        height,
+      });
+      this.fingerprint = fingerprint;
+
+      // Attempt to locate a resume journal candidate from storage
+      const resumeJournal = await this.getResumeJournal({
+        projectId,
+        sceneId,
+        type,
+        fingerprint,
+        reuse,
+      });
+
+      // Validate reuse object if provided
+      if (reuse) {
+        if (!reuse.videoId || !reuse.mediaId) {
+          throw new Error(
+            "Invalid reuse object: must have both videoId and mediaId",
+          );
+        }
+        this.videoId = reuse.videoId;
+        this.mediaId = reuse.mediaId;
+      } else if (resumeJournal?.videoId && resumeJournal?.mediaId) {
+        this.initializedFromResume = true;
+        this.videoId = resumeJournal.videoId;
+        this.mediaId = resumeJournal.mediaId;
+        this.uploadUrl = resumeJournal.uploadUrl || null;
+        this.offset = resumeJournal.offset || 0;
+        this.totalBytes = resumeJournal.totalBytes || 0;
+        this.journalKey =
+          resumeJournal.key || this.journalKey || this.getJournalKey(this.mediaId);
+        this.journalLookupKey = resumeJournal.lookupKey || this.journalLookupKey;
+        if (!this.sessionId && resumeJournal.sessionId) {
+          this.sessionId = resumeJournal.sessionId;
+        }
+        this.resumeCount = (resumeJournal.resumeCount || 0) + 1;
+        this.debugLog("Resuming upload from journal candidate", {
+          projectId,
+          sceneId,
+          type,
+          mediaId: this.mediaId,
+          offset: this.offset,
+        });
+        await this.persistVideoMap({
+          projectId,
+          sceneId,
+          type,
+          videoId: this.videoId,
+          mediaId: this.mediaId,
+          sessionId: this.sessionId,
+        });
+      } else {
+        const existingMap = await this.getVideoMap(projectId, sceneId, type);
+        if (existingMap?.videoId && existingMap?.mediaId) {
+          this.videoId = existingMap.videoId;
+          this.mediaId = existingMap.mediaId;
+          this.journalKey = this.getJournalKey(this.mediaId);
+          this.debugLog("Reusing Bunny video from map", {
+            projectId,
+            sceneId,
+            type,
+            mediaId: this.mediaId,
+          });
+        }
+      }
+
+      if (!this.videoId || !this.mediaId) {
+        const { authenticated, user } = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ type: "check-auth-status" }, resolve);
+        });
+
+        if (!authenticated) throw new Error("Not authenticated with Screenity");
+
+        const { screenityToken } = await chrome.storage.local.get([
+          "screenityToken",
+        ]);
+
+        this.userToken = screenityToken;
+
+        if (!this.userToken) {
+          throw new Error("Missing user token for saving upload metadata");
+        }
+
+        const res = await fetch(`${API_BASE}/bunny/videos`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${screenityToken}`,
+          },
+          body: JSON.stringify({
+            title,
+            projectId,
+            type,
+            linkedMediaId,
+            sceneId,
+            recordingSessionId: this.sessionId || null,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Failed to create Bunny video");
+        const data = await res.json();
+        this.videoId = data.videoId;
+        this.mediaId = data.mediaId;
+        await this.persistVideoMap({
+          projectId,
+          sceneId,
+          type,
+          videoId: this.videoId,
+          mediaId: this.mediaId,
+          sessionId: this.sessionId,
+        });
+      } else {
+        await this.persistVideoMap({
+          projectId,
+          sceneId,
+          type,
+          videoId: this.videoId,
+          mediaId: this.mediaId,
+          sessionId: this.sessionId,
+        });
+      }
+
+      this.journalKey = this.journalKey || this.getJournalKey(this.mediaId);
+      await this.refreshTusAuth();
+
+      if (this.uploadUrl) {
+        const serverOffset = await this.getServerOffset();
+        if (Number.isFinite(serverOffset) && serverOffset >= 0) {
+          this.lastServerOffset = serverOffset;
+          this.offset = serverOffset;
+          this.totalBytes = Math.max(this.totalBytes || 0, serverOffset);
+          if (this.initializedFromResume || serverOffset > 0) {
+            this.emitTelemetry("upload_resumed", {
+              resumedOffset: serverOffset,
+              resumeCount: this.resumeCount || 1,
+            });
+          }
+        } else {
+          this.setUploaderError("resume-offset-unverified");
+          throw new Error("Could not verify server offset during resume.");
+        }
+      } else {
+        await this.initTusUpload();
+      }
+
+      await this.persistUploadJournal({ force: true });
+      this.startHeartbeat();
+      this.status = "ready";
+      this.readyAt = Date.now();
+      this.emitTelemetry("upload_started", {
+        resumed: this.initializedFromResume,
+        resumeCount: this.resumeCount || 0,
+      });
+      this.scheduleJournalPersist({ force: true });
+      return { videoId: this.videoId, mediaId: this.mediaId };
+    } catch (err) {
+      if (this.status !== "error") {
+        this.setUploaderError("initialize-failed", err);
+      } else {
+        this.scheduleJournalPersist({ force: true });
+      }
+      throw err;
+    }
+  }
+
+  async refreshTusAuth() {
+    // Prefer stored screenityToken for auth
+    const token = this.userToken || (await chrome.storage.local.get(["screenityToken"]).then(r => r.screenityToken));
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const url = `${API_BASE}/bunny/videos/tus-auth?videoId=${this.videoId}`;
+
+    // Internal retry absorbs short backend blips (5xx/408/429/network) so they
+    // don't burn the outer uploadChunk retry budget. Fatal auth errors
+    // (400/401/403) are surfaced immediately — no recovery possible.
+    const MAX_ATTEMPTS = 4;
+    let lastStatus = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      let res = null;
+      try {
+        res = await fetch(url, { headers });
+      } catch (err) {
+        lastErr = err;
+        this.emitTelemetry("upload_auth_refresh_failed", {
+          attempt: attempt + 1,
+          status: null,
+          reason: "network",
+          errMsg: String(err?.message || err),
+        });
+        if (attempt === MAX_ATTEMPTS - 1) break;
+        await this._sleepWithJitter(500 * Math.pow(2, attempt));
+        continue;
+      }
+
+      if (res.ok) {
+        const { signature, expires, libraryId } = await res.json();
+        this.signature = signature;
+        this.expires = expires;
+        this.libraryId = libraryId;
+        this.scheduleJournalPersist();
+        return;
+      }
+
+      lastStatus = res.status;
+      const isFatalAuth = res.status === 400 || res.status === 401 || res.status === 403;
+      const isTransient = res.status >= 500 || res.status === 408 || res.status === 429;
+      this.emitTelemetry("upload_auth_refresh_failed", {
+        attempt: attempt + 1,
+        status: res.status,
+        reason: isFatalAuth ? "unauthorized" : isTransient ? "network" : "other",
+      });
+      if (isFatalAuth || !isTransient || attempt === MAX_ATTEMPTS - 1) break;
+      await this._sleepWithJitter(500 * Math.pow(2, attempt));
+    }
+
+    // Build a structured error whose message matches the outer transient regex
+    // (/network/i) for 5xx/blip cases, and stays non-transient for 401/403.
+    const classification =
+      lastStatus === 400 || lastStatus === 401 || lastStatus === 403
+        ? "unauthorized"
+        : "network";
+    const err = new Error(
+      `Failed to refresh TUS auth (${classification} ${lastStatus ?? "offline"})`,
+    );
+    err.status = lastStatus;
+    err.cause = lastErr || undefined;
+    throw err;
+  }
+
+  _sleepWithJitter(baseMs) {
+    const jitter = Math.random() * 250;
+    return new Promise((r) => setTimeout(r, baseMs + jitter));
+  }
+
+  async initTusUpload() {
+    const res = await fetch("https://video.bunnycdn.com/tusupload", {
+      method: "POST",
+      headers: {
+        "Tus-Resumable": "1.0.0",
+        "Upload-Defer-Length": "1",
+        AuthorizationSignature: this.signature,
+        AuthorizationExpire: String(this.expires),
+        LibraryId: String(this.libraryId),
+        VideoId: this.videoId,
+        "Upload-Metadata": `filetype ${btoa("video/webm")},title ${btoa(
+          this.metadata.title,
+        )}`,
+      },
+    });
+
+    if (!res.ok) throw new Error("Failed to start TUS upload session");
+    const location = res.headers.get("location");
+    this.uploadUrl = location.startsWith("/")
+      ? `https://video.bunnycdn.com${location}`
+      : location;
+
+    if (this.userToken) {
+      fetch(`${API_BASE}/bunny/videos/save-upload-meta`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.userToken}`,
+        },
+        body: JSON.stringify({
+          mediaId: this.mediaId,
+          uploadUrl: this.uploadUrl,
+          signature: this.signature,
+          expires: this.expires,
+          projectId: this.projectId,
+          sceneId: this.sceneId || null,
+          recordingSessionId: this.sessionId || null,
+          type: this.metadata?.type || null,
+        }),
+      }).catch((err) =>
+        this.debugLog("save-upload-meta failed (non-blocking)", { error: String(err) }),
+      );
+    } else {
+      this.debugLog("Skipping save-upload-meta because user token is missing", {
+        mediaId: this.mediaId,
+        uploadUrl: this.uploadUrl,
+        signature: this.signature,
+        expires: this.expires,
+      });
+    }
+    await this.persistUploadJournal({ force: true });
+  }
+
+  async write(chunk) {
+    if (this.isFinalizing) throw new Error("Cannot write during finalization");
+    if (this.isPaused) throw new Error("Uploader paused");
+    if (!this.uploadUrl) throw new Error("Uploader not initialized");
+
+    // Check if we're in error state
+    if (this.status === "error") {
+      throw new Error(`Uploader in error state: ${this.error}`);
+    }
+
+    await this.checkAuthExpiration();
+    this.status = "uploading";
+    if (!this.hasEmittedClientStarted) {
+      this.hasEmittedClientStarted = true;
+      this.emitTelemetry("upload_client_started");
+    }
+
+    for (let i = 0; i < chunk.size; i += this.CHUNK_SIZE) {
+      const subChunk = chunk.slice(i, i + this.CHUNK_SIZE);
+      this.chunkQueue.push(subChunk);
+      this.queuedBytes += subChunk.size;
+      this.totalBytes += subChunk.size;
+    }
+    this.lastChunkQueuedAt = Date.now();
+    this.scheduleJournalPersist();
+
+    // Always ensure queue is processing
+    if (!this.isProcessingQueue) {
+      this.queueProcessingPromise = this.processQueue();
+    }
+
+    // Wait for current queue to finish processing these chunks
+    if (this.queuedBytes > 10 * 1024 * 1024) {
+      await this.waitForPendingUploads();
+    }
+
+    // Thumbnail extraction disabled in-flight to reduce timeouts/noise.
+    this._hasExtractedMeta = true;
+  }
+
+  async checkAuthExpiration() {
+    if (!this.expires) return;
+    const now = Math.floor(Date.now() / 1000);
+    if (this.expires - now < this.TOKEN_REFRESH_THRESHOLD) {
+      await this.refreshTusAuth();
+
+      if (this.isProcessingQueue) {
+        this.pause();
+        this.resume();
+      }
+    }
+  }
+  async uploadChunk(chunk) {
+    if (this.isFinalizing) return;
+    const data = new Uint8Array(await chunk.arrayBuffer());
+
+    for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        // AuthorizationSignature has ~20min TTL; refresh before every PATCH.
+        await this.checkAuthExpiration();
+
+        const currentOffset = this.offset;
+
+        const controller = new AbortController();
+        // Exposed so the heartbeat can abort a stalled PATCH.
+        this.currentPatchAbort = controller;
+        const timeout = setTimeout(
+          () => controller.abort("upload-timeout"),
+          this.UPLOAD_TIMEOUT_MS,
+        );
+
+        const res = await fetch(this.uploadUrl, {
+          method: "PATCH",
+          headers: {
+            "Tus-Resumable": "1.0.0",
+            "Content-Type": "application/offset+octet-stream",
+            "Upload-Offset": String(currentOffset),
+            AuthorizationSignature: this.signature,
+            AuthorizationExpire: String(this.expires),
+            LibraryId: String(this.libraryId),
+            VideoId: this.videoId,
+          },
+          body: data,
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        this.currentPatchAbort = null;
+
+        if (res.ok || res.status === 204) {
+          // Server is the source of truth
+          const serverOffsetHeader = res.headers.get("Upload-Offset");
+          if (serverOffsetHeader) {
+            this.offset = parseInt(serverOffsetHeader, 10);
+          } else {
+            // Fallback if Bunny doesn't return it for some reason
+            this.offset = currentOffset + data.length;
+          }
+          this.lastServerOffset = this.offset;
+
+          this.recordProgress(data.length);
+          return;
+        } else {
+          const errorText = await res.text();
+
+          // If the TUS session was invalidated (404), flag as fatal so callers can fall back.
+          if (res.status === 404) {
+            this.status = "error";
+            this.error = "tus-session-missing";
+            this.stalled = true;
+            this.lastErrorAt = Date.now();
+            this.lastErrorCode = "tus-session-missing";
+            this.emitTelemetry("upload_error", {
+              errorCode: "tus-session-missing",
+              httpStatus: 404,
+            });
+            this.scheduleJournalPersist({ force: true });
+            if (typeof this.onStall === "function") {
+              this.onStall({
+                mediaId: this.mediaId,
+                videoId: this.videoId,
+                offset: this.offset,
+                diff: Date.now() - this.lastProgressAt,
+                reason: "tus-404",
+              });
+            }
+            throw new Error("TUS session missing (404).");
+          }
+
+          // Handle offset mismatch errors (409 Conflict)
+          if (
+            res.status === 409 ||
+            errorText.toLowerCase().includes("offset")
+          ) {
+            console.warn(
+              `⚠️ Offset conflict detected (status ${res.status}), fetching current offset from server`,
+            );
+
+            // Query server for current offset using HEAD request
+            try {
+              const serverOffset = await this.getServerOffset();
+              if (Number.isFinite(serverOffset) && serverOffset >= 0) {
+                this.lastServerOffset = serverOffset;
+                this.offset = serverOffset;
+                this.totalBytes = Math.max(this.totalBytes || 0, serverOffset);
+                this.emitTelemetry("upload_resumed", {
+                  resumedOffset: serverOffset,
+                  reason: "offset-conflict",
+                });
+                this.scheduleJournalPersist({ force: true });
+
+                // Retry with corrected offset
+                continue;
+              }
+            } catch (headErr) {
+              console.error("Failed to fetch server offset:", headErr);
+            }
+          }
+
+          throw new Error(`Upload failed (${res.status}): ${errorText}`);
+        }
+      } catch (err) {
+        this.currentPatchAbort = null;
+        // Transient errors (network, timeout, stall-abort, 5xx, 408, 429) retry forever with capped backoff.
+        const isExplicitAbort =
+          this.status === "aborted" || this.isPaused === true;
+        if (isExplicitAbort) {
+          throw err;
+        }
+        const msg = String(err?.message || "");
+        const status = typeof err?.status === "number" ? err.status : null;
+        const isTransient =
+          err?.name === "AbortError" || // timeout / stall-recovery
+          err?.name === "TypeError" || // fetch network failure
+          (status !== null && (status >= 500 || status === 408 || status === 429)) ||
+          /Upload failed \((?:5\d\d|408|429)\b/.test(msg) ||
+          /network|Failed to fetch|timeout/i.test(msg);
+        if (err?.name === "AbortError") {
+          console.warn("⚠️ Upload chunk aborted (timeout or stall-recovery)");
+        }
+        if (!isTransient && attempt === this.MAX_RETRIES) {
+          console.error(
+            `❌ Non-transient failure after ${this.MAX_RETRIES} retries:`,
+            err,
+          );
+          this.setUploaderError("chunk-upload-retries-exhausted", err);
+          throw err;
+        }
+        const attemptLabel = isTransient
+          ? `transient retry #${attempt + 1}`
+          : `attempt ${attempt + 1}/${this.MAX_RETRIES + 1}`;
+        console.warn(`⚠️ Upload ${attemptLabel} failed, retrying...`, err.message);
+        const jitter = Math.random() * 300;
+        // Cap backoff at 60s so offline→online reconnects retry within a minute.
+        const baseDelay = Math.min(
+          this.RETRY_DELAY * Math.pow(2, Math.min(attempt, 7)),
+          60_000,
+        );
+        await new Promise((r) => setTimeout(r, baseDelay + jitter));
+        // Never trip the permanent-failure branch for transient errors.
+        if (isTransient && attempt >= this.MAX_RETRIES) {
+          attempt = this.MAX_RETRIES - 1;
+        }
+      }
+    }
+  }
+
+  async processQueue() {
+    if (this.isProcessingQueue) return;
+    this.isProcessingQueue = true;
+
+    try {
+      while (this.chunkQueue.length && !this.isPaused && !this.isFinalizing) {
+        const chunk = this.chunkQueue.shift();
+        this.queuedBytes -= chunk.size;
+
+        // Serialize uploads: wait for each chunk to complete before starting next
+        try {
+          await this.uploadChunk(chunk);
+        } catch (err) {
+          console.error("❌ Chunk upload failed in queue:", err);
+
+          // Put chunk back at front of queue for potential retry
+          this.chunkQueue.unshift(chunk);
+          this.queuedBytes += chunk.size;
+
+          // Set error state
+          this.setUploaderError("queue-upload-failed", err);
+
+          // Stop processing queue on error
+          break;
+        }
+      }
+    } finally {
+      this.isProcessingQueue = false;
+      this.queueProcessingPromise = null;
+    }
+  }
+
+  async waitForPendingUploads() {
+    // Temporarily unpause to ensure all chunks are processed
+    const wasPaused = this.isPaused;
+    if (wasPaused) {
+      this.isPaused = false;
+    }
+
+    while (
+      this.chunkQueue.length > 0 ||
+      this.isProcessingQueue ||
+      this.pendingUploads.length > 0
+    ) {
+      if (this.stalled && this.lastProgressAt) {
+        const diff = Date.now() - this.lastProgressAt;
+        if (diff > this.HEARTBEAT_LAG_MS * 2) {
+          break;
+        }
+      }
+      if (this.chunkQueue.length && !this.isProcessingQueue) {
+        await this.processQueue();
+      }
+      if (this.queueProcessingPromise) {
+        await this.queueProcessingPromise;
+      }
+      if (this.pendingUploads.length) {
+        await Promise.all(this.pendingUploads);
+      }
+      // Small delay to catch any race conditions
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    // Restore pause state if it was paused
+    if (wasPaused) {
+      this.isPaused = true;
+    }
+  }
+
+  async finalize() {
+    if (this.isFinalizing) throw new Error("Already finalizing");
+    this.isFinalizing = true;
+    this.status = "finalizing";
+    this.finalizeStartedAt = Date.now();
+    this.emitTelemetry("upload_finalize_started");
+    this.scheduleJournalPersist({ force: true });
+    try {
+      await this.waitForPendingUploads();
+      await this.checkAuthExpiration();
+
+      // Re-validate offset with server to avoid partial finalization
+      let serverOffset = null;
+      try {
+        const headRes = await fetch(this.uploadUrl, {
+          method: "HEAD",
+          headers: {
+            "Tus-Resumable": "1.0.0",
+            AuthorizationSignature: this.signature,
+            AuthorizationExpire: String(this.expires),
+            LibraryId: String(this.libraryId),
+            VideoId: this.videoId,
+          },
+        });
+
+        if (headRes.ok) {
+          serverOffset = parseInt(
+            headRes.headers.get("Upload-Offset") || "0",
+            10,
+          );
+          this.offset = serverOffset;
+        }
+      } catch (err) {
+        console.warn("⚠️ Failed HEAD before finalize:", err);
+      }
+
+      // If server didn't receive everything, don't "finalize" into a ghost upload.
+      if (serverOffset === null) {
+        this.setUploaderError("finalize-offset-unverified");
+        throw new Error("Finalize failed: could not verify server offset.");
+      }
+
+      if (serverOffset === 0) {
+        this.status = "error";
+        this.error = "server-offset-0";
+        this.lastErrorAt = Date.now();
+        this.lastErrorCode = "server-offset-0";
+        this.emitTelemetry("upload_error", {
+          errorCode: "server-offset-0",
+        });
+        this.scheduleJournalPersist({ force: true });
+        throw new Error("Finalize failed: server has 0 bytes.");
+      }
+
+      if (serverOffset < this.totalBytes) {
+        this.status = "error";
+        this.error = `incomplete-upload server=${serverOffset} expected=${this.totalBytes}`;
+        this.lastErrorAt = Date.now();
+        this.lastErrorCode = "finalize-incomplete-upload";
+        this.emitTelemetry("upload_error", {
+          errorCode: "finalize-incomplete-upload",
+          serverOffset,
+          expectedBytes: this.totalBytes,
+        });
+        this.scheduleJournalPersist({ force: true });
+        throw new Error(
+          `Finalize blocked: upload incomplete (server ${serverOffset} / expected ${this.totalBytes}).`,
+        );
+      }
+
+      if (serverOffset > this.totalBytes) {
+        this.status = "error";
+        this.error = `invalid-length server=${serverOffset} expected=${this.totalBytes}`;
+        this.lastErrorAt = Date.now();
+        this.lastErrorCode = "finalize-invalid-length";
+        this.emitTelemetry("upload_error", {
+          errorCode: "finalize-invalid-length",
+          serverOffset,
+          expectedBytes: this.totalBytes,
+        });
+        this.scheduleJournalPersist({ force: true });
+        throw new Error(
+          `Finalize blocked: serverOffset (${serverOffset}) exceeds expected totalBytes (${this.totalBytes}).`,
+        );
+      }
+
+      // Now we can safely complete the tus upload by declaring the final length
+      const res = await fetch(this.uploadUrl, {
+        method: "PATCH",
+        headers: {
+          "Tus-Resumable": "1.0.0",
+          "Content-Type": "application/offset+octet-stream",
+          "Upload-Offset": String(serverOffset),
+          "Upload-Length": String(this.totalBytes),
+          AuthorizationSignature: this.signature,
+          AuthorizationExpire: String(this.expires),
+          LibraryId: String(this.libraryId),
+          VideoId: this.videoId,
+        },
+      });
+
+      if (!res.ok && res.status !== 204) {
+        this.setUploaderError("finalize-patch-failed");
+        throw new Error("Finalization failed");
+      }
+      this.status = "completed";
+      this.finalizedAt = Date.now();
+      this.emitTelemetry("upload_finalize_completed", {
+        finalizedBytes: this.totalBytes,
+      });
+      this.emitTelemetry("upload_complete_client", {
+        finalizedBytes: this.totalBytes,
+      });
+      this.stopHeartbeat();
+      await this.clearUploadJournal();
+      this.notifyStateChange("finalize-completed");
+    } catch (err) {
+      // Reset the lock so a subsequent retry call can attempt finalize again.
+      // Without this reset, isFinalizing stays true permanently after any error,
+      // and every retry immediately throws "Already finalizing".
+      this.isFinalizing = false;
+      console.warn("[BunnyTusUploader] finalize failed — isFinalizing reset for retry", {
+        trackType: this.trackType,
+        error: err?.message || String(err),
+        offset: this.offset,
+        totalBytes: this.totalBytes,
+      });
+      throw err;
+    }
+  }
+
+  getMeta() {
+    return {
+      videoId: this.videoId,
+      mediaId: this.mediaId,
+      offset: this.offset,
+      status: this.status,
+      error: this.error,
+      isPaused: this.isPaused,
+      isFinalizing: this.isFinalizing,
+      metadata: this.metadata,
+      expiresAt: this.expires ? new Date(this.expires * 1000) : null,
+      queueLength: this.chunkQueue.length,
+      queuedBytes: this.queuedBytes,
+      width: this.metaWidth || null,
+      height: this.metaHeight || null,
+      thumbnail: this.metaThumbnail || null,
+      sceneId: this.sceneId || null,
+      lastProgressAt: this.lastProgressAt,
+      stalled: this.stalled,
+    };
+  }
+
+  pause() {
+    this.isPaused = true;
+    if (this.status !== "completed" && this.status !== "error") {
+      this.status = "paused";
+    }
+    this.scheduleJournalPersist();
+  }
+
+  resume() {
+    if (this.isPaused) {
+      this.isPaused = false;
+      if (
+        this.status !== "completed" &&
+        this.status !== "error" &&
+        this.status !== "finalizing"
+      ) {
+        this.status = "uploading";
+      }
+      if (!this.isProcessingQueue && this.chunkQueue.length > 0) {
+        this.queueProcessingPromise = this.processQueue();
+      }
+      this.emitTelemetry("upload_resumed", {
+        reason: "client-resume",
+      });
+      this.scheduleJournalPersist();
+    }
+  }
+
+  async abort() {
+    this.pause();
+    this.status = "aborted";
+    this.uploadUrl = null;
+    this.chunkQueue = [];
+    this.queuedBytes = 0;
+    this.totalBytes = 0;
+    this.pendingUploads = [];
+    this.stopHeartbeat();
+    this.emitTelemetry("upload_cancelled");
+    if (this.journalPersistTimer) {
+      clearTimeout(this.journalPersistTimer);
+      this.journalPersistTimer = null;
+    }
+    await this.clearUploadJournal();
+    this.notifyStateChange("aborted");
+  }
+
+  startHeartbeat() {
+    this.stopHeartbeat();
+    this.lastProgressAt = Date.now();
+    this.stalled = false;
+    this.stallRecoveryInFlight = false;
+    this.heartbeatTimer = setInterval(() => {
+      const now = Date.now();
+      const diff = now - this.lastProgressAt;
+      if (diff > this.HEARTBEAT_LAG_MS) {
+        this.stalled = true;
+        this.emitTelemetry("upload_stalled", {
+          stallMs: diff,
+        });
+        this.scheduleJournalPersist({ force: true });
+        if (typeof this.onStall === "function") {
+          this.onStall({
+            mediaId: this.mediaId,
+            videoId: this.videoId,
+            offset: this.offset,
+            diff,
+          });
+        }
+        this.attemptStallRecovery(diff).catch((err) => {
+          console.warn("[bunnyTusUploader] stall recovery failed:", err);
+        });
+      }
+    }, this.HEARTBEAT_INTERVAL_MS);
+  }
+
+  async attemptStallRecovery(stallMs) {
+    if (this.stallRecoveryInFlight) return;
+    this.stallRecoveryInFlight = true;
+    try {
+      if (this.currentPatchAbort) {
+        try {
+          this.currentPatchAbort.abort("stall-recovery");
+        } catch {}
+        this.currentPatchAbort = null;
+      }
+      // Resync offset from server via HEAD so a partially-applied PATCH doesn't cause duplicate bytes.
+      try {
+        const res = await fetch(this.uploadUrl, {
+          method: "HEAD",
+          headers: {
+            "Tus-Resumable": "1.0.0",
+            AuthorizationSignature: this.signature,
+            AuthorizationExpire: String(this.expires),
+            LibraryId: String(this.libraryId),
+            VideoId: this.videoId,
+          },
+        });
+        if (res.ok || res.status === 204) {
+          const serverOffsetHeader = res.headers.get("Upload-Offset");
+          if (serverOffsetHeader != null) {
+            const serverOffset = parseInt(serverOffsetHeader, 10);
+            if (Number.isFinite(serverOffset)) {
+              this.offset = serverOffset;
+              this.lastServerOffset = serverOffset;
+              this.emitTelemetry("upload_stall_recovered", {
+                stallMs,
+                serverOffset,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[bunnyTusUploader] HEAD offset resync failed:", err);
+      }
+    } finally {
+      this.stallRecoveryInFlight = false;
+    }
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+  }
+
+  recordProgress(bytes) {
+    this.lastProgressAt = Date.now();
+    this.stalled = false;
+    if (!this.firstByteAt) {
+      this.firstByteAt = this.lastProgressAt;
+    }
+    if (typeof this.onProgress === "function") {
+      try {
+        this.onProgress({
+          bytes,
+          offset: this.offset,
+          videoId: this.videoId,
+          mediaId: this.mediaId,
+          at: this.lastProgressAt,
+        });
+      } catch (err) {
+        console.warn("Progress callback failed:", err);
+      }
+    }
+    if (!this.hasEmittedFirstByte) {
+      this.hasEmittedFirstByte = true;
+      this.emitTelemetry("upload_first_byte", {
+        bytes,
+      });
+    }
+    if (
+      this.lastProgressEventAt === 0 ||
+      this.lastProgressAt - this.lastProgressEventAt >=
+        this.PROGRESS_EVENT_INTERVAL_MS
+    ) {
+      this.lastProgressEventAt = this.lastProgressAt;
+      this.emitTelemetry("upload_progress", {
+        bytes,
+      });
+    }
+    this.scheduleJournalPersist();
+  }
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = BunnyTusUploader;
+} else {
+  window.BunnyTusUploader = BunnyTusUploader;
+}

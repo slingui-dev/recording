@@ -7,9 +7,24 @@ import { DropdownIcon } from "../../images/popup/images";
 // Context
 import { contentStateContext } from "../../context/ContentState";
 
+export const BaseSwitch = ({ value, checked, onChange }) => (
+  <S.Root
+    className="SwitchRoot"
+    id={value}
+    checked={checked}
+    onCheckedChange={onChange}
+  >
+    <S.Thumb className="SwitchThumb" />
+  </S.Root>
+);
+
 const Switch = (props) => {
   const [contentState, setContentState] = useContext(contentStateContext);
   const switchRef = useRef(null);
+  const switchId = props.anchorId || props.value || props.name;
+  const switchRowId =
+    props.rowAnchorId ||
+    (props.anchorId ? `${props.anchorId}-row` : undefined);
   const [hideToolbarLabel, setHideToolbarLabel] = useState(
     chrome.i18n.getMessage("hideToolbarLabel")
   );
@@ -64,10 +79,10 @@ const Switch = (props) => {
   const dropdownInRef = useRef(null);
   return (
     <form>
-      <div className="SwitchRow">
+      <div className="SwitchRow" id={switchRowId}>
         <label
           className="Label"
-          htmlFor={props.name}
+          htmlFor={switchId}
           style={{ paddingRight: 15 }}
           onClick={(e) => {
             if (props.name === "hideUI") {
@@ -164,10 +179,13 @@ const Switch = (props) => {
         {props.value ? (
           <S.Root
             className="SwitchRoot"
-            id={props.value}
+            id={switchId}
             ref={switchRef}
             checked={contentState[props.value]}
+            disabled={props.disabled}
             onCheckedChange={(checked) => {
+              if (props.disabled) return;
+
               setContentState((prevContentState) => ({
                 ...prevContentState,
                 [props.value]: checked,
@@ -228,12 +246,16 @@ const Switch = (props) => {
                   }));
                 }
               }
+
+              if (typeof props.onChange === "function") {
+                props.onChange(checked);
+              }
             }}
           >
             <S.Thumb className="SwitchThumb" />
           </S.Root>
         ) : (
-          <S.Root className="SwitchRoot" id={props.name}>
+          <S.Root className="SwitchRoot" id={switchId}>
             <S.Thumb className="SwitchThumb" />
           </S.Root>
         )}

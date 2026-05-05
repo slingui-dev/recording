@@ -495,6 +495,10 @@
     "message": "編輯功能與 MP4 匯出無法使用",
     "description": "Over 5 minutes limit description in editor"
   },
+  "overLimitLabelDescriptionFastPath": {
+    "message": "編輯功能無法使用",
+    "description": "Over limit description when the recording is a native MP4 (fast recorder / WebCodecs) so MP4 export still works"
+  },
   "videoProcessingLabelTitle": {
     "message": "影片正在於本機處理中...",
     "description": "Video processing label in editor"
@@ -524,7 +528,7 @@
     "description": "Trim label"
   },
   "preparingLabel": {
-    "message": "正在準備影片，請稍候...",
+    "message": "正在準備...",
     "description": "Preparing label"
   },
   "cropButtonTitle": {
@@ -600,16 +604,20 @@
     "description": "Download GIF label"
   },
   "shareModalSandboxTitle": {
-    "message": "與他人分享您的影片",
+    "message": "準備好升級你的錄影了嗎？",
     "description": "Share modal title in sandbox editor page"
   },
   "shareModalSandboxDescription": {
-    "message": "即將推出！留下您的電子郵件來獲得最新資訊，並在分享功能發佈時收到通知。",
+    "message": "雲端分享、縮放、模板功能……支持一位重視隱私的獨立女性開發者 ❤️",
     "description": "Share modal description in sandbox editor page"
   },
   "shareModalSandboxButton": {
-    "message": "加入等待列表",
+    "message": "了解 Pro 版",
     "description": "Share modal email placeholder in sandbox editor page"
+  },
+  "shareModalSandboxLogin": {
+    "message": "已有帳號？登入",
+    "description": "Share modal login link in sandbox editor page"
   },
   "shareSandboxButton": {
     "message": "分享影片",
@@ -887,6 +895,10 @@
     "message": "由於 Slingui Recording 完全在本機執行來保護隱私，它也受您的裝置硬體限制。處理這個長度的影片會需要太久，並需要大量電腦資源。不用擔心，您還是可以下載 WEBM 檔案或是原始錄影，只是編輯功能與 MP4 匯出會無法使用。雖然是這樣說，如果您瞭解風險您還是可以決定嘗試處理影片。",
     "description": "Over 5 minutes limit modal description"
   },
+  "overLimitModalDescriptionFastPath": {
+    "message": "由於 Screenity 完全在本機執行來保護隱私，它也受您的裝置硬體限制。處理這個長度的影片會需要太久，並需要大量電腦資源。您的 MP4 已準備好可以直接下載，但這麼長的片段無法在瀏覽器中編輯。雖然是這樣說，如果您瞭解風險您還是可以決定嘗試處理影片。",
+    "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
+  },
   "overLimitModalButton": {
     "message": "我瞭解風險，仍要嘗試",
     "description": "Over 5 minutes limit modal button"
@@ -1032,5 +1044,541 @@
   "permissionsModalReview": {
     "message": "審閱權限",
     "description": "Review permissions button"
+  },
+  "recordButtonMultiLabel": {
+    "message": "新增錄製",
+    "description": "Record button label (multi mode)"
+  },
+  "recorderSetupTitle": {
+    "message": "準備中...",
+    "description": "Title in recording page while setting up project before countdown starts"
+  },
+  "recorderSetupDescription": {
+    "message": "請稍候，正在準備您的錄製。",
+    "description": "Description in recording page before countdown starts"
+  },
+  "reopenToolbarToast": {
+    "message": "工具列已隱藏，可在彈出式選單中重新啟用。",
+    "description": "Toast message explaining to reopen the toolbar in the popup options"
+  },
+  "loginButtonLabel": {
+    "message": "登入或註冊",
+    "description": "Login button label in popup settings menu"
+  },
+  "logoutButtonLabel": {
+    "message": "登出",
+    "description": "Logout button label in popup settings menu"
+  },
+  "loggedOutToastTitle": {
+    "message": "您已登出",
+    "description": "Toast message shown when the user logs out"
+  },
+  "storageLimitReachedTitle": {
+    "message": "已達儲存上限",
+    "description": "Modal message shown when the storage limit is reached"
+  },
+  "storageLimitReachedDescription": {
+    "message": "您已使用完 100 GB 的儲存空間。請刪除舊影片或場景以繼續錄製。",
+    "description": "Modal description shown when the storage limit is reached"
+  },
+  "manageStorageButtonLabel": {
+    "message": "管理儲存空間",
+    "description": "Button label to manage storage in the popup settings menu"
+  },
+  "closeModalLabel": {
+    "message": "關閉",
+    "description": "Agnostic close modal button label"
+  },
+  "storageCheckFailTitle": {
+    "message": "無法檢查儲存空間",
+    "description": "Title shown when the storage check fails"
+  },
+  "storageCheckFailAuthDescription": {
+    "message": "檢查儲存空間時發生問題。請重新登入後再嘗試錄製。",
+    "description": "Description shown when the storage check fails due to authentication"
+  },
+  "storageCheckFailDescription": {
+    "message": "我們無法驗證您的儲存配額。請稍後再試或重新整理頁面。",
+    "description": "Description shown when the storage check fails"
+  },
+  "retryButtonLabel": {
+    "message": "再試一次",
+    "description": "Agnostic button label to try again"
+  },
+  "addedToMultiToast": {
+    "message": "場景已加入 Multi 錄製",
+    "description": "Toast message shown when a scene is added to multi-recording"
+  },
+  "readyRecordSceneToast": {
+    "message": "已準備好錄製影片中的新場景",
+    "description": "Toast message shown when the user is in an existing project and ready to record a new scene"
+  },
+  "reachingRecordingLimitToast": {
+    "message": "錄製即將達到 90 分鐘上限，將會自動停止",
+    "description": "Toast message shown when the recording is reaching the 90 minute limit"
+  },
+  "recordingLimitReachedToast": {
+    "message": "已達 90 分鐘上限，錄製已停止",
+    "description": "Toast message shown when the recording limit is reached"
+  },
+  "tabRecordingDisabledToast": {
+    "message": "此頁面停用分頁錄製，已自動切換為螢幕錄製。",
+    "description": "Toast message shown when tab recording is disabled on a page"
+  },
+  "projectRecordingCancelledToast": {
+    "message": "影片錄製已取消",
+    "description": "Toast message shown when the user cancels project recording"
+  },
+  "copiedToClipboardToast": {
+    "message": "連結已複製到剪貼簿",
+    "description": "Toast message shown when link has been copied to clipboard"
+  },
+  "failedToCopyToClipboardToast": {
+    "message": "無法複製連結",
+    "description": "Toast message shown when failed to copy link to clipboard"
+  },
+  "newestSortLabel": {
+    "message": "最新",
+    "description": "Label for the newest sort option"
+  },
+  "oldestSortLabel": {
+    "message": "最舊",
+    "description": "Label for the oldest sort option"
+  },
+  "allVideosHeading": {
+    "message": "所有影片",
+    "description": "Heading for the all videos section in the popup"
+  },
+  "noVideosFound": {
+    "message": "找不到影片",
+    "description": "Message shown when no videos are found in the popup"
+  },
+  "loadingVideosLabel": {
+    "message": "正在載入影片...",
+    "description": "Label shown when videos are loading in the popup"
+  },
+  "goToDashboardButtonLabel": {
+    "message": "前往儀表板",
+    "description": "Button label to go to the dashboard in the popup"
+  },
+  "welcomePopupTitle": {
+    "message": "歡迎使用 Screenity",
+    "description": "Title for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionTop": {
+    "message": "無廣告。無追蹤。無限制。",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionBottom": {
+    "message": "只要點下錄製。",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupCTA": {
+    "message": "免費使用 — 無需註冊！",
+    "description": "Call to action button for the welcome popup shown to new users"
+  },
+  "welcomePopupCloudTitle": {
+    "message": "想讓影片發揮更多效用？",
+    "description": "Title for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupCloudFeature1": {
+    "message": "雲端儲存，一鍵分享影片連結",
+    "description": "Feature 1 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature2": {
+    "message": "將多個片段合併成完整影片",
+    "description": "Feature 2 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature3": {
+    "message": "點擊智慧縮放（也可以自訂）",
+    "description": "Feature 3 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature4": {
+    "message": "加入範本、字幕、版面配置⋯",
+    "description": "Feature 4 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature5": {
+    "message": "自訂背景與模擬圖",
+    "description": "Feature 5 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudCTA": {
+    "message": "🔓 解鎖進階功能",
+    "description": "Call to action button for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupSupport": {
+    "message": "+ 支持獨立創作者的開發工作！",
+    "description": "Message for supporting the indie maker in the welcome popup"
+  },
+  "accountSettingsOption": {
+    "message": "帳號設定",
+    "description": "Label for the account settings option in the popup"
+  },
+  "supportSettingsOption": {
+    "message": "支援",
+    "description": "Label for the support option in the popup"
+  },
+  "inactiveSubscriptionTitle": {
+    "message": "您的 Pro 訂閱已失效",
+    "description": "Title shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionDescription": {
+    "message": "您的 Screenity Pro 訂閱目前已失效。",
+    "description": "Description shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionReactivation": {
+    "message": "請重新啟用以恢復存取。",
+    "description": "Message prompting the user to reactivate their subscription"
+  },
+  "inactiveSubscriptionDeletionWarning": {
+    "message": "您的影片與資料將在以下時間被永久刪除：",
+    "description": "Warning message about the deletion of videos and data"
+  },
+  "manageSubscriptionButton": {
+    "message": "管理您的訂閱",
+    "description": "Button to manage the user's subscription"
+  },
+  "inactiveSubscriptionFreeVersion": {
+    "message": "想繼續使用免費版本嗎？",
+    "description": "Message prompting the user to continue using the free version"
+  },
+  "downgradeToFreeButton": {
+    "message": "登出並降級",
+    "description": "Button to log out and downgrade to the free version"
+  },
+  "loggedOutTitle": {
+    "message": "您已登出",
+    "description": "Title shown when the user is logged out"
+  },
+  "loggedOutDescription": {
+    "message": "請重新登入以同步錄製內容並存取進階功能。",
+    "description": "Description shown when the user is logged out"
+  },
+  "logBackInButton": {
+    "message": "重新登入",
+    "description": "Button to log back in after being logged out"
+  },
+  "loggedOutFreeVersion": {
+    "message": "您仍可在未登入狀態下使用擴充功能，但錄製內容不會被保存且無法恢復。",
+    "description": "Message shown when the user is logged out and using the free version"
+  },
+  "continueWithoutLogin": {
+    "message": "繼續使用（不登入）",
+    "description": "Button to continue using the extension without logging in"
+  },
+  "instantRecordingModeLabel": {
+    "message": "即時錄製模式",
+    "description": "Label for the instant recording mode"
+  },
+  "instantRecordingModeTooltip": {
+    "message": "可立即下載，但相機與版面日後無法編輯。",
+    "description": "Tooltip for the instant recording mode"
+  },
+  "instantRecordingModeTitle": {
+    "message": "即時錄製模式",
+    "description": "Title for the instant recording mode"
+  },
+  "instantRecordingModeDescription": {
+    "message": "所有內容將錄製為單一影片，便於即時下載與分享。相機配置將無法再更改，但仍可進行其他編輯。",
+    "description": "Description for the instant recording mode"
+  },
+  "instantRecordingModeAction": {
+    "message": "了解了",
+    "description": "Action button for the instant recording mode"
+  },
+  "tabRecordingDisabledTooltip": {
+    "message": "此頁面停用了分頁錄製",
+    "description": "Tooltip shown when tab recording is disabled on a page"
+  },
+  "addingToLabel": {
+    "message": "新增至：",
+    "description": "Label shown when a scene is being recorded to a project"
+  },
+  "multiLabel": {
+    "message": "Multi",
+    "description": "Label for the multi-recording mode"
+  },
+  "finishLabelMulti": {
+    "message": "完成",
+    "description": "Label for the finish multi-recording button"
+  },
+  "welcomeProTitle": {
+    "message": "想讓錄製發揮更多效用？",
+    "description": "Title for the welcome Pro popup"
+  },
+  "welcomeProDescription": {
+    "message": "登入即可將影片儲存至雲端、使用連結分享，並存取進階編輯功能。",
+    "description": "Description for the welcome Pro popup"
+  },
+  "welcomeProButton": {
+    "message": "登入以解鎖付費功能",
+    "description": "Button to sign in to Screenity Pro"
+  },
+  "welcomeProSupport": {
+    "message": "支持獨立創作者的開發工作",
+    "description": "Message for supporting the indie maker in the welcome Pro popup"
+  },
+  "unlockMoreFeatures": {
+    "message": "解鎖更多功能",
+    "description": "Button to unlock more features in the editor"
+  },
+  "shareUnlockButton": {
+    "message": "登入以分享（Pro）",
+    "description": "Button to sign in to share in the editor"
+  },
+  "proBannerTitle": {
+    "message": "解鎖雲端分享、多場景編輯、自動縮放、字幕等功能",
+    "description": "Pro banner title in the editor"
+  },
+  "proBannerDescription": {
+    "message": "Screenity 永遠免費、開源且無廣告。Pro 協助支付雲端與基礎建設費用，並支持一人開發的努力 ❤️",
+    "description": "Pro banner description in the editor"
+  },
+  "proBannerAltButton": {
+    "message": "不要再顯示",
+    "description": "Pro banner don't show again button in the editor"
+  },
+  "proBannerButton": {
+    "message": "立即試用",
+    "description": "Pro banner button in the editor"
+  },
+  "multiRecordingModeTitle": {
+    "message": "Multi 模式",
+    "description": "Title for the multi-recording mode modal"
+  },
+  "multiRecordingModeDescription": {
+    "message": "依序錄製多個場景，例如螢幕、攝影機或兩者皆錄。非常適合多次拍攝、切換視角或將錄製內容分段。完成後，點選「完成」以開啟編輯器，所有場景將合併為單一影片。",
+    "description": "Description for the multi-recording mode modal"
+  },
+  "noSubscriptionYetTitle": {
+    "message": "啟用 Pro 開始使用",
+    "description": "Title shown when the user has no active subscription"
+  },
+  "noSubscriptionYetDescription": {
+    "message": "請訂閱以存取 Pro 功能。",
+    "description": "Message prompting the user to subscribe to reactivate their Pro features"
+  },
+  "upgradeToProButton": {
+    "message": "訂閱 Pro",
+    "description": "Button to upgrade to Pro"
+  },
+  "hostBannerTitle": {
+    "message": "喜歡本地使用 Screenity 嗎？歡迎支持未來開發！",
+    "description": "編輯器中的自架設橫幅標題"
+  },
+  "hostBannerDescription": {
+    "message": "Screenity 是由一位獨立女性開發者打造並維護的。自架設是免費的，但如果你覺得它對你有幫助，請考慮透過 Pro 版支持她的開發工作 ❤️",
+    "description": "編輯器中的自架設橫幅描述"
+  },
+  "welcomeBackPopupTitle": {
+    "message": "歡迎回到 Screenity",
+    "description": "回訪使用者的歡迎彈窗標題"
+  },
+  "welcomeBackProTitle": {
+    "message": "✨ 新功能：讓錄製體驗更升級",
+    "description": "歡迎彈窗中雲端儲存功能的標題"
+  },
+  "welcomeBackProDescription": {
+    "message": "Screenity Pro 是一個全新可選平台，可將影片儲存到雲端、透過連結分享，並在需要時解鎖進階編輯工具。",
+    "description": "歡迎彈窗中雲端儲存功能的描述"
+  },
+  "welcomeBackProCTA": {
+    "message": "了解更多 Screenity Pro",
+    "description": "歡迎彈窗中雲端儲存功能的號召性按鈕"
+  },
+  "welcomeToProTitleModal": {
+    "message": "歡迎使用 Screenity Pro",
+    "description": "Pro 歡迎視窗標題"
+  },
+  "welcomeToProDescriptionModal": {
+    "message": "你已準備好開始錄製！請注意以下幾點：\n\n- 錄製時，相機泡泡可能會消失，這是正常現象。它會在背景中單獨捕捉，讓你之後可以自由調整位置。\n- 縮放功能僅在點擊 Chrome 分頁時自動建立，這是瀏覽器的限制。你仍然可以在錄製後手動新增縮放效果。\n- 想快速錄製並立即下載？可以試試即時模式。但請注意，編輯功能有限：無法使用背景、版面或進階調整。",
+    "description": "Pro 歡迎視窗描述"
+  },
+  "welcomeToProActionModal": {
+    "message": "了解",
+    "description": "Pro 歡迎視窗確認按鈕"
+  },
+  "webcodecsToggleLabel": {
+    "message": "快速 MP4",
+    "description": "WebCodecs recorder toggle label"
+  },
+  "webcodecsFailedOffToast": {
+    "message": "快速 MP4 失敗 — 關閉",
+    "description": "WebCodecs failure auto-disable toast"
+  },
+  "proOnboardingWelcomeTitle": {
+    "message": "歡迎使用 Screenity Pro 擴充功能",
+    "description": "Pro onboarding welcome step title"
+  },
+  "proOnboardingWelcomeDescription": {
+    "message": "開始錄製前，先看幾個快速提示。<br/>自動縮放只會在 <strong>Chrome 分頁</strong>內點擊時生效。之後仍可手動新增縮放。",
+    "description": "Pro onboarding welcome step description"
+  },
+  "proOnboardingToolbarTitle": {
+    "message": "錄製工具列與效果",
+    "description": "Pro onboarding toolbar step title"
+  },
+  "proOnboardingToolbarDescription": {
+    "message": "可使用此工具列進行繪圖、游標效果、模糊與錄製控制。<br/><br/><strong>若未隱藏，這個工具列會出現在影片中</strong>。",
+    "description": "Pro onboarding toolbar step description"
+  },
+  "proOnboardingCameraTitle": {
+    "message": "攝影機會分開擷取",
+    "description": "Pro onboarding camera step title"
+  },
+  "proOnboardingCameraDescription": {
+    "message": "錄製時攝影機可能會<strong>隱藏或切換到 PiP</strong>，這是正常的。<br/><br/>它會分開擷取，方便你之後調整位置。",
+    "description": "Pro onboarding camera step description"
+  },
+  "proOnboardingInstantTitle": {
+    "message": "即時模式",
+    "description": "Pro onboarding instant mode step title"
+  },
+  "proOnboardingInstantDescription": {
+    "message": "最適合快速分享，並提供<strong>無限制下載</strong>。<br/><br/>此模式不提供進階版面與編輯選項。",
+    "description": "Pro onboarding instant mode step description"
+  },
+  "proOnboardingDone": {
+    "message": "知道了",
+    "description": "Pro onboarding done button text"
+  },
+  "proOnboardingNext": {
+    "message": "下一步",
+    "description": "Pro onboarding next button text"
+  },
+  "proOnboardingBack": {
+    "message": "返回",
+    "description": "Pro onboarding back button text"
+  },
+  "proOnboardingToolbarLearnMore": {
+    "message": "瞭解更多",
+    "description": "Pro onboarding toolbar learn more link label"
+  },
+  "resetOnboardingOption": {
+    "message": "重設導覽",
+    "description": "Reset pro onboarding option label in popup settings menu"
+  },
+  "recoverLastRecordingOption": {
+    "message": "Recover last recording",
+    "description": "Settings menu item to manually trigger cloud recording recovery"
+  },
+  "toastRecoveredSession": {
+    "message": "Recovered unsaved recording from the previous session.",
+    "description": "Toast shown when a crashed recording session is auto-recovered on startup"
+  },
+  "toastStorageCritical": {
+    "message": "磁碟空間不足，正在儲存錄製內容。已錄製的內容是安全的。",
+    "description": "Toast shown when available storage drops below the critical threshold during recording; reassures that captured data is preserved"
+  },
+  "toastStorageLow": {
+    "message": "Storage is running low. Upload reliability may degrade for long recordings.",
+    "description": "Toast shown when available storage drops below the warning threshold during recording"
+  },
+  "toastAudioCaptureDegraded": {
+    "message": "Transcription capture paused due to memory pressure. Video upload continues.",
+    "description": "Toast shown when the audio recorder is stopped early because the audio buffer limit was reached"
+  },
+  "toastNetworkOffline": {
+    "message": "Network offline. Upload paused. Screen chunks are saved locally.",
+    "description": "Toast shown when the browser goes offline during a cloud recording upload"
+  },
+  "longRecordingTitle": {
+    "message": "長時間錄製",
+    "description": "Banner title shown when a recording exceeds the local processing limit but is otherwise successful"
+  },
+  "longRecordingDescription": {
+    "message": "您的錄製已完成且安全。請在下方下載 WebM 檔案。",
+    "description": "Banner description for long recordings that can be downloaded but not edited locally"
+  },
+  "notAvailableLongRecording": {
+    "message": "長時間錄製無法使用",
+    "description": "Disabled button label for features not available due to recording length"
+  },
+  "notAvailableRecoveryMode": {
+    "message": "復原模式下無法使用",
+    "description": "Disabled button label for features not available in recovery/fallback mode"
+  },
+  "editTooLongTitle": {
+    "message": "音訊編輯內容過長",
+    "description": "Alert title when an audio mute/mix edit is rejected because the clip exceeds 15 minutes"
+  },
+  "editTooLongDescription": {
+    "message": "此音訊編輯不支援超過15分鐘的片段。原始檔案未被修改。請先嘗試裁剪片段。",
+    "description": "Alert body explaining the 15-minute limit and suggesting trimming first"
+  },
+  "editTimeoutTitle": {
+    "message": "編輯逾時",
+    "description": "Alert title when an edit operation does not complete within the 5-minute watchdog period"
+  },
+  "editTimeoutDescription": {
+    "message": "編輯未能及時完成。原始錄製內容未被修改。請重試，或先裁剪片段。",
+    "description": "Alert body for the timeout case, prompting retry or shorter clip"
+  },
+  "streamEndedWarningToast": {
+    "message": "螢幕分享已停止。您的錄製內容已儲存，準備好後即可停止。",
+    "description": "Toast shown when screen share track ends mid-recording. Recording continues; removes false urgency about data loss."
+  },
+  "recoveryModeDescription": {
+    "message": "處理時出現問題，但您的錄製內容是安全的。您可以在下方下載。",
+    "description": "Recovery mode banner description — reassures user their recording is accessible despite the processing failure"
+  },
+  "editProcessingSafeDescription": {
+    "message": "正在處理編輯。原始錄製內容未受影響。",
+    "description": "Shown in the editor processing alert when a user-initiated edit is running, to reassure the original is safe"
+  },
+  "editFailedTitle": {
+    "message": "無法套用編輯",
+    "description": "Alert title when an edit operation fails due to an encoding or processing error"
+  },
+  "editFailedDescription": {
+    "message": "處理過程中出現問題。原始錄製內容是安全的。您可以重試或直接下載。",
+    "description": "Alert body for edit failure; explicitly confirms the original recording is untouched"
+  },
+  "videoTrackEndedToast": {
+    "message": "螢幕分享已停止，正在儲存錄製內容。已錄製的內容是安全的。",
+    "description": "Toast shown when the video track ends mid-recording (e.g. monitor disconnected, screen share revoked)"
+  },
+  "audioTrackEndedToast": {
+    "message": "音訊已中斷，正在儲存錄製內容。已錄製的影片是安全的。",
+    "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
+  },
+  "editorRecoveryToast": {
+    "message": "錄製內容已儲存。編輯器未開啟，請點擊 Screenity 圖示重試。",
+    "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
+  },
+  "stopAckTimeoutToast": {
+    "message": "儲存時間比預期長。您的資料是安全的，編輯器即將開啟。",
+    "description": "Toast shown when the recorder does not acknowledge the stop request within a few seconds"
+  },
+  "copyDebugInfoButton": {
+    "message": "複製除錯資訊",
+    "description": "Button to copy technical debug info to clipboard for support"
+  },
+  "debugInfoCopiedToast": {
+    "message": "除錯資訊已複製",
+    "description": "Toast shown after debug info is copied"
+  },
+  "getHelpButton": {
+    "message": "取得幫助",
+    "description": "Side button on error modals that opens a prefilled support form"
+  },
+  "recordingTooShortToast": {
+    "message": "錄製時間太短，無法儲存",
+    "description": "Toast shown when a region recording is stopped by navigation but no chunks were saved"
+  },
+  "fastRecorderFailedTitle": {
+    "message": "快速錄製器失敗",
+    "description": "Title for the modal shown when the fast MP4 recorder output could not be validated"
+  },
+  "fastRecorderFailedDescription": {
+    "message": "快速錄製器的輸出無法在此裝置上驗證。\n您仍可以下載該檔案。",
+    "description": "Body text for the fast recorder failure modal"
+  },
+  "downloadAnywayButton": {
+    "message": "仍然下載",
+    "description": "Button to download the recording file despite validation failure"
+  },
+  "cancelButton": {
+    "message": "取消",
+    "description": "Generic cancel button label"
   }
 }

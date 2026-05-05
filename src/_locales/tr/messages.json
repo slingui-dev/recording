@@ -495,6 +495,10 @@
     "message": "Düzenleme ve MP4 biçiminde dışa aktarma mevcut değil",
     "description": "Editörde 5 dakikadan fazla sınır açıklaması"
   },
+  "overLimitLabelDescriptionFastPath": {
+    "message": "Düzenleme özellikleri mevcut değil",
+    "description": "Over limit description when the recording is a native MP4 (fast recorder / WebCodecs) so MP4 export still works"
+  },
   "videoProcessingLabelTitle": {
     "message": "Video işleniyor...",
     "description": "Editörde video işleme etiketi"
@@ -524,7 +528,7 @@
     "description": "Kırpma etiketi"
   },
   "preparingLabel": {
-    "message": "Video hazırlanıyor, lütfen bekleyin...",
+    "message": "Hazırlanıyor...",
     "description": "Hazırlanıyor etiketi"
   },
   "cropButtonTitle": {
@@ -600,16 +604,20 @@
     "description": "GIF olarak İndir etiketi"
   },
   "shareModalSandboxTitle": {
-    "message": "Videolarınızı başkalarıyla paylaşın",
-    "description": "Kum havuzlu editör sayfasındaki paylaşım modalı başlığı"
+    "message": "Kayıtlarını geliştirmeye hazır mısın?",
+    "description": "Share modal title in sandbox editor page"
   },
   "shareModalSandboxDescription": {
-    "message": "Yakında geliyor! Paylaşım kullanılabilecek olduğunda güncel kalın ve bildirildiğinizde haberdar olmak için e-posta bırakın.",
-    "description": "Kum havuzlu editör sayfasındaki paylaşım modalı açıklaması"
+    "message": "Bulutta paylaşım, yakınlaştırmalar, şablonlar... ve gizliliğe önem veren bağımsız bir kadın geliştiriciyi destekle ❤️",
+    "description": "Share modal description in sandbox editor page"
   },
   "shareModalSandboxButton": {
-    "message": "Bekleme listesine katılın",
-    "description": "Kum havuzlu editör sayfasındaki paylaşım modalı e-posta yer tutucusu"
+    "message": "Pro hakkında daha fazla bilgi",
+    "description": "Share modal email placeholder in sandbox editor page"
+  },
+  "shareModalSandboxLogin": {
+    "message": "Zaten bir hesabın var mı? Giriş yap",
+    "description": "Share modal login link in sandbox editor page"
   },
   "shareSandboxButton": {
     "message": "Videoyu Paylaş",
@@ -887,6 +895,10 @@
     "message": "Slingui Recording tamamen özel ve yerel olarak çalıştığı için cihazınızın donanımıyla sınırlıdır. Bu uzunluktaki bir videoyu işlemek çok uzun sürer ve çok fazla kaynak kullanır. Ancak, hala WEBM dosyasını veya ham kaydı indirebilirsiniz, ancak düzenleme ve MP4 dışa aktarma seçenekleri mevcut değildir. Yine de riskleri anlıyorsanız, videoyu işlemeyi deneyebilirsiniz.",
     "description": "5 dakika sınırlı modal açıklaması"
   },
+  "overLimitModalDescriptionFastPath": {
+    "message": "Screenity tamamen özel ve yerel olarak çalıştığı için cihazınızın donanımıyla sınırlıdır. Bu uzunluktaki bir videoyu işlemek çok uzun sürer ve çok fazla kaynak kullanır. MP4 dosyanız indirilmeye hazır, ancak bu uzunluktaki klipler için tarayıcıda düzenleme yapılamaz. Yine de riskleri anlıyorsanız, videoyu işlemeyi deneyebilirsiniz.",
+    "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
+  },
   "overLimitModalButton": {
     "message": "Riski anladım, yine de dene",
     "description": "5 dakika sınırlı modal düğmesi"
@@ -895,12 +907,10 @@
     "message": "Uzun videoları işleme hakkında daha fazla bilgi edinin.",
     "description": "5 dakika sınırlı modal daha fazla bilgi öğrenme bağlantısı"
   },
-
   "recoveryModeTitle": {
     "message": "Kurtarma Modu",
     "description": "Kurtarma Modu Başlığı"
   },
-
   "downloadForTroubleshootingOption": {
     "message": "Sorunları Gidermek için Verileri İndir",
     "description": "Sorunları Giderme Seçeneği"
@@ -1007,7 +1017,6 @@
     "message": "Bilgisayar sesini kaydetmek istiyorsanız, 'Sistem Sesini Paylaş' seçeneğinin etkin olduğundan emin olun. Bu seçeneği görmüyorsanız, Chrome'u güncellemeyi deneyin veya sekme kaydı seçeneğine geçin.",
     "description": "Diğer Sistemler İçin Ses Uyarı Açıklaması"
   },
-
   "maxResolutionLabel": {
     "message": "Maksimum çözünürlük",
     "description": "Ayarlar menüsündeki maksimum çözünürlük etiketi"
@@ -1016,7 +1025,6 @@
     "message": "Maksimum FPS",
     "description": "Ayarlar menüsündeki maksimum FPS etiketi"
   },
-
   "notEnoughRAM": {
     "message": "Yetersiz RAM",
     "description": "Ayarlar menüsünde yetersiz RAM etiketi"
@@ -1036,5 +1044,541 @@
   "permissionsModalReview": {
     "message": "İzinleri İncele",
     "description": "İzinleri İncele düğmesi"
+  },
+  "recordButtonMultiLabel": {
+    "message": "Başka bir kayıt ekle",
+    "description": "Record button label (multi mode)"
+  },
+  "recorderSetupTitle": {
+    "message": "Hazırlanıyor...",
+    "description": "Title in recording page while setting up project before countdown starts"
+  },
+  "recorderSetupDescription": {
+    "message": "Beklemede kal! Kayıt hazırlanıyor.",
+    "description": "Description in recording page before countdown starts"
+  },
+  "reopenToolbarToast": {
+    "message": "Araç çubuğu gizlendi. Açılır menüden yeniden etkinleştirin.",
+    "description": "Toast message explaining to reopen the toolbar in the popup options"
+  },
+  "loginButtonLabel": {
+    "message": "Giriş yap veya kaydol",
+    "description": "Login button label in popup settings menu"
+  },
+  "logoutButtonLabel": {
+    "message": "Çıkış yap",
+    "description": "Logout button label in popup settings menu"
+  },
+  "loggedOutToastTitle": {
+    "message": "Oturumunuz kapatıldı",
+    "description": "Toast message shown when the user logs out"
+  },
+  "storageLimitReachedTitle": {
+    "message": "Depolama sınırına ulaşıldı",
+    "description": "Modal message shown when the storage limit is reached"
+  },
+  "storageLimitReachedDescription": {
+    "message": "100 GB depolama alanınızın tamamını kullandınız. Lütfen kayıt yapmaya devam etmek için eski videoları veya sahneleri silin.",
+    "description": "Modal description shown when the storage limit is reached"
+  },
+  "manageStorageButtonLabel": {
+    "message": "Depolamayı yönet",
+    "description": "Button label to manage storage in the popup settings menu"
+  },
+  "closeModalLabel": {
+    "message": "Kapat",
+    "description": "Agnostic close modal button label"
+  },
+  "storageCheckFailTitle": {
+    "message": "Depolama kontrol edilemedi",
+    "description": "Title shown when the storage check fails"
+  },
+  "storageCheckFailAuthDescription": {
+    "message": "Depolamanız kontrol edilirken bir sorun oluştu. Lütfen tekrar giriş yapın ve kaydı deneyin.",
+    "description": "Description shown when the storage check fails due to authentication"
+  },
+  "storageCheckFailDescription": {
+    "message": "Depolama kotanızı doğrulayamadık. Lütfen birkaç saniye sonra tekrar deneyin veya sayfayı yenileyin.",
+    "description": "Description shown when the storage check fails"
+  },
+  "retryButtonLabel": {
+    "message": "Tekrar dene",
+    "description": "Agnostic button label to try again"
+  },
+  "addedToMultiToast": {
+    "message": "Sahne Multi kaydına eklendi",
+    "description": "Toast message shown when a scene is added to multi-recording"
+  },
+  "readyRecordSceneToast": {
+    "message": "Videona yeni bir sahne kaydetmeye hazırsın",
+    "description": "Toast message shown when the user is in an existing project and ready to record a new scene"
+  },
+  "reachingRecordingLimitToast": {
+    "message": "Kayıt 90 dakikalık sınıra ulaşıyor, yakında duracak",
+    "description": "Toast message shown when the recording is reaching the 90 minute limit"
+  },
+  "recordingLimitReachedToast": {
+    "message": "Kayıt 90 dakikalık sınıra ulaştığı için durduruldu",
+    "description": "Toast message shown when the recording limit is reached"
+  },
+  "tabRecordingDisabledToast": {
+    "message": "Bu sayfada sekme kaydı devre dışı. Ekran kaydına geçildi.",
+    "description": "Toast message shown when tab recording is disabled on a page"
+  },
+  "projectRecordingCancelledToast": {
+    "message": "Video kaydı iptal edildi",
+    "description": "Toast message shown when the user cancels project recording"
+  },
+  "copiedToClipboardToast": {
+    "message": "Bağlantı panoya kopyalandı",
+    "description": "Toast message shown when link has been copied to clipboard"
+  },
+  "failedToCopyToClipboardToast": {
+    "message": "Bağlantı kopyalanamadı",
+    "description": "Toast message shown when failed to copy link to clipboard"
+  },
+  "newestSortLabel": {
+    "message": "En yeni",
+    "description": "Label for the newest sort option"
+  },
+  "oldestSortLabel": {
+    "message": "En eski",
+    "description": "Label for the oldest sort option"
+  },
+  "allVideosHeading": {
+    "message": "Tüm videolar",
+    "description": "Heading for the all videos section in the popup"
+  },
+  "noVideosFound": {
+    "message": "Hiç video bulunamadı",
+    "description": "Message shown when no videos are found in the popup"
+  },
+  "loadingVideosLabel": {
+    "message": "Videolar yükleniyor...",
+    "description": "Label shown when videos are loading in the popup"
+  },
+  "goToDashboardButtonLabel": {
+    "message": "Panel'e git",
+    "description": "Button label to go to the dashboard in the popup"
+  },
+  "welcomePopupTitle": {
+    "message": "Screenity'e hoş geldin",
+    "description": "Title for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionTop": {
+    "message": "Reklam yok. Takip yok. Sınır yok.",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionBottom": {
+    "message": "Sadece kayda bas.",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupCTA": {
+    "message": "Ücretsiz kullan — kaydolmana gerek yok!",
+    "description": "Call to action button for the welcome popup shown to new users"
+  },
+  "welcomePopupCloudTitle": {
+    "message": "Videolarınla daha fazlasını yapmak ister misin?",
+    "description": "Title for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupCloudFeature1": {
+    "message": "Bulut depolama, bağlantıyla paylaş",
+    "description": "Feature 1 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature2": {
+    "message": "Birden fazla klibi tek bir hikâyede birleştir",
+    "description": "Feature 2 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature3": {
+    "message": "Tıklamada akıllı yakınlaştırmalar (ya da kendi yakınlaştırmanı ekle!)",
+    "description": "Feature 3 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature4": {
+    "message": "Şablonlar, altyazılar, düzenler ekle...",
+    "description": "Feature 4 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature5": {
+    "message": "Özel arka planlar ve maketler",
+    "description": "Feature 5 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudCTA": {
+    "message": "🔓 Ekstra özelliklerin kilidini aç",
+    "description": "Call to action button for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupSupport": {
+    "message": "+ Bağımsız bir geliştiriciyi destekle!",
+    "description": "Message for supporting the indie maker in the welcome popup"
+  },
+  "accountSettingsOption": {
+    "message": "Hesap ayarları",
+    "description": "Label for the account settings option in the popup"
+  },
+  "supportSettingsOption": {
+    "message": "Destek",
+    "description": "Label for the support option in the popup"
+  },
+  "inactiveSubscriptionTitle": {
+    "message": "Pro aboneliğiniz aktif değil",
+    "description": "Title shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionDescription": {
+    "message": "Screenity Pro aboneliğiniz aktif değil.",
+    "description": "Description shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionReactivation": {
+    "message": "Erişime devam etmek için lütfen yeniden etkinleştirin.",
+    "description": "Message prompting the user to reactivate their subscription"
+  },
+  "inactiveSubscriptionDeletionWarning": {
+    "message": "Videolarınız ve verileriniz şu tarihte kalıcı olarak silinecek: ",
+    "description": "Warning message about the deletion of videos and data"
+  },
+  "manageSubscriptionButton": {
+    "message": "Aboneliğini yönet",
+    "description": "Button to manage the user's subscription"
+  },
+  "inactiveSubscriptionFreeVersion": {
+    "message": "Ücretsiz sürümü kullanmaya devam etmek ister misiniz?",
+    "description": "Message prompting the user to continue using the free version"
+  },
+  "downgradeToFreeButton": {
+    "message": "Çıkış yap ve ücretsiz sürüme geç",
+    "description": "Button to log out and downgrade to the free version"
+  },
+  "loggedOutTitle": {
+    "message": "Oturumunuz kapatıldı",
+    "description": "Title shown when the user is logged out"
+  },
+  "loggedOutDescription": {
+    "message": "Kayıtlarınızın hesabınıza senkronize edilmesi ve premium özelliklere erişim için tekrar giriş yapmalısınız.",
+    "description": "Description shown when the user is logged out"
+  },
+  "logBackInButton": {
+    "message": "Yeniden giriş yap",
+    "description": "Button to log back in after being logged out"
+  },
+  "loggedOutFreeVersion": {
+    "message": "Uzantıyı hesap olmadan kullanmaya devam edebilirsin - ancak kayıtların kaydedilmeyecek ve daha sonra kurtarılamayacak.",
+    "description": "Message shown when the user is logged out and using the free version"
+  },
+  "continueWithoutLogin": {
+    "message": "Giriş yapmadan devam et",
+    "description": "Button to continue using the extension without logging in"
+  },
+  "instantRecordingModeLabel": {
+    "message": "Anında kayıt modu",
+    "description": "Label for the instant recording mode"
+  },
+  "instantRecordingModeTooltip": {
+    "message": "Anında indirme, ancak kamera ve düzen daha sonra düzenlenemez.",
+    "description": "Tooltip for the instant recording mode"
+  },
+  "instantRecordingModeTitle": {
+    "message": "Anında kayıt modu",
+    "description": "Title for the instant recording mode"
+  },
+  "instantRecordingModeDescription": {
+    "message": "Bu mod her şeyi tek bir videoya kaydeder, anında indirip paylaşabilirsiniz. Kamera düzenini daha sonra değiştiremezsiniz, ancak diğer düzenlemeler hâlâ mümkündür.",
+    "description": "Description for the instant recording mode"
+  },
+  "instantRecordingModeAction": {
+    "message": "Anladım",
+    "description": "Action button for the instant recording mode"
+  },
+  "tabRecordingDisabledTooltip": {
+    "message": "Bu sayfada sekme kaydı devre dışı",
+    "description": "Tooltip shown when tab recording is disabled on a page"
+  },
+  "addingToLabel": {
+    "message": "Şuraya ekleniyor: ",
+    "description": "Label shown when a scene is being recorded to a project"
+  },
+  "multiLabel": {
+    "message": "Multi",
+    "description": "Label for the multi-recording mode"
+  },
+  "finishLabelMulti": {
+    "message": "Bitir",
+    "description": "Label for the finish multi-recording button"
+  },
+  "welcomeProTitle": {
+    "message": "Kayıtlarınla daha fazlasını yapmak ister misin?",
+    "description": "Title for the welcome Pro popup"
+  },
+  "welcomeProDescription": {
+    "message": "Videolarını buluta kaydetmek, bağlantıyla paylaşmak ve gelişmiş düzenleme özelliklerine erişmek için giriş yap.",
+    "description": "Description for the welcome Pro popup"
+  },
+  "welcomeProButton": {
+    "message": "Ücretli özelliklerin kilidini açmak için giriş yap",
+    "description": "Button to sign in to Screenity Pro"
+  },
+  "welcomeProSupport": {
+    "message": "Bağımsız bir geliştiriciyi destekle",
+    "description": "Message for supporting the indie maker in the welcome Pro popup"
+  },
+  "unlockMoreFeatures": {
+    "message": "Daha fazla özelliğin kilidini aç",
+    "description": "Button to unlock more features in the editor"
+  },
+  "shareUnlockButton": {
+    "message": "Paylaşmak için giriş yap (pro)",
+    "description": "Button to sign in to share in the editor"
+  },
+  "proBannerTitle": {
+    "message": "Bulut paylaşımı, çok sahneli düzenleme, otomatik yakınlaştırma, altyazılar ve daha fazlasının kilidini aç",
+    "description": "Pro banner title in the editor"
+  },
+  "proBannerDescription": {
+    "message": "Screenity her zaman ücretsiz, açık kaynak ve reklamsız olacak. Pro, bulut & altyapı maliyetlerini karşılar ve bağımsız bir geliştiriciyi destekler! ❤️",
+    "description": "Pro banner description in the editor"
+  },
+  "proBannerAltButton": {
+    "message": "Bir daha gösterme",
+    "description": "Pro banner don't show again button in the editor"
+  },
+  "proBannerButton": {
+    "message": "Dene",
+    "description": "Pro banner button in the editor"
+  },
+  "multiRecordingModeTitle": {
+    "message": "Multi modu",
+    "description": "Title for the multi-recording mode modal"
+  },
+  "multiRecordingModeDescription": {
+    "message": "Ekran, kamera veya her ikisi gibi birden fazla sahneyi art arda kaydedin. Birden fazla deneme yapmak, görünümleri değiştirmek veya kaydınızı parçalara ayırmak için harikadır. İşiniz bittiğinde, tüm sahnelerin tek bir videoda birleştirildiği editörü açmak için Bitir'e tıklayın.",
+    "description": "Description for the multi-recording mode modal"
+  },
+  "noSubscriptionYetTitle": {
+    "message": "Başlamak için Pro’yu etkinleştir",
+    "description": "Title shown when the user has no active subscription"
+  },
+  "noSubscriptionYetDescription": {
+    "message": "Pro özelliklere erişmek için abone olun.",
+    "description": "Message prompting the user to subscribe to reactivate their Pro features"
+  },
+  "upgradeToProButton": {
+    "message": "Pro’ya abone ol",
+    "description": "Button to upgrade to Pro"
+  },
+  "hostBannerTitle": {
+    "message": "Screenity’yi yerel olarak mı kullanıyorsunuz? Gelecekteki geliştirmelere destek olun!",
+    "description": "Kendi sunucusunda barındıran kullanıcılar için banner başlığı"
+  },
+  "hostBannerDescription": {
+    "message": "Screenity, bağımsız bir kadın geliştirici tarafından oluşturuldu. Kendi sunucunuzda kullanmak ücretsizdir, ancak faydalı buluyorsanız, Pro ile desteklemeyi düşünebilirsiniz ❤️",
+    "description": "Kendi sunucusunda barındıran kullanıcılar için banner açıklaması"
+  },
+  "welcomeBackPopupTitle": {
+    "message": "Screenity’e tekrar hoş geldiniz",
+    "description": "Geri dönen kullanıcılar için karşılama açılır penceresi başlığı"
+  },
+  "welcomeBackProTitle": {
+    "message": "✨ Yeni: Kayıtlarınızı bir üst seviyeye taşıyın",
+    "description": "Karşılama açılır penceresinde bulut depolama özelliği başlığı"
+  },
+  "welcomeBackProDescription": {
+    "message": "Screenity Pro, videolarınızı bulutta saklamak, bağlantıyla paylaşmak ve gelişmiş düzenleme araçlarının kilidini açmak için isteğe bağlı yeni bir platformdur – ihtiyacınız olduğunda kullanabilirsiniz.",
+    "description": "Karşılama açılır penceresinde bulut depolama özelliğinin açıklaması"
+  },
+  "welcomeBackProCTA": {
+    "message": "Screenity Pro hakkında daha fazla bilgi edinin",
+    "description": "Karşılama açılır penceresinde bulut depolama özelliği için harekete geçirici buton"
+  },
+  "welcomeToProTitleModal": {
+    "message": "Screenity Pro'ya Hoş Geldiniz",
+    "description": "Pro karşılama modali başlığı"
+  },
+  "welcomeToProDescriptionModal": {
+    "message": "Kayda başlamaya hazırsınız! Aklınızda bulundurmanız gereken birkaç şey:\n\n- Kayıt sırasında kamera balonu kaybolabilir, bu normaldir. Arka planda ayrı olarak kaydedilir, böylece sonradan istediğiniz gibi konumlandırabilirsiniz.\n- Yakınlaştırmalar (zoom), yalnızca Chrome sekmeleri içindeki tıklamalarda otomatik olarak oluşturulur — bu, tarayıcıdan kaynaklı bir sınırlamadır. Kayıttan sonra manuel olarak daha fazla yakınlaştırma ekleyebilirsiniz.\n- Hızlı kayıtlar ve anında indirme için Instant Mode'u deneyin. Ancak, düzenleme seçeneklerinin sınırlı olduğunu unutmayın: arka planlar, yerleşimler veya gelişmiş ayarlar mevcut değildir.",
+    "description": "Pro karşılama modali açıklaması"
+  },
+  "welcomeToProActionModal": {
+    "message": "Tamamdır",
+    "description": "Pro karşılama modali eylem düğmesi"
+  },
+  "webcodecsToggleLabel": {
+    "message": "Fast MP4",
+    "description": "WebCodecs recorder toggle label"
+  },
+  "webcodecsFailedOffToast": {
+    "message": "Fast MP4 hata — kapalı",
+    "description": "WebCodecs failure auto-disable toast"
+  },
+  "proOnboardingWelcomeTitle": {
+    "message": "Screenity Pro uzantısına hoş geldin",
+    "description": "Pro onboarding welcome step title"
+  },
+  "proOnboardingWelcomeDescription": {
+    "message": "Kayda başlamadan önce birkaç hızlı ipucu.<br/>Otomatik yakınlaştırma yalnızca <strong>Chrome sekmeleri</strong> içindeki tıklamalarda çalışır. Daha sonra manuel olarak yakınlaştırma ekleyebilirsin.",
+    "description": "Pro onboarding welcome step description"
+  },
+  "proOnboardingToolbarTitle": {
+    "message": "Kayıt araç çubuğu ve efektler",
+    "description": "Pro onboarding toolbar step title"
+  },
+  "proOnboardingToolbarDescription": {
+    "message": "Bu çubuğu çizim, imleç efektleri, bulanıklaştırma ve kayıt kontrolleri için kullan.<br/><br/><strong>Bu çubuk, gizlemezsen videoda görünür</strong>.",
+    "description": "Pro onboarding toolbar step description"
+  },
+  "proOnboardingCameraTitle": {
+    "message": "Kamera ayrı kaydedilir",
+    "description": "Pro onboarding camera step title"
+  },
+  "proOnboardingCameraDescription": {
+    "message": "Kayıt sırasında kamera <strong>gizlenebilir veya PiP'e geçebilir</strong>, bu normaldir.<br/><br/>Daha sonra istediğin gibi konumlandırabilmen için ayrı kaydedilir.",
+    "description": "Pro onboarding camera step description"
+  },
+  "proOnboardingInstantTitle": {
+    "message": "Anlık mod",
+    "description": "Pro onboarding instant mode step title"
+  },
+  "proOnboardingInstantDescription": {
+    "message": "Hızlı paylaşım ve <strong>sınırsız indirme</strong> için en iyi seçenek.<br/><br/>Bu modda gelişmiş düzen ve düzenleyici seçenekleri kullanılamaz.",
+    "description": "Pro onboarding instant mode step description"
+  },
+  "proOnboardingDone": {
+    "message": "Anladım",
+    "description": "Pro onboarding done button text"
+  },
+  "proOnboardingNext": {
+    "message": "İleri",
+    "description": "Pro onboarding next button text"
+  },
+  "proOnboardingBack": {
+    "message": "Geri",
+    "description": "Pro onboarding back button text"
+  },
+  "proOnboardingToolbarLearnMore": {
+    "message": "Daha fazla bilgi",
+    "description": "Pro onboarding toolbar learn more link label"
+  },
+  "resetOnboardingOption": {
+    "message": "Onboarding'i sıfırla",
+    "description": "Reset pro onboarding option label in popup settings menu"
+  },
+  "recoverLastRecordingOption": {
+    "message": "Recover last recording",
+    "description": "Settings menu item to manually trigger cloud recording recovery"
+  },
+  "toastRecoveredSession": {
+    "message": "Recovered unsaved recording from the previous session.",
+    "description": "Toast shown when a crashed recording session is auto-recovered on startup"
+  },
+  "toastStorageCritical": {
+    "message": "Disk alanı düşük. Kaydınız şimdi kaydediliyor. Şimdiye kadar yakalanan her şey güvende.",
+    "description": "Toast shown when available storage drops below the critical threshold during recording; reassures that captured data is preserved"
+  },
+  "toastStorageLow": {
+    "message": "Storage is running low. Upload reliability may degrade for long recordings.",
+    "description": "Toast shown when available storage drops below the warning threshold during recording"
+  },
+  "toastAudioCaptureDegraded": {
+    "message": "Transcription capture paused due to memory pressure. Video upload continues.",
+    "description": "Toast shown when the audio recorder is stopped early because the audio buffer limit was reached"
+  },
+  "toastNetworkOffline": {
+    "message": "Network offline. Upload paused. Screen chunks are saved locally.",
+    "description": "Toast shown when the browser goes offline during a cloud recording upload"
+  },
+  "longRecordingTitle": {
+    "message": "Uzun kayıt",
+    "description": "Banner title shown when a recording exceeds the local processing limit but is otherwise successful"
+  },
+  "longRecordingDescription": {
+    "message": "Kaydınız tamamlandı ve güvende. Aşağıdan WebM olarak indirin.",
+    "description": "Banner description for long recordings that can be downloaded but not edited locally"
+  },
+  "notAvailableLongRecording": {
+    "message": "Uzun kayıtlar için kullanılamıyor",
+    "description": "Disabled button label for features not available due to recording length"
+  },
+  "notAvailableRecoveryMode": {
+    "message": "Kurtarma modunda kullanılamıyor",
+    "description": "Disabled button label for features not available in recovery/fallback mode"
+  },
+  "editTooLongTitle": {
+    "message": "Ses düzenlemesi çok uzun",
+    "description": "Alert title when an audio mute/mix edit is rejected because the clip exceeds 15 minutes"
+  },
+  "editTooLongDescription": {
+    "message": "Bu ses düzenlemesi 15 dakikadan uzun klipler için desteklenmiyor. Orijinaliniz değişmedi. Önce klibi kırpmayı deneyin.",
+    "description": "Alert body explaining the 15-minute limit and suggesting trimming first"
+  },
+  "editTimeoutTitle": {
+    "message": "Düzenleme zaman aşımına uğradı",
+    "description": "Alert title when an edit operation does not complete within the 5-minute watchdog period"
+  },
+  "editTimeoutDescription": {
+    "message": "Düzenleme zamanında tamamlanamadı. Orijinal kaydınız değişmedi. Tekrar deneyin veya önce klibi kırpın.",
+    "description": "Alert body for the timeout case, prompting retry or shorter clip"
+  },
+  "streamEndedWarningToast": {
+    "message": "Ekran paylaşımı durdu. Kaydınız kaydedildi. Hazır olduğunuzda durdurun.",
+    "description": "Toast shown when screen share track ends mid-recording. Recording continues; removes false urgency about data loss."
+  },
+  "recoveryModeDescription": {
+    "message": "Bir işleme sorunu oluştu, ancak kaydınız güvende. Aşağıdan indirebilirsiniz.",
+    "description": "Recovery mode banner description — reassures user their recording is accessible despite the processing failure"
+  },
+  "editProcessingSafeDescription": {
+    "message": "Düzenlemeniz işleniyor. Orijinal kaydınız değiştirilmedi.",
+    "description": "Shown in the editor processing alert when a user-initiated edit is running, to reassure the original is safe"
+  },
+  "editFailedTitle": {
+    "message": "Düzenleme uygulanamadı",
+    "description": "Alert title when an edit operation fails due to an encoding or processing error"
+  },
+  "editFailedDescription": {
+    "message": "İşleme sırasında bir sorun oluştu. Orijinal kaydınız güvende. Tekrar deneyebilir veya olduğu gibi indirebilirsiniz.",
+    "description": "Alert body for edit failure; explicitly confirms the original recording is untouched"
+  },
+  "videoTrackEndedToast": {
+    "message": "Ekran paylaşımı durdu. Kaydınız şimdi kaydediliyor. Şimdiye kadar yakalanan her şey güvende.",
+    "description": "Toast shown when the video track ends mid-recording (e.g. monitor disconnected, screen share revoked)"
+  },
+  "audioTrackEndedToast": {
+    "message": "Ses bağlantısı kesildi. Kaydınız şimdi kaydediliyor. Şimdiye kadar yakalanan video güvende.",
+    "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
+  },
+  "editorRecoveryToast": {
+    "message": "Kaydınız kaydedildi. Düzenleyici açılmadı. Tekrar denemek için Screenity simgesine tıklayın.",
+    "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
+  },
+  "stopAckTimeoutToast": {
+    "message": "Kaydetme beklenenden uzun sürüyor. Verileriniz güvende. Düzenleyici kısa süre içinde açılacak.",
+    "description": "Toast shown when the recorder does not acknowledge the stop request within a few seconds"
+  },
+  "copyDebugInfoButton": {
+    "message": "Hata ayıklama bilgisini kopyala",
+    "description": "Button to copy technical debug info to clipboard for support"
+  },
+  "debugInfoCopiedToast": {
+    "message": "Hata ayıklama bilgisi kopyalandı",
+    "description": "Toast shown after debug info is copied"
+  },
+  "getHelpButton": {
+    "message": "Yardım al",
+    "description": "Side button on error modals that opens a prefilled support form"
+  },
+  "recordingTooShortToast": {
+    "message": "Kayıt kaydedilemeyecek kadar kısa",
+    "description": "Toast shown when a region recording is stopped by navigation but no chunks were saved"
+  },
+  "fastRecorderFailedTitle": {
+    "message": "Hızlı kayıt başarısız oldu",
+    "description": "Title for the modal shown when the fast MP4 recorder output could not be validated"
+  },
+  "fastRecorderFailedDescription": {
+    "message": "Hızlı kaydedicinin çıktısı bu cihazda doğrulanamadı.\nDosyayı yine de indirebilirsiniz.",
+    "description": "Body text for the fast recorder failure modal"
+  },
+  "downloadAnywayButton": {
+    "message": "Yine de indir",
+    "description": "Button to download the recording file despite validation failure"
+  },
+  "cancelButton": {
+    "message": "İptal",
+    "description": "Generic cancel button label"
   }
 }

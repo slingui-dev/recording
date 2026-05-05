@@ -1,7 +1,7 @@
 import "./styles/edit/_VideoPlayer.scss";
 import "./styles/global/_app.scss";
 
-import React, { useState, useEffect, useRef, useContext } from "react";
+import React, { useEffect, useRef, useContext } from "react";
 // Layout
 import Editor from "./layout/editor/Editor";
 import Player from "./layout/player/Player";
@@ -11,21 +11,12 @@ import HelpButton from "./components/player/HelpButton";
 
 // Context
 import { ContentStateContext } from "./context/ContentState"; // Import the ContentState context
+import { diagForward } from "../utils/diagForward";
 
 const Sandbox = () => {
   const [contentState, setContentState] = useContext(ContentStateContext); // Access the ContentState context
   const parentRef = useRef(null);
   const progress = useRef("");
-
-  // Check when going offline (listener)
-  // useEffect(() => {
-  //   window.addEventListener("offline", () => {
-  //     setContentState((prevState) => ({
-  //       ...prevState,
-  //       offline: true,
-  //     }));
-  //   });
-  // }, []);
 
   const getChromeVersion = () => {
     var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
@@ -51,6 +42,7 @@ const Sandbox = () => {
   useEffect(() => {
     if (!contentState.blob || !contentState.ffmpeg) return;
     if (contentState.frame) return;
+    // Frame extraction now works in fallback mode using Canvas API
     contentState.getFrame();
   }, [contentState.blob, contentState.ffmpeg]);
 
@@ -102,10 +94,65 @@ const Sandbox = () => {
     if (contentState.chunkCount > 0) {
       progress.current = `(${Math.min(
         100,
-        Math.round((contentState.chunkIndex / contentState.chunkCount) * 100)
+        Math.round((contentState.chunkIndex / contentState.chunkCount) * 100),
       )}%)`;
     }
   }, [contentState.chunkIndex, contentState.chunkCount]);
+
+  useEffect(() => {
+    // Check if we need to show support banner
+    chrome.runtime.sendMessage({ type: "check-banner-support" }, (response) => {
+      if (response && response.bannerSupport) {
+        setContentState((prev) => ({
+          ...prev,
+          bannerSupport: true,
+        }));
+      }
+    });
+  }, []);
+
+  // If editor was opened manually and we don't yet have a blob/ready state,
+  // proactively ask the background to send chunks to this sandbox tab.
+  useEffect(() => {
+    let requested = false;
+    if (requested) return; // guard
+    requested = true;
+
+    const tryRequest = () => {
+      try {
+        if (!contentState.blob && !contentState.ready) {
+          console.debug(
+            "[Screenity][Sandbox] requesting chunks from background (send-chunks-to-sandbox)",
+          );
+          // Ask background to send chunks to this tab (background will
+          // determine the target tab or use this sender)
+          chrome.runtime.sendMessage(
+            { type: "send-chunks-to-sandbox" },
+            () => {},
+          );
+        }
+      } catch (err) {}
+    };
+
+    // Delay slightly to allow initial message listeners to be registered
+    const t = setTimeout(tryRequest, 400);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Regenerate frame when entering crop mode to reflect current blob
+  useEffect(() => {
+    if (
+      contentState.mode === "crop" &&
+      contentState.getFrame &&
+      contentState.blob &&
+      contentState.ffmpeg
+    ) {
+      // Small delay to ensure state updates have propagated
+      setTimeout(() => {
+        contentState.getFrame();
+      }, 50);
+    }
+  }, [contentState.mode]);
 
   return (
     <div ref={parentRef}>
@@ -124,7 +171,9 @@ const Sandbox = () => {
             <div className="title">
               {chrome.i18n.getMessage("sandboxProgressTitle") +
                 " " +
-                progress.current}
+                (contentState.processingProgress > 0
+                  ? `(${Math.round(contentState.processingProgress)}%)`
+                  : progress.current)}
             </div>
             <div className="subtitle">
               {chrome.i18n.getMessage("sandboxProgressDescription")}
@@ -133,6 +182,13 @@ const Sandbox = () => {
               <div
                 className="button-stop"
                 onClick={() => {
+                  diagForward("sandbox-user-clicked-help", {
+                    chunkCount: contentState?.chunkCount ?? 0,
+                    chunkIndex: contentState?.chunkIndex ?? 0,
+                    hasRawBlob: Boolean(contentState?.rawBlob),
+                    hasBlob: Boolean(contentState?.blob),
+                    ready: Boolean(contentState?.ready),
+                  });
                   contentState.openModal(
                     chrome.i18n.getMessage("havingIssuesModalTitle"),
                     chrome.i18n.getMessage("havingIssuesModalDescription"),
@@ -140,24 +196,21 @@ const Sandbox = () => {
                     chrome.i18n.getMessage("havingIssuesModalButton2"),
                     () => {
                       chrome.runtime.sendMessage({ type: "restore-recording" });
-                      // chrome.runtime.sendMessage(
-                      //   {
-                      //     type: "check-restore",
-                      //   },
-                      //   (response) => {
-                      //     if (response.restore) {
-                      //       chrome.runtime.sendMessage({
-                      //         type: "indexed-db-download",
-                      //       });
-                      //     } else {
-                      //       alert(chrome.i18n.getMessage("noRecordingFound"));
-                      //     }
-                      //   }
-                      // );
                     },
                     () => {
                       chrome.runtime.sendMessage({ type: "report-bug" });
-                    }
+                    },
+                    null, // image
+                    null, // learnMore
+                    null, // learnMoreLink
+                    false, // colorSafe
+                    chrome.i18n.getMessage("getHelpButton"),
+                    () => {
+                      chrome.runtime.sendMessage({
+                        type: "report-error",
+                        source: "processing-stuck",
+                      });
+                    },
                   );
                 }}
               >

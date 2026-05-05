@@ -1,4 +1,4 @@
-import React, { useState, useRef, useContext, useEffect } from "react";
+import React, { useRef, useContext, useEffect } from "react";
 import { Rnd } from "react-rnd";
 
 // Context
@@ -123,6 +123,57 @@ const ResizableBox = () => {
     setCropTarget();
   }, []);
 
+  useEffect(() => {
+    const parent = parentRef.current;
+    if (!parent) return;
+
+    const handleContextMenu = (e) => {
+      if (e.target.className.includes("resize-handle")) {
+        e.preventDefault();
+      }
+    };
+
+    parent.addEventListener("contextmenu", handleContextMenu);
+    return () => {
+      parent.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, []);
+
+  // Shadow DOM event forwarding: mouse events from inside the Shadow DOM
+  // get retargeted to the shadow host and stop at `document` — they never
+  // reach `window`. re-resizable listens on `window`, so we forward the
+  // events that originate from our shadow container.
+  useEffect(() => {
+    const shadowHostId = "screenity-root-container";
+
+    const forwardToWindow = (e) => {
+      if (
+        e.target?.id === shadowHostId ||
+        e.target?.closest?.("#" + shadowHostId)
+      ) {
+        window.dispatchEvent(
+          new MouseEvent(e.type, {
+            bubbles: false,
+            cancelable: true,
+            clientX: e.clientX,
+            clientY: e.clientY,
+            screenX: e.screenX,
+            screenY: e.screenY,
+            button: e.button,
+            buttons: e.buttons,
+          })
+        );
+      }
+    };
+
+    document.addEventListener("mouseup", forwardToWindow);
+    document.addEventListener("mousemove", forwardToWindow);
+    return () => {
+      document.removeEventListener("mouseup", forwardToWindow);
+      document.removeEventListener("mousemove", forwardToWindow);
+    };
+  }, []);
+
   return (
     <div
       style={{
@@ -193,6 +244,7 @@ const ResizableBox = () => {
         }}
         minWidth={50}
         minHeight={50}
+        cancel=".resize-handle-wrapper"
         resizeHandleWrapperClass="resize-handle-wrapper"
         resizeHandleComponent={{
           topLeft: <div className="resize-handle top-left" />,
@@ -224,7 +276,8 @@ const ResizableBox = () => {
           style={{
             width: "100%",
             height: "100%",
-            border: recordingRef.current ? "none" : "2px dashed #D9D9D9",
+            outline: recordingRef.current ? "none" : "2px dashed #D9D9D9",
+            outlineOffset: "2px", // Pushes it inside the box to avoid it being visible in recordings
             boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.2)",
             borderRadius: "5px",
             zIndex: 2,

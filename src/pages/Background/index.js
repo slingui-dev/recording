@@ -1,568 +1,126 @@
-import saveToDrive from "./modules/saveToDrive";
-
+import { initializeListeners } from "./listeners";
+import { setupHandlers } from "./messaging/handlers";
 import {
-  sendMessageTab,
-  focusTab,
-  removeTab,
-  getCurrentTab,
-  createTab,
-} from "./modules/tabHelper";
+  messageRouter,
+  messageDispatcher,
+} from "../../messaging/messageRouter";
+import { stopRecording } from "./recording/stopRecording";
+import { getCurrentTab, sendMessageTab, removeTab } from "./tabManagement";
+import { hydrateDiagnosticLog, diagEvent } from "../utils/diagnosticLog";
 
-import localforage from "localforage";
-
-localforage.config({
-  driver: localforage.INDEXEDDB,
-  name: "screenity",
-  version: 1,
-});
-
-// Get chunks store
-const chunksStore = localforage.createInstance({
-  name: "chunks",
-});
-
-// Get localDirectory store
-const localDirectoryStore = localforage.createInstance({
-  name: "localDirectory",
-});
-
-const startAfterCountdown = async () => {
-  // Check that the recording didn't get dismissed
-  const { recordingTab } = await chrome.storage.local.get(["recordingTab"]);
-  const { offscreen } = await chrome.storage.local.get(["offscreen"]);
-
-  if (recordingTab != null || offscreen) {
-    chrome.storage.local.set({ recording: true });
-    startRecording();
-  }
-};
-
-const resetActiveTab = async () => {
-  const { activeTab } = await chrome.storage.local.get(["activeTab"]);
-
-  // Check if activeTab exists
-  chrome.tabs.get(activeTab, (tab) => {
-    if (tab) {
-      // Focus the window
-      chrome.windows.update(tab.windowId, { focused: true }, async () => {
-        chrome.tabs.update(activeTab, {
-          active: true,
-          selected: true,
-          highlighted: true,
-        });
-
-        focusTab(activeTab);
-
-        sendMessageTab(activeTab, { type: "ready-to-record" });
-
-        // Check if countdown is set, if so start recording after 3 seconds
-        const { countdown } = await chrome.storage.local.get(["countdown"]);
-        if (countdown) {
-          setTimeout(() => {
-            startAfterCountdown();
-          }, 3500);
-        } else {
-          setTimeout(() => {
-            startAfterCountdown();
-          }, 500);
-        }
-      });
-    }
-  });
-};
-
-const resetActiveTabRestart = async () => {
-  const { activeTab } = await chrome.storage.local.get(["activeTab"]);
-  focusTab(activeTab).then(async () => {
-    sendMessageTab(activeTab, { type: "ready-to-record" });
-
-    // Check if countdown is set, if so start recording after 3 seconds
-    const { countdown } = await chrome.storage.local.get(["countdown"]);
-    if (countdown) {
-      setTimeout(() => {
-        startAfterCountdown();
-      }, 3000);
-    } else {
-      startRecording();
-    }
-  });
-};
-
-const startRecording = async () => {
-  chrome.storage.local.set({
-    recordingStartTime: Date.now(),
-    restarting: false,
-    recording: true,
-  });
-
-  // Check if customRegion is set
-  const { customRegion } = await chrome.storage.local.get(["customRegion"]);
-
-  if (customRegion) {
-    sendMessageRecord({ type: "start-recording-tab", region: true });
-  } else {
-    sendMessageRecord({ type: "start-recording-tab" });
-  }
-  chrome.action.setIcon({ path: "assets/recording-logo.png" });
-  // Set up alarm if set in storage
-  const { alarm } = await chrome.storage.local.get(["alarm"]);
-  const { alarmTime } = await chrome.storage.local.get(["alarmTime"]);
-  if (alarm) {
-    const seconds = parseFloat(alarmTime);
-    chrome.alarms.create("recording-alarm", { delayInMinutes: seconds / 60 });
-  }
-};
-
-// Detect commands
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command === "start-recording") {
-    // get active tab
-    const activeTab = await getCurrentTab();
-
-    // Check if it's possible to inject into content (not a chrome:// page, new tab, etc)
-    if (
-      !(
-        (navigator.onLine === false &&
-          !activeTab.url.includes("/playground.html") &&
-          !activeTab.url.includes("/setup.html")) ||
-        activeTab.url.startsWith("chrome://") ||
-        (activeTab.url.startsWith("chrome-extension://") &&
-          !activeTab.url.includes("/playground.html") &&
-          !activeTab.url.includes("/setup.html"))
-      ) &&
-      !activeTab.url.includes("stackoverflow.com/") &&
-      !activeTab.url.includes("chrome.google.com/webstore") &&
-      !activeTab.url.includes("chromewebstore.google.com")
-    ) {
-      sendMessageTab(activeTab.id, { type: "start-stream" });
-    } else {
-      chrome.tabs
-        .create({
-          url: "playground.html",
-          active: true,
-        })
-        .then((tab) => {
-          chrome.storage.local.set({ activeTab: tab.id });
-          // Wait for the tab to load
-          chrome.tabs.onUpdated.addListener(function _(tabId, changeInfo, tab) {
-            if (tabId === tab.id && changeInfo.status === "complete") {
-              setTimeout(() => {
-                sendMessageTab(tab.id, { type: "start-stream" });
-              }, 500);
-              chrome.tabs.onUpdated.removeListener(_);
-            }
-          });
-        });
-    }
-  } else if (command === "cancel-recording") {
-    // get active tab
-    const activeTab = await getCurrentTab();
-    sendMessageTab(activeTab.id, { type: "cancel-recording" });
-  } else if (command == "pause-recording") {
-    const activeTab = await getCurrentTab();
-    sendMessageTab(activeTab.id, { type: "pause-recording" });
-  }
-});
-
-const handleAlarm = async (alarm) => {
-  if (alarm.name === "recording-alarm") {
-    // Check if recording
-    const { recording } = await chrome.storage.local.get(["recording"]);
-    if (recording) {
-      stopRecording();
-
-      const { activeTab } = await chrome.storage.local.get(["activeTab"]);
-
-      // Check if actual tab
-      chrome.tabs.get(activeTab, (t) => {
-        if (t) {
-          sendMessageTab(activeTab, { type: "stop-recording-tab" });
-        } else {
-          sendMessageTab(tab.id, { type: "stop-recording-tab" });
-          chrome.storage.local.set({ activeTab: tab.id });
-        }
-      });
-    }
-    chrome.alarms.clear("recording-alarm");
-  }
-};
-
-const alarmListener = (alarm) => {
-  handleAlarm(alarm);
-};
-
-const addAlarmListener = () => {
-  if (!chrome.alarms.onAlarm.hasListener(alarmListener)) {
-    chrome.alarms.onAlarm.addListener(alarmListener);
-  }
-};
-
-// Check if the permission is granted
-if (chrome.permissions) {
-  chrome.permissions.contains({ permissions: ["alarms"] }, (result) => {
-    if (result) {
-      addAlarmListener();
-    }
-  });
-}
-
-const onActivated = async (activeInfo) => {
-  const { recordingStartTime } = await chrome.storage.local.get([
-    "recordingStartTime",
-  ]);
-  // Get tab
-  const tab = await chrome.tabs.get(activeInfo.tabId);
-
-  // Check if not recording (needs to hide the extension)
-  const { recording } = await chrome.storage.local.get(["recording"]);
-  const { restarting } = await chrome.storage.local.get(["restarting"]);
-
-  // Update active tab
-  if (recording) {
-    // Check if region recording, and if the recording tab is the same as the current tab
-    const { tabRecordedID } = await chrome.storage.local.get(["tabRecordedID"]);
-    if (tabRecordedID && tabRecordedID != activeInfo.tabId) {
-      sendMessageTab(activeInfo.tabId, { type: "hide-popup-recording" });
-      // Check if active tab is not backup.html + chrome-extension://
-    } else if (
-      !(
-        tab.url.includes("backup.html") &&
-        tab.url.includes("chrome-extension://")
-      )
-    ) {
-      chrome.storage.local.set({ activeTab: activeInfo.tabId });
-    }
-
-    // Check if region or customRegion is set
-    const { region } = await chrome.storage.local.get(["region"]);
-    const { recordingType } = await chrome.storage.local.get(["recordingType"]);
-    const { customRegion } = await chrome.storage.local.get(["customRegion"]);
-
-    if (!region && !customRegion && recordingType !== "region") {
-      sendMessageTab(activeInfo.tabId, { type: "recording-check" });
-    }
-  } else if (!recording && !restarting) {
-    sendMessageTab(activeInfo.tabId, { type: "recording-ended" });
-  }
-
-  if (recordingStartTime) {
-    // Check if alarm
-    const { alarm } = await chrome.storage.local.get(["alarm"]);
-    if (alarm) {
-      // Send remaining seconds
-      const { alarmTime } = await chrome.storage.local.get(["alarmTime"]);
-      const seconds = parseFloat(alarmTime);
-      const time = Math.floor((Date.now() - recordingStartTime) / 1000);
-      const remaining = seconds - time;
-      sendMessageTab(activeInfo.tabId, {
-        type: "time",
-        time: remaining,
-      });
-    } else {
-      const time = Math.floor((Date.now() - recordingStartTime) / 1000);
-      sendMessageTab(activeInfo.tabId, { type: "time", time: time });
-    }
-  }
-};
-
-chrome.windows.onFocusChanged.addListener(async (windowId) => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    return;
-  }
-
-  // Get the tab that is active in the focused window
-  const [activeTab] = await chrome.tabs.query({
-    active: true,
-    windowId: windowId,
-  });
-
-  if (activeTab) {
-    onActivated({ tabId: activeTab.id });
-  }
-});
-
-// Check when a page is activated
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  onActivated(activeInfo);
-});
-
-// Check when a user navigates to a different domain in the same tab (chrome.tabs?)
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete") {
-    // Check if not recording (needs to hide the extension)
-    const { recording } = await chrome.storage.local.get(["recording"]);
-    const { restarting } = await chrome.storage.local.get(["restarting"]);
-    const { tabRecordedID } = await chrome.storage.local.get(["tabRecordedID"]);
-
-    if (!recording && !restarting) {
-      sendMessageTab(tabId, { type: "recording-ended" });
-    } else if (recording && tabRecordedID && tabRecordedID == tabId) {
-      sendMessageTab(tabId, { type: "recording-check", force: true });
-    }
-
-    const { recordingStartTime } = await chrome.storage.local.get([
-      "recordingStartTime",
-    ]);
-    // Get tab
-    const tab = await chrome.tabs.get(tabId);
-
-    if (recordingStartTime) {
-      // Check if alarm
-      const { alarm } = await chrome.storage.local.get(["alarm"]);
-      if (alarm) {
-        // Send remaining seconds
-        const { alarmTime } = await chrome.storage.local.get(["alarmTime"]);
-        const seconds = parseFloat(alarmTime);
-        const time = Math.floor((Date.now() - recordingStartTime) / 1000);
-        const remaining = seconds - time;
-        sendMessageTab(tabId, {
-          type: "time",
-          time: remaining,
-        });
-      } else {
-        const time = Math.floor((Date.now() - recordingStartTime) / 1000);
-        sendMessageTab(tabId, { type: "time", time: time });
-      }
-    }
-
-    const commands = await chrome.commands.getAll();
-    sendMessageTab(tabId, {
-      type: "commands",
-      commands: commands,
-    });
-
-    // Check if tab is playground.html
-    if (
-      tab.url.includes(chrome.runtime.getURL("playground.html")) &&
-      changeInfo.status === "complete"
-    ) {
-      sendMessageTab(tab.id, { type: "toggle-popup" });
-    }
-  }
-});
-
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = function () {
-      resolve(reader.result);
-    };
-    reader.onerror = function (error) {
-      reject(error);
-    };
-    reader.readAsDataURL(blob);
-  });
-}
-
-const handleChunks = async (chunks, override = false) => {
-  const { sendingChunks, sandboxTab } = await chrome.storage.local.get([
-    "sendingChunks",
-    "sandboxTab",
-  ]);
-
-  if (sendingChunks) {
-    console.warn("Chunks are already being sent, skipping...");
-    return;
-  }
-  await chrome.storage.local.set({ sendingChunks: true });
-
-  if (chunks.length === 0) {
-    await chrome.storage.local.set({ sendingChunks: false });
-    sendMessageTab(sandboxTab, { type: "make-video-tab", override });
-    return;
-  }
-
-  // Order chunks by timestamp
-  chunks.sort((a, b) => a.timestamp - b.timestamp);
-
-  let currentIndex = 0;
-  const batchSize = 10;
-  const maxRetries = 3;
-  const retryDelay = 1000;
-  const chunksCount = chunks.length;
-
-  sendMessageTab(sandboxTab, {
-    type: "chunk-count",
-    count: chunksCount,
-    override,
-  });
-
-  const sendBatch = async (batch, retryCount = 0) => {
-    try {
-      const response = await sendMessageTab(sandboxTab, {
-        type: "new-chunk-tab",
-        chunks: batch,
-      });
-      if (!response) {
-        throw new Error("No response or failed response from tab.");
-      }
-    } catch (error) {
-      if (retryCount < maxRetries) {
-        console.error(
-          `Sending batch failed, retrying... Attempt ${retryCount + 1}`,
-          error
-        );
-        setTimeout(() => sendBatch(batch, retryCount + 1), retryDelay);
-      } else {
-        console.error("Maximum retry attempts reached for this batch.", error);
-      }
-    }
-  };
-
-  while (currentIndex < chunksCount) {
-    const end = Math.min(currentIndex + batchSize, chunksCount);
-    const batch = await Promise.all(
-      chunks.slice(currentIndex, end).map(async (chunk, index) => {
-        try {
-          const base64 = await blobToBase64(chunk.chunk);
-          return { chunk: base64, index: currentIndex + index };
-        } catch (error) {
-          console.error("Error converting chunk to Base64", error);
-          return null;
-        }
-      })
-    );
-
-    // Filter out any failed conversions
-    const filteredBatch = batch.filter((chunk) => chunk !== null);
-    if (filteredBatch.length > 0) {
-      await sendBatch(filteredBatch);
-    }
-    currentIndex += batchSize;
-  }
-
-  await chrome.storage.local.set({ sendingChunks: false });
-  sendMessageTab(sandboxTab, { type: "make-video-tab", override });
-};
-
-const sendChunks = async (override = false) => {
+// Clear any storage flags that act as in-progress locks and could have been
+// left in a "true" state if the service worker was killed mid-operation.
+// Must run before any message handler or alarm handler has a chance to bail
+// out on a stale lock.  Storage reads/writes are fast enough that they
+// complete well before any queued event is dispatched to the worker.
+const clearStaleLocks = async () => {
   try {
-    const chunks = [];
-    await chunksStore.iterate((value, key) => {
-      chunks.push(value);
-    });
-    console.log("Retrieved chunks from store", chunks.length);
-    handleChunks(chunks, override);
-  } catch (error) {
-    chrome.runtime.reload();
-  }
-};
+    const {
+      sendingChunks,
+      postStopEditorOpening,
+      postStopEditorOpened,
+      recording,
+      multiMode,
+      region,
+    } = await chrome.storage.local.get([
+      "sendingChunks",
+      "postStopEditorOpening",
+      "postStopEditorOpened",
+      "recording",
+      "multiMode",
+      "region",
+    ]);
 
-const stopRecording = async () => {
-  chrome.storage.local.set({ restarting: false });
-  const { recordingStartTime } = await chrome.storage.local.get([
-    "recordingStartTime",
-  ]);
-  let duration = Date.now() - recordingStartTime;
-  const maxDuration = 7 * 60 * 1000;
-
-  if (recordingStartTime === 0) {
-    duration = 0;
-  }
-  chrome.storage.local.set({
-    recording: false,
-    recordingDuration: duration,
-    tabRecordedID: null,
-  });
-
-  chrome.storage.local.set({ recordingStartTime: 0 });
-
-  if (duration > maxDuration) {
-    // Close the sandbox tab, open a new one with fallback editor
-    chrome.tabs.create(
-      {
-        url: "editorfallback.html",
-        active: true,
-      },
-      (tab) => {
-        chrome.tabs.onUpdated.addListener(function _(
-          tabId,
-          changeInfo,
-          updatedTab
-        ) {
-          if (tabId === tab.id && changeInfo.status === "complete") {
-            chrome.tabs.onUpdated.removeListener(_);
-            chrome.storage.local.set({ sandboxTab: tab.id });
-
-            // Get the recording data directly within the sandbox page
-            sendMessageTab(tab.id, {
-              type: "large-recording",
-            });
-          }
-        });
-      }
-    );
-  } else {
-    // Close the sandbox tab, open a new one with normal editor
-    chrome.tabs.create(
-      {
-        url: "editor.html",
-        active: true,
-      },
-      (tab) => {
-        chrome.tabs.onUpdated.addListener(function _(
-          tabId,
-          changeInfo,
-          updatedTab
-        ) {
-          if (tabId === tab.id && changeInfo.status === "complete") {
-            chrome.tabs.onUpdated.removeListener(_);
-            chrome.storage.local.set({ sandboxTab: tab.id });
-            sendChunks();
-          }
-        });
-      }
-    );
-  }
-
-  chrome.action.setIcon({ path: "assets/icon-34.png" });
-
-  // Check if wasRegion is set
-  const { wasRegion } = await chrome.storage.local.get(["wasRegion"]);
-  if (wasRegion) {
-    chrome.storage.local.set({ wasRegion: false, region: true });
-  }
-
-  // Cancel any alarms
-  chrome.alarms.clear("recording-alarm");
-
-  discardOffscreenDocuments();
-};
-
-const forceProcessing = async () => {
-  // Need to create a new sandbox tab
-  let editor_url = "editor.html";
-
-  // Get sandbox tab
-  const { sandboxTab } = await chrome.storage.local.get(["sandboxTab"]);
-
-  chrome.tabs.create(
-    {
-      url: editor_url,
-      active: true,
-    },
-    (tab) => {
-      chrome.tabs.onUpdated.addListener(function _(
-        tabId,
-        changeInfo,
-        updatedTab
-      ) {
-        if (tabId === tab.id && changeInfo.status === "complete") {
-          chrome.tabs.onUpdated.removeListener(_);
-          // Close the existing sandbox tab
-          removeTab(sandboxTab);
-          chrome.storage.local.set({ sandboxTab: tab.id });
-
-          sendChunks(true);
-        }
-      });
+    const stale = {};
+    if (sendingChunks) {
+      stale.sendingChunks = false;
+      console.warn("[Screenity][BG] Stale lock found on startup: sendingChunks — clearing");
     }
-  );
+    if (postStopEditorOpening) {
+      stale.postStopEditorOpening = false;
+      console.warn("[Screenity][BG] Stale lock found on startup: postStopEditorOpening — clearing");
+    }
+    if (postStopEditorOpened) {
+      stale.postStopEditorOpened = false;
+      console.warn("[Screenity][BG] Stale lock found on startup: postStopEditorOpened — clearing");
+    }
+
+    if (multiMode && !recording) {
+      stale.multiMode = false;
+      stale.multiSceneCount = 0;
+      stale.multiProjectId = null;
+      stale.multiLastSceneId = null;
+      console.warn("[Screenity][BG] Stale multi-mode state found on startup — clearing");
+    }
+
+    if (region && !recording) {
+      stale.region = false;
+      console.warn("[Screenity][BG] Stale region state found on startup — clearing");
+    }
+
+    if (Object.keys(stale).length > 0) {
+      await chrome.storage.local.set(stale);
+      console.info(
+        "[Screenity][BG] Startup stale locks cleared:",
+        Object.keys(stale).join(", "),
+      );
+    }
+  } catch (err) {
+    console.error("[Screenity][BG] Failed to clear stale startup locks:", err);
+  }
 };
 
-// For some reason without this the service worker doesn't always work
-chrome.runtime.onStartup.addListener(() => {
-  console.log(`Starting...`);
+// Event listeners must be registered synchronously at module evaluation time
+// so Chrome counts them for service worker keep-alive.
+messageRouter();
+initializeListeners();
+setupHandlers();
+
+// Fire-and-forget: clears stale locks from a previous crashed session.
+// Runs after listener registration (required synchronous) but before Chrome
+// can dispatch any queued events to this worker.
+clearStaleLocks();
+
+// One-time migration for users upgrading from 4.3.7. The finalize-hang bug on
+// abrupt stream end caused sticky-disable to fire for many WebCodecs users;
+// the underlying cause is fixed in this release (fragmented MP4 + streaming),
+// so the sticky flags are no longer warranted and should be cleared once so
+// affected users get WebCodecs again on their next recording. The user's
+// explicit opt-out (useWebCodecsRecorder === false) is preserved.
+const CURRENT_MIGRATION_VERSION = "4.3.8";
+const runUpgradeMigrations = async () => {
+  try {
+    const { screenityMigratedForVersion } = await chrome.storage.local.get([
+      "screenityMigratedForVersion",
+    ]);
+    if (screenityMigratedForVersion === CURRENT_MIGRATION_VERSION) return;
+
+    await chrome.storage.local.remove([
+      "fastRecorderDisabledForDevice",
+      "fastRecorderDisabledReason",
+      "fastRecorderDisabledAt",
+      "fastRecorderDisabledDetails",
+      "fastRecorderValidationFailed",
+      "fastRecorderValidation",
+      "lastWebCodecsFailureAt",
+      "lastWebCodecsFailureCode",
+      "lastFailedValidation",
+    ]);
+    await chrome.storage.local.set({
+      screenityMigratedForVersion: CURRENT_MIGRATION_VERSION,
+    });
+    console.info(
+      "[Screenity][BG] Cleared stale 4.3.7 sticky-disable flags on upgrade",
+    );
+  } catch (err) {
+    console.error("[Screenity][BG] Upgrade migration failed:", err);
+  }
+};
+runUpgradeMigrations();
+
+// Hydrate the diagnostic log from storage and record that the SW (re)started.
+hydrateDiagnosticLog().then(() => {
+  diagEvent("sw-init", { ts: Date.now() });
 });
 
 // Check when action button is clicked

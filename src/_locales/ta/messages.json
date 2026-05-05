@@ -495,6 +495,10 @@
     "message": "திருத்தல் மற்றும் MP4 வடிவம் விரும்பில்லை",
     "description": "எடிட்டரில் 5 நிமிடத்திற்குக் கீழ் வரும் விளக்கம்"
   },
+  "overLimitLabelDescriptionFastPath": {
+    "message": "திருத்தல் அம்சங்கள் கிடைக்கவில்லை",
+    "description": "Over limit description when the recording is a native MP4 (fast recorder / WebCodecs) so MP4 export still works"
+  },
   "videoProcessingLabelTitle": {
     "message": "வீடியோ செயலாக்கப்படுகின்றது...",
     "description": "வீடியோ செயலாக்க லேபிள் இன் பதிவு"
@@ -524,7 +528,7 @@
     "description": "குறைத்து பொத்தான்"
   },
   "preparingLabel": {
-    "message": "வீடியோ தயாரிக்கப்படுகின்றது, தயவு செய்து காத்திருக்கவும்...",
+    "message": "தயாராகிறது...",
     "description": "தயாரிக்கின்றது லேபிள்"
   },
   "cropButtonTitle": {
@@ -600,16 +604,20 @@
     "description": "GIF பொத்தான்"
   },
   "shareModalSandboxTitle": {
-    "message": "உங்கள் வீடியோக்களை பிரித்தியம் பகிருங்கள்",
-    "description": "மின்னணு திருத்தி திருத்தி பக்கத்தில் பகிரும் மின்னணு திருத்தி திருத்தி பெயர்"
+    "message": "உங்கள் பதிவு தரத்தை உயர்த்த தயாரா?",
+    "description": "Share modal title in sandbox editor page"
   },
   "shareModalSandboxDescription": {
-    "message": "விரைவில்! பகிர்ந்திருக்கின்றோம்! பகிர்ந்துகொள்ள உங்கள் மின்னணு அஞ்சலை விட்டு போக விரும்பினால் அப்பதிவு செய்து விடவும்.",
-    "description": "மின்னணு திருத்தி மின்னணு பெயர் மின்னணு பெயர்"
+    "message": "க்ளவுட் பகிர்வு, பூம், டெம்ப்ளேட்டுகள்... மற்றும் தனியொரு டெவலப்பரால் உருவாக்கப்பட்ட, தனியுரிமையை மதிக்கும் டூலை ஆதரிக்கவும் ❤️",
+    "description": "Share modal description in sandbox editor page"
   },
   "shareModalSandboxButton": {
-    "message": "காத்திருக்க காத்திருக்க",
-    "description": "மின்னணு திருத்தி மின்னணு பெயர் மின்னணு பெயர் பிளேச்ஹோல்டர் மின்னணு பெயர் மின்னணு பெயர்"
+    "message": "Pro பற்றி மேலும் அறிக",
+    "description": "Share modal email placeholder in sandbox editor page"
+  },
+  "shareModalSandboxLogin": {
+    "message": "ஏற்கனவே கணக்கு உள்ளதா? உள்நுழைக",
+    "description": "Share modal login link in sandbox editor page"
   },
   "shareSandboxButton": {
     "message": "வீடியோ பகிர்",
@@ -887,6 +895,10 @@
     "message": "Slingui Recording முழுவதும் தனியாக உழைந்து உழைக்கும் போது, உங்கள் சாதனத்தின் உபகரண வகைகளால் கட்டாயமாக வர்ம்வேர் செய்வது. இந்த நீளம் உள்ள விடியோவை செயல்படுத்துவது மிகவும் நேரம் எடுக்கும் மற்றும் மிகவும் வளர்ச்சியடையும். ஆனால் வேறு பரிமாற்றம் முடியும் என்று கவனிக்கவும், நீங்கள் இந்த அபரிசீலிதம் புரிந்திருந்தால்.",
     "description": "5 நிமிட வாரந்தோற்ற உள்ளடக்கம் மோடல் விளக்கம்"
   },
+  "overLimitModalDescriptionFastPath": {
+    "message": "Screenity முற்றிலும் தனிப்பட்டதாகவும் உள்ளூரில் இயங்குவதால், உங்கள் சாதன வன்பொருளால் வரையறுக்கப்படுகிறது. இந்த நீளமான வீடியோவை செயலாக்க அதிக நேரம் மற்றும் வளங்கள் தேவைப்படும். உங்கள் MP4 பதிவிறக்கத் தயாராக உள்ளது, ஆனால் இவ்வளவு நீளமான கிளிப்புகளுக்கு உலாவியில் திருத்தம் கிடைக்காது. இருந்தாலும், நீங்கள் அபாயங்களைப் புரிந்தால் வீடியோவை செயலாக்க முயற்சி செய்யலாம்.",
+    "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
+  },
   "overLimitModalButton": {
     "message": "ஞாபகம், அதை முயற்சிக்கவும்",
     "description": "5 நிமிட வாரந்தோற்ற உள்ளடக்கம் மோடல் பட்டன்"
@@ -895,12 +907,10 @@
     "message": "நீண்ட வீடியோக்களை செயல்படுத்துவது பற்றிய மேலும் அறிந்து கொள்ளுங்கள்.",
     "description": "5 நிமிட வாரந்தோற்ற உள்ளடக்கம் மோடல் மேலும் அறிந்து கொள்ளுங்கள் இணைப்பு மூலம்"
   },
-
   "recoveryModeTitle": {
     "message": "மீட்டமைப்பு முறை",
     "description": "மீட்டமைப்பு முறை தலைப்பு"
   },
-
   "downloadForTroubleshootingOption": {
     "message": "பிரச்சனைகளை தீர்க்க தரவை பதிவிறக்கவும்",
     "description": "பிரச்சனைகளை தீர்க்க விருப்ப பதிவிறக்க விருப்பம்"
@@ -1007,7 +1017,6 @@
     "message": "கணினியிலிருந்து ஒலியை பதிவுசெய்ய விரும்பினதால், 'கணினி ஒலியை பகிர்க' விருப்பத்தை செயல்படுத்துக. இந்த விருப்பத்தை காணாதிருக்கின்றார் என்பதை பார்க்கின்றதால், Chrome ஐ புதுப்பிக்கவும் அல்லது வரிசை பதிவு விருப்பம் மாற்றுவதை முயற்சிக்கவும்.",
     "description": "பிற கணினி வடிவம் க்கு ஒலியின் எச்சரிக்கை தலைப்பு"
   },
-
   "maxResolutionLabel": {
     "message": "அதிசய கருவி",
     "description": "அமைப்புகள் பட்டியலில் அதிசய கருவி குறியீட்டு"
@@ -1016,7 +1025,6 @@
     "message": "அதிசய கோட்டிகள் கோட்டிகள்",
     "description": "அமைப்புகள் பட்டியலில் அதிசய கோட்டிகள் குறியீட்டு"
   },
-
   "notEnoughRAM": {
     "message": "புதிய ரேம் போதுமில்லை",
     "description": "அமைப்புக்கு அந்த ரேம் போதுமில்லை பதில்"
@@ -1036,5 +1044,541 @@
   "permissionsModalReview": {
     "message": "அனுமதிகளை பரவி",
     "description": "அனுமதிகளை பரவி பொத்தானை"
+  },
+  "recordButtonMultiLabel": {
+    "message": "დაამატე კიდევ ერთი ჩაწერა",
+    "description": "Record button label (multi mode)"
+  },
+  "recorderSetupTitle": {
+    "message": "მიმდინარეობს მომზადება...",
+    "description": "Title in recording page while setting up project before countdown starts"
+  },
+  "recorderSetupDescription": {
+    "message": "დაიცადე! ჩაწერა მზადდება.",
+    "description": "Description in recording page before countdown starts"
+  },
+  "reopenToolbarToast": {
+    "message": "ხელსაწყოთა ზოლი დამალულია. ჩართე ხელახლა მენიუდან.",
+    "description": "Toast message explaining to reopen the toolbar in the popup options"
+  },
+  "loginButtonLabel": {
+    "message": "შესვლა ან რეგისტრაცია",
+    "description": "Login button label in popup settings menu"
+  },
+  "logoutButtonLabel": {
+    "message": "გასვლა",
+    "description": "Logout button label in popup settings menu"
+  },
+  "loggedOutToastTitle": {
+    "message": "თქვენ გამოხვედით სისტემიდან",
+    "description": "Toast message shown when the user logs out"
+  },
+  "storageLimitReachedTitle": {
+    "message": "საცავის ლიმიტი ამოწურულია",
+    "description": "Modal message shown when the storage limit is reached"
+  },
+  "storageLimitReachedDescription": {
+    "message": "გამოიყენე მთელი 100 GB. წაშალე ძველი ვიდეოები ან სცენები გასაგრძელებლად.",
+    "description": "Modal description shown when the storage limit is reached"
+  },
+  "manageStorageButtonLabel": {
+    "message": "მართე საცავი",
+    "description": "Button label to manage storage in the popup settings menu"
+  },
+  "closeModalLabel": {
+    "message": "დახურვა",
+    "description": "Agnostic close modal button label"
+  },
+  "storageCheckFailTitle": {
+    "message": "შეცდომა საცავის შემოწმებისას",
+    "description": "Title shown when the storage check fails"
+  },
+  "storageCheckFailAuthDescription": {
+    "message": "პრობლემა წარმოიშვა საცავის შემოწმებისას. შედი ხელახლა და სცადე თავიდან.",
+    "description": "Description shown when the storage check fails due to authentication"
+  },
+  "storageCheckFailDescription": {
+    "message": "ვერ შემოწმდა საცავის კვოტა. სცადე თავიდან ან განაახლე გვერდი.",
+    "description": "Description shown when the storage check fails"
+  },
+  "retryButtonLabel": {
+    "message": "სცადე ხელახლა",
+    "description": "Agnostic button label to try again"
+  },
+  "addedToMultiToast": {
+    "message": "სცენა დაემატა Multi-ს",
+    "description": "Toast message shown when a scene is added to multi-recording"
+  },
+  "readyRecordSceneToast": {
+    "message": "მზად ხარ ახალი სცენის ჩასაწერად",
+    "description": "Toast message shown when the user is in an existing project and ready to record a new scene"
+  },
+  "reachingRecordingLimitToast": {
+    "message": "ჩაწერა უახლოვდება 90 წუთის ლიმიტს, მალე შეწყდება",
+    "description": "Toast message shown when the recording is reaching the 90 minute limit"
+  },
+  "recordingLimitReachedToast": {
+    "message": "ჩაწერა შეწყდა 90 წუთის ლიმიტის გამო",
+    "description": "Toast message shown when the recording limit is reached"
+  },
+  "tabRecordingDisabledToast": {
+    "message": "ჩანართის ჩაწერა ამ გვერდზე მიუწვდომელია. ჩაირთო ეკრანის ჩაწერა.",
+    "description": "Toast message shown when tab recording is disabled on a page"
+  },
+  "projectRecordingCancelledToast": {
+    "message": "ვიდეოს ჩაწერა გაუქმდა",
+    "description": "Toast message shown when the user cancels project recording"
+  },
+  "copiedToClipboardToast": {
+    "message": "ბმული დაკოპირდა",
+    "description": "Toast message shown when link has been copied to clipboard"
+  },
+  "failedToCopyToClipboardToast": {
+    "message": "ბმულის დაკოპირება ვერ მოხერხდა",
+    "description": "Toast message shown when failed to copy link to clipboard"
+  },
+  "newestSortLabel": {
+    "message": "უახლესი",
+    "description": "Label for the newest sort option"
+  },
+  "oldestSortLabel": {
+    "message": "უძველესი",
+    "description": "Label for the oldest sort option"
+  },
+  "allVideosHeading": {
+    "message": "ყველა ვიდეო",
+    "description": "Heading for the all videos section in the popup"
+  },
+  "noVideosFound": {
+    "message": "ვიდეოები არ მოიძებნა",
+    "description": "Message shown when no videos are found in the popup"
+  },
+  "loadingVideosLabel": {
+    "message": "იტვირთება ვიდეოები...",
+    "description": "Label shown when videos are loading in the popup"
+  },
+  "goToDashboardButtonLabel": {
+    "message": "გადადით პანელზე",
+    "description": "Button label to go to the dashboard in the popup"
+  },
+  "welcomePopupTitle": {
+    "message": "მოგესალმებით Screenity-ში",
+    "description": "Title for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionTop": {
+    "message": "არა რეკლამებს. არა თვალთვალს. არა ლიმიტებს.",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionBottom": {
+    "message": "  უბრალოდ დააჭირე ჩაწერას.",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupCTA": {
+    "message": "გამოიყენე უფასოდ — რეგისტრაციის გარეშე!",
+    "description": "Call to action button for the welcome popup shown to new users"
+  },
+  "welcomePopupCloudTitle": {
+    "message": "გინდა უფრო მეტი გააკეთო ვიდეოებით?",
+    "description": "Title for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupCloudFeature1": {
+    "message": "საცავი ღრუბელში, ვიდეოს გაზიარება ბმულით",
+    "description": "Feature 1 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature2": {
+    "message": "შეაერთე რამდენიმე კლიპი ერთ ისტორიად",
+    "description": "Feature 2 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature3": {
+    "message": "ჭკვიანი გადიდება დაჭერაზე (ან დაამატე შენი!)",
+    "description": "Feature 3 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature4": {
+    "message": "დამატე შაბლონები, სუბტიტრები, განლაგებები...",
+    "description": "Feature 4 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature5": {
+    "message": "მორგებული ფონი და მაკეტები",
+    "description": "Feature 5 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudCTA": {
+    "message": "🔓 გახსენი დამატებითი ფუნქციები",
+    "description": "Call to action button for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupSupport": {
+    "message": "+ მხარი დაუჭირე დამოუკიდებელ შემქმნელს!",
+    "description": "Message for supporting the indie maker in the welcome popup"
+  },
+  "accountSettingsOption": {
+    "message": "ანგარიშის პარამეტრები",
+    "description": "Label for the account settings option in the popup"
+  },
+  "supportSettingsOption": {
+    "message": "მხარდაჭერა",
+    "description": "Label for the support option in the popup"
+  },
+  "inactiveSubscriptionTitle": {
+    "message": "თქვენი Pro გამოწერა არ არის აქტიური",
+    "description": "Title shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionDescription": {
+    "message": "თქვენი Screenity Pro გამოწერა არ არის აქტიური.",
+    "description": "Description shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionReactivation": {
+    "message": "გთხოვთ, გაააქტიურეთ ხელახლა, რომ კვლავ მიიღოთ წვდომა.",
+    "description": "Message prompting the user to reactivate their subscription"
+  },
+  "inactiveSubscriptionDeletionWarning": {
+    "message": "თქვენი ვიდეოები და მონაცემები წაიშლება სამუდამოდ ",
+    "description": "Warning message about the deletion of videos and data"
+  },
+  "manageSubscriptionButton": {
+    "message": "მართე გამოწერა",
+    "description": "Button to manage the user's subscription"
+  },
+  "inactiveSubscriptionFreeVersion": {
+    "message": "გინდა გააგრძელო უფასო ვერსიის გამოყენება?",
+    "description": "Message prompting the user to continue using the free version"
+  },
+  "downgradeToFreeButton": {
+    "message": "გასვლა და უფასო ვერსიაზე გადართვა",
+    "description": "Button to log out and downgrade to the free version"
+  },
+  "loggedOutTitle": {
+    "message": "თქვენ გამოხვედით სისტემიდან",
+    "description": "Title shown when the user is logged out"
+  },
+  "loggedOutDescription": {
+    "message": "ჩაწერების ანგარიშთან სინქრონიზაციისა და პრემიუმ ფუნქციებზე წვდომისთვის, შედით ხელახლა.",
+    "description": "Description shown when the user is logged out"
+  },
+  "logBackInButton": {
+    "message": "შედი ხელახლა",
+    "description": "Button to log back in after being logged out"
+  },
+  "loggedOutFreeVersion": {
+    "message": "შეგიძლიათ გააგრძელოთ გამოყენება ანგარიშის გარეშე – მაგრამ ჩაწერები არ შეინახება და აღდგენადიც არ იქნება.",
+    "description": "Message shown when the user is logged out and using the free version"
+  },
+  "continueWithoutLogin": {
+    "message": "გაგრძელება ანგარიშის გარეშე",
+    "description": "Button to continue using the extension without logging in"
+  },
+  "instantRecordingModeLabel": {
+    "message": "მყისიერი ჩაწერის რეჟიმი",
+    "description": "Label for the instant recording mode"
+  },
+  "instantRecordingModeTooltip": {
+    "message": "მყისიერი ჩამოტვირთვა, მაგრამ კამერისა და განლაგების შეცვლა შეუძლებელი იქნება მოგვიანებით.",
+    "description": "Tooltip for the instant recording mode"
+  },
+  "instantRecordingModeTitle": {
+    "message": "მყისიერი ჩაწერის რეჟიმი",
+    "description": "Title for the instant recording mode"
+  },
+  "instantRecordingModeDescription": {
+    "message": "ეს ყველაფერი ჩაწერს ერთ ვიდეოში მყისიერი ჩამოსატვირთად და გასაზიარებლად. მოგვიანებით ვერ შეცვლი კამერის განლაგებას, მაგრამ სხვა რედაქტირება შესაძლებელი იქნება.",
+    "description": "Description for the instant recording mode"
+  },
+  "instantRecordingModeAction": {
+    "message": "გასაგებია",
+    "description": "Action button for the instant recording mode"
+  },
+  "tabRecordingDisabledTooltip": {
+    "message": "ჩანართის ჩაწერა ამ გვერდზე მიუწვდომელია",
+    "description": "Tooltip shown when tab recording is disabled on a page"
+  },
+  "addingToLabel": {
+    "message": "დამატება პროექტში: ",
+    "description": "Label shown when a scene is being recorded to a project"
+  },
+  "multiLabel": {
+    "message": "Multi",
+    "description": "Label for the multi-recording mode"
+  },
+  "finishLabelMulti": {
+    "message": "დასრულება",
+    "description": "Label for the finish multi-recording button"
+  },
+  "welcomeProTitle": {
+    "message": "გინდა მეტი შეძლო ჩაწერებით?",
+    "description": "Title for the welcome Pro popup"
+  },
+  "welcomeProDescription": {
+    "message": "შედით, რომ შეინახოთ ვიდეოები ღრუბელში, გაუზიაროთ ბმულით და გამოიყენოთ დამატებითი რედაქტირების ფუნქციები.",
+    "description": "Description for the welcome Pro popup"
+  },
+  "welcomeProButton": {
+    "message": "შედით ფასიანი ფუნქციების გასახსნელად",
+    "description": "Button to sign in to Screenity Pro"
+  },
+  "welcomeProSupport": {
+    "message": "მხარი დაუჭირე დამოუკიდებელ შემქმნელს",
+    "description": "Message for supporting the indie maker in the welcome Pro popup"
+  },
+  "unlockMoreFeatures": {
+    "message": "გახსენი მეტი ფუნქცია",
+    "description": "Button to unlock more features in the editor"
+  },
+  "shareUnlockButton": {
+    "message": "შედით გასაზიარებლად (pro)",
+    "description": "Button to sign in to share in the editor"
+  },
+  "proBannerTitle": {
+    "message": "გახსენი ღრუბლოვანი გაზიარება, მრავალსცენიანი რედაქტირება, ავტომატური გადიდებები, სუბტიტრები და სხვა",
+    "description": "Pro banner title in the editor"
+  },
+  "proBannerDescription": {
+    "message": "Screenity ყოველთვის იქნება უფასო, ღია კოდი და რეკლამის გარეშე. Pro ეხმარება ღრუბლისა და ინფრასტრუქტურის ხარჯების დაფარვაში და დამოუკიდებელი შემქმნელის მხარდაჭერაში! ❤️",
+    "description": "Pro banner description in the editor"
+  },
+  "proBannerAltButton": {
+    "message": "არ აჩვენო კვლავ",
+    "description": "Pro banner don't show again button in the editor"
+  },
+  "proBannerButton": {
+    "message": "სცადე",
+    "description": "Pro banner button in the editor"
+  },
+  "multiRecordingModeTitle": {
+    "message": "მულტი რეჟიმი",
+    "description": "Title for the multi-recording mode modal"
+  },
+  "multiRecordingModeDescription": {
+    "message": "ჩაწერე რამდენიმე სცენა — ეკრანი, კამერა ან ორივე — თანმიმდევრობით. შესანიშნავია მრავალჯერადი დუბლებისთვის, ხედების გადასართავად ან ჩანაწერის ნაწილებად დასაყოფად. დასრულების შემდეგ დააჭირე 'დასრულება', რომ ყველა სცენა ერთ ვიდეოში გაერთიანებული იხსნა რედაქტორში.",
+    "description": "Description for the multi-recording mode modal"
+  },
+  "noSubscriptionYetTitle": {
+    "message": "გააქტიურეთ Pro დასაწყებად",
+    "description": "Title shown when the user has no active subscription"
+  },
+  "noSubscriptionYetDescription": {
+    "message": "გადახდით सदस्यობას Pro ფუნქციებზე წვდომისთვის.",
+    "description": "Message prompting the user to subscribe to reactivate their Pro features"
+  },
+  "upgradeToProButton": {
+    "message": "გადადი Pro-ზე",
+    "description": "Button to upgrade to Pro"
+  },
+  "hostBannerTitle": {
+    "message": "Screenity-ஐ உள்ளூர் சேவையகத்தில் பயன்படுத்திக் கொண்டிருக்கிறீர்களா? எதிர்கால மேம்பாட்டை ஆதரிக்குங்கள்!",
+    "description": "தானாக ஹோஸ்ட் செய்யும் பயனர்களுக்கான பேனர் தலைப்பு"
+  },
+  "hostBannerDescription": {
+    "message": "Screenity ஒரு தனிப்பட்ட பெண் டெவலப்பரால் உருவாக்கப்பட்டதாகும். தானாக ஹோஸ்ட் செய்வது இலவசம், ஆனால் இது பயனுள்ளதாக இருந்தால், Pro பதிப்பின் மூலம் ஆதரியுங்கள் ❤️",
+    "description": "தானாக ஹோஸ்ட் செய்யும் பயனர்களுக்கான பேனர் விளக்கம்"
+  },
+  "welcomeBackPopupTitle": {
+    "message": "திரும்ப வருக Screenity-க்கு!",
+    "description": "திரும்ப வந்த பயனர்களுக்கான வரவேற்பு பாப்அப்பின் தலைப்பு"
+  },
+  "welcomeBackProTitle": {
+    "message": "✨ புதியது: உங்கள் பதிவு அனுபவத்தை மேம்படுத்துங்கள்",
+    "description": "மேகம் சார்ந்த சேமிப்பு அம்சத்துக்கான தலைப்பு"
+  },
+  "welcomeBackProDescription": {
+    "message": "Screenity Pro என்பது உங்கள் வீடியோக்களை மேகத்தில் சேமிக்க, ஒரு இணைப்பின் மூலம் பகிர, மேலும் மேம்பட்ட தொகுப்பு கருவிகளை அணுக ஒரு விருப்பமான புதிய தளமாகும் – நீங்கள் விரும்பும் நேரத்தில் பயன்படுத்தலாம்.",
+    "description": "மேக சேமிப்பு அம்சத்தின் விளக்கம்"
+  },
+  "welcomeBackProCTA": {
+    "message": "Screenity Pro பற்றி மேலும் அறிக",
+    "description": "மேக சேமிப்பு அம்சத்துக்கான செயல் அழைப்பு பொத்தான்"
+  },
+  "welcomeToProTitleModal": {
+    "message": "Screenity Pro-க்கு வரவேற்கிறோம்",
+    "description": "Pro வரவேற்பு தோன்றும் பதிலின் தலைப்பு"
+  },
+  "welcomeToProDescriptionModal": {
+    "message": "பதிவைத் தொடங்க தயார்! நினைவில் கொள்ள சில விஷயங்கள்:\n\n- பதிவு செய்யும் போது கேமரா பபிள் மறைந்துவிடலாம், இது சாதாரணம். இது பின்னணியில் தனியாகப் பதிவாகும், பிறகு நீங்கள் விரும்பும் இடத்தில் அதை அமைக்கலாம்.\n- பெரிதாக்கங்கள் (zooms) Chrome தாவல்கள் உள்ளே கிளிக் செய்தால் மட்டுமே தானாக உருவாகும் — இது ஒரு உலாவி கட்டுப்பாடு. பதிவுக்குப் பிறகு கைமுறையாக மேலும் பெரிதாக்கங்களைச் சேர்க்கலாம்.\n- உடனடி பதிவுகளுக்காக Instant Mode-ஐ முயற்சிக்கவும். ஆனால், தொகுப்பதற்கான விருப்பங்கள் குறைவாக இருக்கும்: பின்னணிகள், அமைப்புகள், மேம்பட்ட கட்டுப்பாடுகள் கிடையாது.",
+    "description": "Pro வரவேற்பு தோன்றும் பதிலின் விளக்கம்"
+  },
+  "welcomeToProActionModal": {
+    "message": "சரி, புரிந்துவிட்டது",
+    "description": "Pro வரவேற்பு தோன்றும் பதிலின் செயல்பாடு பொத்தான்"
+  },
+  "webcodecsToggleLabel": {
+    "message": "Fast MP4",
+    "description": "WebCodecs recorder toggle label"
+  },
+  "webcodecsFailedOffToast": {
+    "message": "Fast MP4 தோல்வி — ஆஃப்",
+    "description": "WebCodecs failure auto-disable toast"
+  },
+  "proOnboardingWelcomeTitle": {
+    "message": "Screenity Pro நீட்டிப்புக்கு வரவேற்கிறோம்",
+    "description": "Pro onboarding welcome step title"
+  },
+  "proOnboardingWelcomeDescription": {
+    "message": "பதிவு செய்ய முன் சில வேகமான குறிப்புகள்.<br/>தானியங்கி zoom என்பது <strong>Chrome தாவல்கள்</strong> உள்ள கிளிக்குகளுக்கு மட்டும் வேலை செய்யும். பிறகு நீங்கள் zoom-ஐ கைமுறையாகச் சேர்க்கலாம்.",
+    "description": "Pro onboarding welcome step description"
+  },
+  "proOnboardingToolbarTitle": {
+    "message": "பதிவு கருவிப்பட்டை மற்றும் விளைவுகள்",
+    "description": "Pro onboarding toolbar step title"
+  },
+  "proOnboardingToolbarDescription": {
+    "message": "இந்த கருவிப்பட்டையில் வரைதல், கர்சர் விளைவுகள், blur மற்றும் பதிவு கட்டுப்பாடுகளைப் பயன்படுத்தலாம்.<br/><br/><strong>இந்த கருவிப்பட்டை வீடியோவில் சேரும்</strong> மறைக்கவில்லை என்றால்.",
+    "description": "Pro onboarding toolbar step description"
+  },
+  "proOnboardingCameraTitle": {
+    "message": "கேமரா தனியாக பதிவு செய்யப்படுகிறது",
+    "description": "Pro onboarding camera step title"
+  },
+  "proOnboardingCameraDescription": {
+    "message": "பதிவு செய்யும்போது கேமரா <strong>மறையவோ அல்லது PiP-க்கு மாறவோ</strong>லாம்; இது சாதாரணம்.<br/><br/>பிறகு நீங்கள் இடத்தை மாற்றுவதற்கு அது தனியாகப் பதிவு செய்யப்படுகிறது.",
+    "description": "Pro onboarding camera step description"
+  },
+  "proOnboardingInstantTitle": {
+    "message": "உடனடி முறை",
+    "description": "Pro onboarding instant mode step title"
+  },
+  "proOnboardingInstantDescription": {
+    "message": "வேகமாக பகிர்வதற்கு மற்றும் <strong>வரம்பில்லா பதிவிறக்கங்களுக்கு</strong> சிறந்தது.<br/><br/>இந்த முறையில் மேம்பட்ட layout/editor விருப்பங்கள் கிடைக்காது.",
+    "description": "Pro onboarding instant mode step description"
+  },
+  "proOnboardingDone": {
+    "message": "சரி",
+    "description": "Pro onboarding done button text"
+  },
+  "proOnboardingNext": {
+    "message": "அடுத்து",
+    "description": "Pro onboarding next button text"
+  },
+  "proOnboardingBack": {
+    "message": "பின்",
+    "description": "Pro onboarding back button text"
+  },
+  "proOnboardingToolbarLearnMore": {
+    "message": "மேலும் அறிக",
+    "description": "Pro onboarding toolbar learn more link label"
+  },
+  "resetOnboardingOption": {
+    "message": "Onboarding-ஐ மீட்டமை",
+    "description": "Reset pro onboarding option label in popup settings menu"
+  },
+  "recoverLastRecordingOption": {
+    "message": "Recover last recording",
+    "description": "Settings menu item to manually trigger cloud recording recovery"
+  },
+  "toastRecoveredSession": {
+    "message": "Recovered unsaved recording from the previous session.",
+    "description": "Toast shown when a crashed recording session is auto-recovered on startup"
+  },
+  "toastStorageCritical": {
+    "message": "டிஸ்க் இடம் குறைவு. உங்கள் பதிவு சேமிக்கப்படுகிறது. இதுவரை பதிவான அனைத்தும் பாதுகாப்பாக உள்ளது.",
+    "description": "Toast shown when available storage drops below the critical threshold during recording; reassures that captured data is preserved"
+  },
+  "toastStorageLow": {
+    "message": "Storage is running low. Upload reliability may degrade for long recordings.",
+    "description": "Toast shown when available storage drops below the warning threshold during recording"
+  },
+  "toastAudioCaptureDegraded": {
+    "message": "Transcription capture paused due to memory pressure. Video upload continues.",
+    "description": "Toast shown when the audio recorder is stopped early because the audio buffer limit was reached"
+  },
+  "toastNetworkOffline": {
+    "message": "Network offline. Upload paused. Screen chunks are saved locally.",
+    "description": "Toast shown when the browser goes offline during a cloud recording upload"
+  },
+  "longRecordingTitle": {
+    "message": "நீண்ட பதிவு",
+    "description": "Banner title shown when a recording exceeds the local processing limit but is otherwise successful"
+  },
+  "longRecordingDescription": {
+    "message": "உங்கள் பதிவு முழுமையானது மற்றும் பாதுகாப்பானது. கீழே WebM ஆக பதிவிறக்கம் செய்யுங்கள்.",
+    "description": "Banner description for long recordings that can be downloaded but not edited locally"
+  },
+  "notAvailableLongRecording": {
+    "message": "நீண்ட பதிவுகளுக்கு கிடைக்காது",
+    "description": "Disabled button label for features not available due to recording length"
+  },
+  "notAvailableRecoveryMode": {
+    "message": "மீட்டமைப்பு முறையில் கிடைக்காது",
+    "description": "Disabled button label for features not available in recovery/fallback mode"
+  },
+  "editTooLongTitle": {
+    "message": "ஆடியோ திருத்தம் மிக நீளமானது",
+    "description": "Alert title when an audio mute/mix edit is rejected because the clip exceeds 15 minutes"
+  },
+  "editTooLongDescription": {
+    "message": "இந்த ஆடியோ திருத்தம் 15 நிமிடங்களுக்கு மேல் உள்ள கிளிப்களுக்கு ஆதரவில்லை. அசல் மாற்றப்படவில்லை. முதலில் கிளிப்பை வெட்டி சுருக்க முயற்சிக்கவும்.",
+    "description": "Alert body explaining the 15-minute limit and suggesting trimming first"
+  },
+  "editTimeoutTitle": {
+    "message": "திருத்தத்திற்கான நேரம் முடிந்தது",
+    "description": "Alert title when an edit operation does not complete within the 5-minute watchdog period"
+  },
+  "editTimeoutDescription": {
+    "message": "திருத்தம் சரியான நேரத்தில் முடியவில்லை. அசல் பதிவு மாற்றப்படவில்லை. மீண்டும் முயற்சிக்கவும் அல்லது முதலில் கிளிப்பை வெட்டுங்கள்.",
+    "description": "Alert body for the timeout case, prompting retry or shorter clip"
+  },
+  "streamEndedWarningToast": {
+    "message": "திரைப் பகிர்வு நிறுத்தப்பட்டது. உங்கள் பதிவு சேமிக்கப்பட்டது. தயாரானதும் நிறுத்துங்கள்.",
+    "description": "Toast shown when screen share track ends mid-recording. Recording continues; removes false urgency about data loss."
+  },
+  "recoveryModeDescription": {
+    "message": "செயலாக்கத்தில் சிக்கல் ஏற்பட்டது, ஆனால் உங்கள் பதிவு பாதுகாப்பாக உள்ளது. கீழே பதிவிறக்கம் செய்யலாம்.",
+    "description": "Recovery mode banner description — reassures user their recording is accessible despite the processing failure"
+  },
+  "editProcessingSafeDescription": {
+    "message": "உங்கள் திருத்தம் செயலாக்கப்படுகிறது. அசல் பதிவு மாற்றப்படவில்லை.",
+    "description": "Shown in the editor processing alert when a user-initiated edit is running, to reassure the original is safe"
+  },
+  "editFailedTitle": {
+    "message": "திருத்தத்தைப் பயன்படுத்த முடியவில்லை",
+    "description": "Alert title when an edit operation fails due to an encoding or processing error"
+  },
+  "editFailedDescription": {
+    "message": "செயலாக்கத்தின் போது ஏதோ தவறு ஏற்பட்டது. உங்கள் அசல் பதிவு பாதுகாப்பாக உள்ளது. மீண்டும் முயற்சிக்கலாம் அல்லது அப்படியே பதிவிறக்கம் செய்யலாம்.",
+    "description": "Alert body for edit failure; explicitly confirms the original recording is untouched"
+  },
+  "videoTrackEndedToast": {
+    "message": "திரைப் பகிர்வு நிறுத்தப்பட்டது. உங்கள் பதிவு சேமிக்கப்படுகிறது. இதுவரை பதிவான அனைத்தும் பாதுகாப்பாக உள்ளது.",
+    "description": "Toast shown when the video track ends mid-recording (e.g. monitor disconnected, screen share revoked)"
+  },
+  "audioTrackEndedToast": {
+    "message": "ஆடியோ துண்டிக்கப்பட்டது. உங்கள் பதிவு சேமிக்கப்படுகிறது. இதுவரை பதிவான வீடியோ பாதுகாப்பாக உள்ளது.",
+    "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
+  },
+  "editorRecoveryToast": {
+    "message": "உங்கள் பதிவு சேமிக்கப்பட்டது. எடிட்டர் திறக்கப்படவில்லை. மீண்டும் முயற்சிக்க Screenity சின்னத்தைக் கிளிக் செய்யுங்கள்.",
+    "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
+  },
+  "stopAckTimeoutToast": {
+    "message": "சேமிப்பு எதிர்பார்த்ததை விட அதிக நேரம் எடுக்கிறது. உங்கள் தரவு பாதுகாப்பாக உள்ளது. எடிட்டர் விரைவில் திறக்கும்.",
+    "description": "Toast shown when the recorder does not acknowledge the stop request within a few seconds"
+  },
+  "copyDebugInfoButton": {
+    "message": "Debug தகவலை நகலெடு",
+    "description": "Button to copy technical debug info to clipboard for support"
+  },
+  "debugInfoCopiedToast": {
+    "message": "Debug தகவல் நகலெடுக்கப்பட்டது",
+    "description": "Toast shown after debug info is copied"
+  },
+  "getHelpButton": {
+    "message": "உதவி பெறுங்கள்",
+    "description": "Side button on error modals that opens a prefilled support form"
+  },
+  "recordingTooShortToast": {
+    "message": "பதிவு சேமிக்க முடியாத அளவுக்கு சிறியது",
+    "description": "Toast shown when a region recording is stopped by navigation but no chunks were saved"
+  },
+  "fastRecorderFailedTitle": {
+    "message": "வேகமான பதிவி தோல்வியடைந்தது",
+    "description": "Title for the modal shown when the fast MP4 recorder output could not be validated"
+  },
+  "fastRecorderFailedDescription": {
+    "message": "இந்த சாதனத்தில் வேகமான பதிவியின் வெளியீட்டைச் சரிபார்க்க முடியவில்லை.\nநீங்கள் கோப்பை எப்படியும் பதிவிறக்கலாம்.",
+    "description": "Body text for the fast recorder failure modal"
+  },
+  "downloadAnywayButton": {
+    "message": "எப்படியும் பதிவிறக்கு",
+    "description": "Button to download the recording file despite validation failure"
+  },
+  "cancelButton": {
+    "message": "ரத்துசெய்",
+    "description": "Generic cancel button label"
   }
 }

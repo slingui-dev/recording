@@ -495,6 +495,10 @@
     "message": "편집 및 MP4 형식으로 내보내기를 사용할 수 없어요",
     "description": "편집기 내에서 5분 이상 제한 설명"
   },
+  "overLimitLabelDescriptionFastPath": {
+    "message": "편집 기능을 사용할 수 없어요",
+    "description": "Over limit description when the recording is a native MP4 (fast recorder / WebCodecs) so MP4 export still works"
+  },
   "videoProcessingLabelTitle": {
     "message": "비디오 처리 중...",
     "description": "Video processing label in editor"
@@ -524,7 +528,7 @@
     "description": "Trim label"
   },
   "preparingLabel": {
-    "message": "비디오 준비 중, 기다려주세요...",
+    "message": "준비 중...",
     "description": "Preparing label"
   },
   "cropButtonTitle": {
@@ -600,16 +604,20 @@
     "description": "Download GIF label"
   },
   "shareModalSandboxTitle": {
-    "message": "다른 사람과 비디오 공유",
+    "message": "녹화를 한 단계 업그레이드해 볼까요?",
     "description": "Share modal title in sandbox editor page"
   },
   "shareModalSandboxDescription": {
-    "message": "곧 출시됩니다! 이메일을 남겨 업데이트를 받고 공유 가능 시 알림을 받으세요.",
+    "message": "클라우드 공유, 줌, 템플릿 제공… 그리고 프라이버시를 지키는 여성 인디 개발자를 응원해 주세요! ❤️",
     "description": "Share modal description in sandbox editor page"
   },
   "shareModalSandboxButton": {
-    "message": "대기 목록 가입",
+    "message": "Pro 자세히 알아보기",
     "description": "Share modal email placeholder in sandbox editor page"
+  },
+  "shareModalSandboxLogin": {
+    "message": "이미 계정이 있으신가요? 로그인",
+    "description": "Share modal login link in sandbox editor page"
   },
   "shareSandboxButton": {
     "message": "비디오 공유",
@@ -887,6 +895,10 @@
     "message": "Slingui Recording는 완전히 개인적이며 로컬에서 실행되므로 디바이스의 하드웨어에 제한됩니다. 이 길이의 비디오를 처리하는 데 시간이 오래 걸리고 많은 리소스를 필요로 할 것입니다. 걱정하지 마세요. 여전히 WEBM 파일이나 원시 녹화를 다운로드할 수 있지만 편집 및 MP4 내보내기는 사용할 수 없습니다. 그럼에도 불구하고, 이 비디오를 처리해 보려고 할 수 있습니다. 단, 위험을 이해하는 경우에만 시도하십시오.",
     "description": "5분 이상 제한 모달 설명"
   },
+  "overLimitModalDescriptionFastPath": {
+    "message": "Screenity는 완전히 개인적이며 로컬에서 실행되므로 디바이스의 하드웨어에 제한됩니다. 이 길이의 비디오를 처리하는 데 시간이 오래 걸리고 많은 리소스를 필요로 할 것입니다. MP4 파일은 바로 다운로드할 수 있지만, 이 정도 길이의 클립은 브라우저 내 편집이 지원되지 않습니다. 그럼에도 불구하고, 위험을 이해하는 경우에만 이 비디오를 처리해 볼 수 있습니다.",
+    "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
+  },
   "overLimitModalButton": {
     "message": "위험을 이해하고 시도해 보겠습니다",
     "description": "5분 이상 제한 모달 버튼"
@@ -895,12 +907,10 @@
     "message": "긴 비디오 처리에 대해 자세히 알아보기",
     "description": "5분 이상 제한 모달에서 자세히 알아보기 링크와 점이 포함된 설명"
   },
-
   "recoveryModeTitle": {
     "message": "복구 모드",
     "description": "복구 모드 제목"
   },
-
   "downloadForTroubleshootingOption": {
     "message": "문제 해결을 위한 데이터 다운로드",
     "description": "문제 해결을 위한 다운로드 옵션"
@@ -1007,7 +1017,6 @@
     "message": "컴퓨터 오디오를 녹음하려면 '시스템 오디오 공유' 옵션을 활성화하세요. 이 옵션을 보지 못하는 경우 Chrome을 업데이트하거나 탭 녹음 옵션으로 전환해 보세요.",
     "description": "기타 시스템용 오디오 경고 설명"
   },
-
   "maxResolutionLabel": {
     "message": "최대 해상도",
     "description": "설정 메뉴에서 최대 해상도 레이블"
@@ -1016,7 +1025,6 @@
     "message": "최대 FPS",
     "description": "설정 메뉴에서 최대 FPS 레이블"
   },
-
   "notEnoughRAM": {
     "message": "RAM 부족",
     "description": "설정 메뉴에서 'RAM 부족' 라벨"
@@ -1036,5 +1044,541 @@
   "permissionsModalReview": {
     "message": "권한 검토",
     "description": "권한 검토 버튼"
+  },
+  "recordButtonMultiLabel": {
+    "message": "녹화 추가",
+    "description": "Record button label (multi mode)"
+  },
+  "recorderSetupTitle": {
+    "message": "준비 중...",
+    "description": "Title in recording page while setting up project before countdown starts"
+  },
+  "recorderSetupDescription": {
+    "message": "잠시만 기다려 주세요. 녹화를 준비하고 있어요.",
+    "description": "Description in recording page before countdown starts"
+  },
+  "reopenToolbarToast": {
+    "message": "툴바가 숨겨졌습니다. 팝업 옵션에서 다시 활성화하세요.",
+    "description": "Toast message explaining to reopen the toolbar in the popup options"
+  },
+  "loginButtonLabel": {
+    "message": "로그인 또는 가입",
+    "description": "Login button label in popup settings menu"
+  },
+  "logoutButtonLabel": {
+    "message": "로그아웃",
+    "description": "Logout button label in popup settings menu"
+  },
+  "loggedOutToastTitle": {
+    "message": "로그아웃되었습니다",
+    "description": "Toast message shown when the user logs out"
+  },
+  "storageLimitReachedTitle": {
+    "message": "저장 공간 한도 도달",
+    "description": "Modal message shown when the storage limit is reached"
+  },
+  "storageLimitReachedDescription": {
+    "message": "100GB 저장 공간을 모두 사용하셨습니다. 계속 녹화하려면 이전 영상이나 장면을 삭제해 주세요.",
+    "description": "Modal description shown when the storage limit is reached"
+  },
+  "manageStorageButtonLabel": {
+    "message": "저장 공간 관리",
+    "description": "Button label to manage storage in the popup settings menu"
+  },
+  "closeModalLabel": {
+    "message": "닫기",
+    "description": "Agnostic close modal button label"
+  },
+  "storageCheckFailTitle": {
+    "message": "저장 공간 확인 실패",
+    "description": "Title shown when the storage check fails"
+  },
+  "storageCheckFailAuthDescription": {
+    "message": "저장 공간을 확인하는 중 문제가 발생했습니다. 다시 로그인하고 녹화를 시도해 주세요.",
+    "description": "Description shown when the storage check fails due to authentication"
+  },
+  "storageCheckFailDescription": {
+    "message": "저장 공간을 확인할 수 없습니다. 잠시 후 다시 시도하거나 페이지를 새로고침해 주세요.",
+    "description": "Description shown when the storage check fails"
+  },
+  "retryButtonLabel": {
+    "message": "다시 시도",
+    "description": "Agnostic button label to try again"
+  },
+  "addedToMultiToast": {
+    "message": "장면이 Multi 녹화에 추가되었습니다",
+    "description": "Toast message shown when a scene is added to multi-recording"
+  },
+  "readyRecordSceneToast": {
+    "message": "새 장면을 녹화할 준비가 되었습니다",
+    "description": "Toast message shown when the user is in an existing project and ready to record a new scene"
+  },
+  "reachingRecordingLimitToast": {
+    "message": "녹화가 90분 제한에 가까워지고 있어 곧 종료됩니다",
+    "description": "Toast message shown when the recording is reaching the 90 minute limit"
+  },
+  "recordingLimitReachedToast": {
+    "message": "90분 녹화 제한으로 녹화가 종료되었습니다",
+    "description": "Toast message shown when the recording limit is reached"
+  },
+  "tabRecordingDisabledToast": {
+    "message": "이 페이지에서는 탭 녹화가 비활성화되어 있어 화면 녹화로 전환되었습니다.",
+    "description": "Toast message shown when tab recording is disabled on a page"
+  },
+  "projectRecordingCancelledToast": {
+    "message": "영상 녹화가 취소되었습니다",
+    "description": "Toast message shown when the user cancels project recording"
+  },
+  "copiedToClipboardToast": {
+    "message": "링크가 클립보드에 복사되었습니다",
+    "description": "Toast message shown when link has been copied to clipboard"
+  },
+  "failedToCopyToClipboardToast": {
+    "message": "링크 복사에 실패했습니다",
+    "description": "Toast message shown when failed to copy link to clipboard"
+  },
+  "newestSortLabel": {
+    "message": "최신순",
+    "description": "Label for the newest sort option"
+  },
+  "oldestSortLabel": {
+    "message": "오래된순",
+    "description": "Label for the oldest sort option"
+  },
+  "allVideosHeading": {
+    "message": "모든 영상",
+    "description": "Heading for the all videos section in the popup"
+  },
+  "noVideosFound": {
+    "message": "영상이 없습니다",
+    "description": "Message shown when no videos are found in the popup"
+  },
+  "loadingVideosLabel": {
+    "message": "영상을 불러오는 중...",
+    "description": "Label shown when videos are loading in the popup"
+  },
+  "goToDashboardButtonLabel": {
+    "message": "대시보드로 이동",
+    "description": "Button label to go to the dashboard in the popup"
+  },
+  "welcomePopupTitle": {
+    "message": "Screenity에 오신 것을 환영합니다",
+    "description": "Title for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionTop": {
+    "message": "광고 없음. 추적 없음. 제한 없음.",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionBottom": {
+    "message": "그냥 녹화 버튼만 누르세요.",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupCTA": {
+    "message": "가입 없이 무료로 사용해보세요!",
+    "description": "Call to action button for the welcome popup shown to new users"
+  },
+  "welcomePopupCloudTitle": {
+    "message": "영상으로 더 많은 걸 해보고 싶으신가요?",
+    "description": "Title for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupCloudFeature1": {
+    "message": "클라우드 저장소, 링크로 공유",
+    "description": "Feature 1 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature2": {
+    "message": "여러 클립을 하나의 스토리로 결합",
+    "description": "Feature 2 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature3": {
+    "message": "클릭 시 스마트 줌 (또는 직접 추가!)",
+    "description": "Feature 3 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature4": {
+    "message": "템플릿, 자막, 레이아웃 추가...",
+    "description": "Feature 4 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature5": {
+    "message": "맞춤형 배경 및 목업",
+    "description": "Feature 5 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudCTA": {
+    "message": "🔓 추가 기능 잠금 해제",
+    "description": "Call to action button for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupSupport": {
+    "message": "+ 1인 인디 개발자를 응원해 주세요!",
+    "description": "Message for supporting the indie maker in the welcome popup"
+  },
+  "accountSettingsOption": {
+    "message": "계정 설정",
+    "description": "Label for the account settings option in the popup"
+  },
+  "supportSettingsOption": {
+    "message": "지원",
+    "description": "Label for the support option in the popup"
+  },
+  "inactiveSubscriptionTitle": {
+    "message": "Pro 구독이 비활성화되었습니다",
+    "description": "Title shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionDescription": {
+    "message": "Screenity Pro 구독이 비활성화되어 있습니다.",
+    "description": "Description shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionReactivation": {
+    "message": "접근을 재개하려면 구독을 다시 활성화해 주세요.",
+    "description": "Message prompting the user to reactivate their subscription"
+  },
+  "inactiveSubscriptionDeletionWarning": {
+    "message": "다음 날짜에 영상과 데이터가 영구적으로 삭제됩니다: ",
+    "description": "Warning message about the deletion of videos and data"
+  },
+  "manageSubscriptionButton": {
+    "message": "구독 관리",
+    "description": "Button to manage the user's subscription"
+  },
+  "inactiveSubscriptionFreeVersion": {
+    "message": "무료 버전을 계속 사용하시겠어요?",
+    "description": "Message prompting the user to continue using the free version"
+  },
+  "downgradeToFreeButton": {
+    "message": "로그아웃하고 무료 버전으로 전환",
+    "description": "Button to log out and downgrade to the free version"
+  },
+  "loggedOutTitle": {
+    "message": "로그아웃되었습니다",
+    "description": "Title shown when the user is logged out"
+  },
+  "loggedOutDescription": {
+    "message": "녹화를 계정과 동기화하고 프리미엄 기능을 사용하려면 다시 로그인해야 합니다.",
+    "description": "Description shown when the user is logged out"
+  },
+  "logBackInButton": {
+    "message": "다시 로그인",
+    "description": "Button to log back in after being logged out"
+  },
+  "loggedOutFreeVersion": {
+    "message": "계정 없이도 확장 기능을 계속 사용할 수 있지만, 녹화는 저장되지 않으며 나중에 복구할 수 없습니다.",
+    "description": "Message shown when the user is logged out and using the free version"
+  },
+  "continueWithoutLogin": {
+    "message": "로그인 없이 계속하기",
+    "description": "Button to continue using the extension without logging in"
+  },
+  "instantRecordingModeLabel": {
+    "message": "즉시 녹화 모드",
+    "description": "Label for the instant recording mode"
+  },
+  "instantRecordingModeTooltip": {
+    "message": "즉시 다운로드 가능하지만, 카메라 및 레이아웃은 나중에 편집할 수 없습니다.",
+    "description": "Tooltip for the instant recording mode"
+  },
+  "instantRecordingModeTitle": {
+    "message": "즉시 녹화 모드",
+    "description": "Title for the instant recording mode"
+  },
+  "instantRecordingModeDescription": {
+    "message": "이 모드는 모든 것을 하나의 영상으로 녹화하여 즉시 다운로드 및 공유할 수 있게 해줍니다. 나중에 카메라 레이아웃은 변경할 수 없지만, 다른 편집은 가능합니다.",
+    "description": "Description for the instant recording mode"
+  },
+  "instantRecordingModeAction": {
+    "message": "확인",
+    "description": "Action button for the instant recording mode"
+  },
+  "tabRecordingDisabledTooltip": {
+    "message": "이 페이지에서는 탭 녹화가 비활성화되어 있습니다",
+    "description": "Tooltip shown when tab recording is disabled on a page"
+  },
+  "addingToLabel": {
+    "message": "추가 중: ",
+    "description": "Label shown when a scene is being recorded to a project"
+  },
+  "multiLabel": {
+    "message": "Multi",
+    "description": "Label for the multi-recording mode"
+  },
+  "finishLabelMulti": {
+    "message": "완료",
+    "description": "Label for the finish multi-recording button"
+  },
+  "welcomeProTitle": {
+    "message": "녹화로 더 많은 것을 해보고 싶으신가요?",
+    "description": "Title for the welcome Pro popup"
+  },
+  "welcomeProDescription": {
+    "message": "영상을 클라우드에 저장하고 링크로 공유하며 고급 편집 기능을 사용하려면 로그인하세요.",
+    "description": "Description for the welcome Pro popup"
+  },
+  "welcomeProButton": {
+    "message": "유료 기능 잠금 해제를 위해 로그인",
+    "description": "Button to sign in to Screenity Pro"
+  },
+  "welcomeProSupport": {
+    "message": "1인 인디 개발자를 응원해 주세요",
+    "description": "Message for supporting the indie maker in the welcome Pro popup"
+  },
+  "unlockMoreFeatures": {
+    "message": "더 많은 기능 잠금 해제",
+    "description": "Button to unlock more features in the editor"
+  },
+  "shareUnlockButton": {
+    "message": "공유하려면 로그인 (pro)",
+    "description": "Button to sign in to share in the editor"
+  },
+  "proBannerTitle": {
+    "message": "클라우드 공유, 멀티 장면 편집, 자동 줌, 자막 등 기능 잠금 해제",
+    "description": "Pro banner title in the editor"
+  },
+  "proBannerDescription": {
+    "message": "Screenity는 항상 무료, 오픈소스, 광고 없이 제공됩니다. Pro는 클라우드 및 인프라 비용을 지원하며, 1인 개발자의 개발을 돕습니다! ❤️",
+    "description": "Pro banner description in the editor"
+  },
+  "proBannerAltButton": {
+    "message": "다시 표시하지 않기",
+    "description": "Pro banner don't show again button in the editor"
+  },
+  "proBannerButton": {
+    "message": "체험해 보기",
+    "description": "Pro banner button in the editor"
+  },
+  "multiRecordingModeTitle": {
+    "message": "멀티 모드",
+    "description": "Title for the multi-recording mode modal"
+  },
+  "multiRecordingModeDescription": {
+    "message": "화면, 카메라 또는 둘 다를 순차적으로 녹화하세요. 여러 번 촬영하거나 시점을 바꾸거나 녹화를 여러 부분으로 나누기에 좋습니다. 완료되면 '완료'를 클릭하여 모든 장면이 하나의 영상으로 결합된 편집기를 열 수 있습니다.",
+    "description": "Description for the multi-recording mode modal"
+  },
+  "noSubscriptionYetTitle": {
+    "message": "Pro를 활성화하여 시작하세요",
+    "description": "Title shown when the user has no active subscription"
+  },
+  "noSubscriptionYetDescription": {
+    "message": "Pro 기능에 접근하려면 구독해 주세요.",
+    "description": "Message prompting the user to subscribe to reactivate their Pro features"
+  },
+  "upgradeToProButton": {
+    "message": "Pro 구독하기",
+    "description": "Button to upgrade to Pro"
+  },
+  "hostBannerTitle": {
+    "message": "로컬에서 Screenity를 잘 사용하고 계신가요? 개발을 응원해 주세요!",
+    "description": "에디터에서의 셀프 호스트 배너 제목"
+  },
+  "hostBannerDescription": {
+    "message": "Screenity는 여성 1인 개발자가 만든 프로젝트입니다. 셀프 호스팅은 무료지만, 도움이 되셨다면 Pro로 후원해 주세요 ❤️",
+    "description": "에디터에서의 셀프 호스트 배너 설명"
+  },
+  "welcomeBackPopupTitle": {
+    "message": "Screenity에 다시 오신 걸 환영해요",
+    "description": "다시 방문한 사용자에게 보여지는 환영 팝업의 제목"
+  },
+  "welcomeBackProTitle": {
+    "message": "✨ 새로워졌어요: 녹화 그 이상을 원하시나요?",
+    "description": "환영 팝업에 표시되는 클라우드 저장 기능의 제목"
+  },
+  "welcomeBackProDescription": {
+    "message": "Screenity Pro는 동영상을 클라우드에 저장하고, 링크로 공유하며, 고급 편집 도구를 사용할 수 있는 선택적인 새로운 플랫폼이에요. 필요할 때 언제든 사용할 수 있어요.",
+    "description": "환영 팝업에 표시되는 클라우드 저장 기능 설명"
+  },
+  "welcomeBackProCTA": {
+    "message": "Screenity Pro 자세히 알아보기",
+    "description": "환영 팝업의 클라우드 저장 기능에 대한 클릭 유도 문구"
+  },
+  "welcomeToProTitleModal": {
+    "message": "Screenity Pro에 오신 것을 환영합니다",
+    "description": "Pro 환영 모달 제목"
+  },
+  "welcomeToProDescriptionModal": {
+    "message": "이제 녹화를 시작할 준비가 완료되었습니다! 몇 가지 참고 사항:\n\n- 녹화 중에는 카메라 버블이 사라질 수 있지만 정상입니다. 카메라는 배경에서 별도로 캡처되므로 나중에 원하는 위치로 조정할 수 있습니다.\n- Chrome 탭 내에서 클릭할 때만 자동으로 줌이 생성됩니다. 이는 브라우저의 제한 사항입니다. 녹화 후 수동으로 줌을 추가할 수 있습니다.\n- 즉시 다운로드가 가능한 빠른 녹화를 원하신다면, 인스턴트 모드를 사용해 보세요. 단, 이 모드에서는 배경, 레이아웃, 고급 설정 등의 편집 기능이 제한됩니다.",
+    "description": "Pro 환영 모달 설명"
+  },
+  "welcomeToProActionModal": {
+    "message": "알겠어요",
+    "description": "Pro 환영 모달 확인 버튼"
+  },
+  "webcodecsToggleLabel": {
+    "message": "Fast MP4",
+    "description": "WebCodecs recorder toggle label"
+  },
+  "webcodecsFailedOffToast": {
+    "message": "Fast MP4 실패 — 꺼짐",
+    "description": "WebCodecs failure auto-disable toast"
+  },
+  "proOnboardingWelcomeTitle": {
+    "message": "Screenity Pro 확장 프로그램에 오신 것을 환영합니다",
+    "description": "Pro onboarding welcome step title"
+  },
+  "proOnboardingWelcomeDescription": {
+    "message": "녹화를 시작하기 전에 빠른 팁을 확인하세요.<br/>자동 줌은 <strong>Chrome 탭</strong> 안에서의 클릭에만 동작합니다. 이후에 수동으로 줌을 추가할 수 있습니다.",
+    "description": "Pro onboarding welcome step description"
+  },
+  "proOnboardingToolbarTitle": {
+    "message": "녹화 툴바 및 효과",
+    "description": "Pro onboarding toolbar step title"
+  },
+  "proOnboardingToolbarDescription": {
+    "message": "이 툴바에서 그리기, 커서 효과, 블러, 녹화 제어를 할 수 있습니다.<br/><br/><strong>툴바를 숨기지 않으면 영상에 함께 녹화됩니다</strong>.",
+    "description": "Pro onboarding toolbar step description"
+  },
+  "proOnboardingCameraTitle": {
+    "message": "카메라는 별도로 캡처됩니다",
+    "description": "Pro onboarding camera step title"
+  },
+  "proOnboardingCameraDescription": {
+    "message": "녹화 중 카메라가 <strong>숨겨지거나 PiP로 이동</strong>할 수 있으며 정상 동작입니다.<br/><br/>카메라는 별도로 캡처되므로 나중에 원하는 위치로 배치할 수 있습니다.",
+    "description": "Pro onboarding camera step description"
+  },
+  "proOnboardingInstantTitle": {
+    "message": "인스턴트 모드",
+    "description": "Pro onboarding instant mode step title"
+  },
+  "proOnboardingInstantDescription": {
+    "message": "빠른 공유와 <strong>무제한 다운로드</strong>에 가장 적합합니다.<br/><br/>이 모드에서는 고급 레이아웃/편집 옵션을 사용할 수 없습니다.",
+    "description": "Pro onboarding instant mode step description"
+  },
+  "proOnboardingDone": {
+    "message": "확인",
+    "description": "Pro onboarding done button text"
+  },
+  "proOnboardingNext": {
+    "message": "다음",
+    "description": "Pro onboarding next button text"
+  },
+  "proOnboardingBack": {
+    "message": "뒤로",
+    "description": "Pro onboarding back button text"
+  },
+  "proOnboardingToolbarLearnMore": {
+    "message": "자세히 보기",
+    "description": "Pro onboarding toolbar learn more link label"
+  },
+  "resetOnboardingOption": {
+    "message": "온보딩 다시 시작",
+    "description": "Reset pro onboarding option label in popup settings menu"
+  },
+  "recoverLastRecordingOption": {
+    "message": "Recover last recording",
+    "description": "Settings menu item to manually trigger cloud recording recovery"
+  },
+  "toastRecoveredSession": {
+    "message": "Recovered unsaved recording from the previous session.",
+    "description": "Toast shown when a crashed recording session is auto-recovered on startup"
+  },
+  "toastStorageCritical": {
+    "message": "디스크 공간이 부족합니다. 녹화를 저장하고 있어요. 지금까지 캡처된 내용은 안전합니다.",
+    "description": "Toast shown when available storage drops below the critical threshold during recording; reassures that captured data is preserved"
+  },
+  "toastStorageLow": {
+    "message": "Storage is running low. Upload reliability may degrade for long recordings.",
+    "description": "Toast shown when available storage drops below the warning threshold during recording"
+  },
+  "toastAudioCaptureDegraded": {
+    "message": "Transcription capture paused due to memory pressure. Video upload continues.",
+    "description": "Toast shown when the audio recorder is stopped early because the audio buffer limit was reached"
+  },
+  "toastNetworkOffline": {
+    "message": "Network offline. Upload paused. Screen chunks are saved locally.",
+    "description": "Toast shown when the browser goes offline during a cloud recording upload"
+  },
+  "longRecordingTitle": {
+    "message": "긴 녹화",
+    "description": "Banner title shown when a recording exceeds the local processing limit but is otherwise successful"
+  },
+  "longRecordingDescription": {
+    "message": "녹화가 완료되었고 안전합니다. 아래에서 WebM으로 다운로드하세요.",
+    "description": "Banner description for long recordings that can be downloaded but not edited locally"
+  },
+  "notAvailableLongRecording": {
+    "message": "긴 녹화에는 사용할 수 없어요",
+    "description": "Disabled button label for features not available due to recording length"
+  },
+  "notAvailableRecoveryMode": {
+    "message": "복구 모드에서 사용할 수 없어요",
+    "description": "Disabled button label for features not available in recovery/fallback mode"
+  },
+  "editTooLongTitle": {
+    "message": "오디오 편집이 너무 깁니다",
+    "description": "Alert title when an audio mute/mix edit is rejected because the clip exceeds 15 minutes"
+  },
+  "editTooLongDescription": {
+    "message": "이 오디오 편집은 15분이 넘는 클립에는 지원되지 않습니다. 원본은 변경되지 않았습니다. 먼저 클립을 다듬어 보세요.",
+    "description": "Alert body explaining the 15-minute limit and suggesting trimming first"
+  },
+  "editTimeoutTitle": {
+    "message": "편집 시간이 초과되었습니다",
+    "description": "Alert title when an edit operation does not complete within the 5-minute watchdog period"
+  },
+  "editTimeoutDescription": {
+    "message": "편집이 제시간에 완료되지 않았습니다. 원본 녹화는 변경되지 않았습니다. 다시 시도하거나 먼저 클립을 다듬어 보세요.",
+    "description": "Alert body for the timeout case, prompting retry or shorter clip"
+  },
+  "streamEndedWarningToast": {
+    "message": "화면 공유가 중단되었어요. 녹화는 저장되었습니다. 준비되면 중지하세요.",
+    "description": "Toast shown when screen share track ends mid-recording. Recording continues; removes false urgency about data loss."
+  },
+  "recoveryModeDescription": {
+    "message": "처리 중 문제가 있었지만 녹화는 안전해요. 아래에서 다운로드할 수 있습니다.",
+    "description": "Recovery mode banner description — reassures user their recording is accessible despite the processing failure"
+  },
+  "editProcessingSafeDescription": {
+    "message": "편집을 처리하고 있어요. 원본 녹화는 변경되지 않았습니다.",
+    "description": "Shown in the editor processing alert when a user-initiated edit is running, to reassure the original is safe"
+  },
+  "editFailedTitle": {
+    "message": "편집을 적용할 수 없어요",
+    "description": "Alert title when an edit operation fails due to an encoding or processing error"
+  },
+  "editFailedDescription": {
+    "message": "처리 중 문제가 발생했어요. 원본 녹화는 안전합니다. 다시 시도하거나 그대로 다운로드할 수 있어요.",
+    "description": "Alert body for edit failure; explicitly confirms the original recording is untouched"
+  },
+  "videoTrackEndedToast": {
+    "message": "화면 공유가 중단되었어요. 녹화를 저장하고 있습니다. 지금까지 캡처된 내용은 안전합니다.",
+    "description": "Toast shown when the video track ends mid-recording (e.g. monitor disconnected, screen share revoked)"
+  },
+  "audioTrackEndedToast": {
+    "message": "오디오가 연결 해제되었어요. 녹화를 저장하고 있습니다. 지금까지 캡처된 영상은 안전합니다.",
+    "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
+  },
+  "editorRecoveryToast": {
+    "message": "녹화가 저장되었어요. 편집기가 열리지 않았습니다. Screenity 아이콘을 클릭해서 다시 시도하세요.",
+    "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
+  },
+  "stopAckTimeoutToast": {
+    "message": "저장이 예상보다 오래 걸리고 있어요. 데이터는 안전합니다. 편집기가 곧 열릴 거예요.",
+    "description": "Toast shown when the recorder does not acknowledge the stop request within a few seconds"
+  },
+  "copyDebugInfoButton": {
+    "message": "디버그 정보 복사",
+    "description": "Button to copy technical debug info to clipboard for support"
+  },
+  "debugInfoCopiedToast": {
+    "message": "디버그 정보가 복사되었어요",
+    "description": "Toast shown after debug info is copied"
+  },
+  "getHelpButton": {
+    "message": "도움 받기",
+    "description": "Side button on error modals that opens a prefilled support form"
+  },
+  "recordingTooShortToast": {
+    "message": "녹화 시간이 너무 짧아 저장할 수 없습니다",
+    "description": "Toast shown when a region recording is stopped by navigation but no chunks were saved"
+  },
+  "fastRecorderFailedTitle": {
+    "message": "빠른 녹화기 실패",
+    "description": "Title for the modal shown when the fast MP4 recorder output could not be validated"
+  },
+  "fastRecorderFailedDescription": {
+    "message": "이 기기에서 빠른 녹화기 출력을 검증할 수 없습니다.\n파일을 그대로 다운로드할 수 있습니다.",
+    "description": "Body text for the fast recorder failure modal"
+  },
+  "downloadAnywayButton": {
+    "message": "그래도 다운로드",
+    "description": "Button to download the recording file despite validation failure"
+  },
+  "cancelButton": {
+    "message": "취소",
+    "description": "Generic cancel button label"
   }
 }

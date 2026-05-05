@@ -95,7 +95,6 @@
     "message": "Afficher plus d'options",
     "description": "Étiquette Afficher plus d'options"
   },
-
   "systemAudioLabel": {
     "message": "Inclure l'audio système",
     "description": "Étiquette de l'audio système/onglet"
@@ -496,6 +495,10 @@
     "message": "L'édition et l'exportation au format MP4 ne sont pas disponibles",
     "description": "Description de la limite de plus de 5 minutes dans l'éditeur"
   },
+  "overLimitLabelDescriptionFastPath": {
+    "message": "Les fonctions d'édition ne sont pas disponibles",
+    "description": "Over limit description when the recording is a native MP4 (fast recorder / WebCodecs) so MP4 export still works"
+  },
   "videoProcessingLabelTitle": {
     "message": "La vidéo est en cours de traitement...",
     "description": "Étiquette de traitement vidéo dans l'éditeur"
@@ -525,7 +528,7 @@
     "description": "Étiquette de recadrage"
   },
   "preparingLabel": {
-    "message": "Préparation de la vidéo, veuillez patienter...",
+    "message": "Préparation...",
     "description": "Étiquette de préparation"
   },
   "cropButtonTitle": {
@@ -601,16 +604,20 @@
     "description": "Étiquette de téléchargement GIF"
   },
   "shareModalSandboxTitle": {
-    "message": "Partagez vos vidéos avec un lien",
-    "description": "Titre de la boîte de dialogue de partage sur la page de l'éditeur de tests"
+    "message": "Prêt à améliorer vos enregistrements ?",
+    "description": "Share modal title in sandbox editor page"
   },
   "shareModalSandboxDescription": {
-    "message": "À venir ! Laissez votre adresse e-mail pour rester informé et recevoir des notifications lorsqu'il sera disponible.",
-    "description": "Description de la boîte de dialogue de partage sur la page de l'éditeur de tests"
+    "message": "Partage dans le cloud, zooms, modèles... et soutiens une dev indie qui respecte ta vie privée ❤️",
+    "description": "Share modal description in sandbox editor page"
   },
   "shareModalSandboxButton": {
-    "message": "Rejoignez la liste d'attente",
-    "description": "Espace réservé pour l'e-mail dans la boîte de dialogue de partage sur la page de l'éditeur de tests"
+    "message": "En savoir plus sur Pro",
+    "description": "Share modal email placeholder in sandbox editor page"
+  },
+  "shareModalSandboxLogin": {
+    "message": "Vous avez déjà un compte ? Connexion",
+    "description": "Share modal login link in sandbox editor page"
   },
   "shareSandboxButton": {
     "message": "Partager la vidéo",
@@ -888,6 +895,10 @@
     "message": "Comme Slingui Recording est complètement privé et fonctionne en local, il est limité par le matériel de votre appareil. Le traitement d'une vidéo de cette longueur prendrait trop de temps et serait très intensif en ressources. Ne vous inquiétez pas, vous pouvez toujours télécharger le fichier WEBM ou l'enregistrement brut, mais l'édition et l'exportation en MP4 ne sont pas disponibles. Cela dit, vous pouvez toujours essayer de traiter la vidéo de toute façon, si vous comprenez les risques.",
     "description": "Description de la fenêtre modale de limite de plus de 5 minutes"
   },
+  "overLimitModalDescriptionFastPath": {
+    "message": "Comme Screenity est complètement privé et fonctionne en local, il est limité par le matériel de votre appareil. Le traitement d'une vidéo de cette longueur prendrait trop de temps et serait très intensif en ressources. Votre MP4 est prêt à être téléchargé, mais l'édition dans le navigateur n'est pas disponible pour des clips aussi longs. Cela dit, vous pouvez toujours essayer de traiter la vidéo de toute façon, si vous comprenez les risques.",
+    "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
+  },
   "overLimitModalButton": {
     "message": "Je comprends le risque, essayer quand même",
     "description": "Bouton de la fenêtre modale de limite de plus de 5 minutes"
@@ -896,12 +907,10 @@
     "message": "En savoir plus sur le traitement des vidéos longues.",
     "description": "Lien 'En savoir plus' de la fenêtre modale de limite de plus de 5 minutes avec un point"
   },
-
   "recoveryModeTitle": {
     "message": "Mode de récupération",
     "description": "Titre du mode de récupération"
   },
-
   "downloadForTroubleshootingOption": {
     "message": "Télécharger des données pour résoudre les problèmes",
     "description": "Option de téléchargement pour résoudre les problèmes"
@@ -1008,7 +1017,6 @@
     "message": "Assurez-vous d'activer l'option 'Partager l'audio du système' si vous souhaitez enregistrer l'audio de l'ordinateur. Si vous ne voyez pas cette option, essayez de mettre à jour Chrome ou basculez vers l'enregistrement de l'onglet.",
     "description": "Description de l'avertissement audio pour d'autres systèmes"
   },
-
   "maxResolutionLabel": {
     "message": "Résolution maximale",
     "description": "Étiquette de résolution maximale dans le menu des paramètres"
@@ -1017,7 +1025,6 @@
     "message": "FPS maximum",
     "description": "Étiquette de FPS maximum dans le menu des paramètres"
   },
-
   "notEnoughRAM": {
     "message": "Pas assez de RAM",
     "description": "Étiquette 'Pas assez de RAM' dans le menu des paramètres"
@@ -1037,5 +1044,541 @@
   "permissionsModalReview": {
     "message": "Réviser les autorisations",
     "description": "Bouton de révision des autorisations"
+  },
+  "recordButtonMultiLabel": {
+    "message": "Ajouter un autre enregistrement",
+    "description": "Record button label (multi mode)"
+  },
+  "recorderSetupTitle": {
+    "message": "Préparation en cours...",
+    "description": "Title in recording page while setting up project before countdown starts"
+  },
+  "recorderSetupDescription": {
+    "message": "Un instant ! Votre enregistrement est en préparation.",
+    "description": "Description in recording page before countdown starts"
+  },
+  "reopenToolbarToast": {
+    "message": "Barre d’outils masquée. Réactivez-la depuis les options du popup.",
+    "description": "Toast message explaining to reopen the toolbar in the popup options"
+  },
+  "loginButtonLabel": {
+    "message": "Se connecter ou s’inscrire",
+    "description": "Login button label in popup settings menu"
+  },
+  "logoutButtonLabel": {
+    "message": "Se déconnecter",
+    "description": "Logout button label in popup settings menu"
+  },
+  "loggedOutToastTitle": {
+    "message": "Vous avez été déconnectée",
+    "description": "Toast message shown when the user logs out"
+  },
+  "storageLimitReachedTitle": {
+    "message": "Limite de stockage atteinte",
+    "description": "Modal message shown when the storage limit is reached"
+  },
+  "storageLimitReachedDescription": {
+    "message": "Vous avez utilisé les 50 Go de stockage. Supprimez d’anciennes vidéos ou scènes pour continuer à enregistrer.",
+    "description": "Modal description shown when the storage limit is reached"
+  },
+  "manageStorageButtonLabel": {
+    "message": "Gérer le stockage",
+    "description": "Button label to manage storage in the popup settings menu"
+  },
+  "closeModalLabel": {
+    "message": "Fermer",
+    "description": "Agnostic close modal button label"
+  },
+  "storageCheckFailTitle": {
+    "message": "Impossible de vérifier le stockage",
+    "description": "Title shown when the storage check fails"
+  },
+  "storageCheckFailAuthDescription": {
+    "message": "Un problème est survenu lors de la vérification du stockage. Veuillez vous reconnecter et réessayer.",
+    "description": "Description shown when the storage check fails due to authentication"
+  },
+  "storageCheckFailDescription": {
+    "message": "Impossible de vérifier votre quota de stockage. Réessayez dans quelques secondes ou actualisez la page.",
+    "description": "Description shown when the storage check fails"
+  },
+  "retryButtonLabel": {
+    "message": "Réessayer",
+    "description": "Agnostic button label to try again"
+  },
+  "addedToMultiToast": {
+    "message": "Scène ajoutée à l’enregistrement Multi",
+    "description": "Toast message shown when a scene is added to multi-recording"
+  },
+  "readyRecordSceneToast": {
+    "message": "Prête à enregistrer une nouvelle scène dans votre vidéo",
+    "description": "Toast message shown when the user is in an existing project and ready to record a new scene"
+  },
+  "reachingRecordingLimitToast": {
+    "message": "L’enregistrement approche la limite de 90 minutes, il s’arrêtera bientôt",
+    "description": "Toast message shown when the recording is reaching the 90 minute limit"
+  },
+  "recordingLimitReachedToast": {
+    "message": "Enregistrement arrêté — limite de 90 minutes atteinte",
+    "description": "Toast message shown when the recording limit is reached"
+  },
+  "tabRecordingDisabledToast": {
+    "message": "L’enregistrement d’onglet est désactivé sur cette page. L’enregistrement d’écran a été activé par défaut.",
+    "description": "Toast message shown when tab recording is disabled on a page"
+  },
+  "projectRecordingCancelledToast": {
+    "message": "Enregistrement de la vidéo annulé",
+    "description": "Toast message shown when the user cancels project recording"
+  },
+  "copiedToClipboardToast": {
+    "message": "Lien copié dans le presse-papiers",
+    "description": "Toast message shown when link has been copied to clipboard"
+  },
+  "failedToCopyToClipboardToast": {
+    "message": "Échec de la copie du lien",
+    "description": "Toast message shown when failed to copy link to clipboard"
+  },
+  "newestSortLabel": {
+    "message": "Les plus récents",
+    "description": "Label for the newest sort option"
+  },
+  "oldestSortLabel": {
+    "message": "Les plus anciens",
+    "description": "Label for the oldest sort option"
+  },
+  "allVideosHeading": {
+    "message": "Toutes les vidéos",
+    "description": "Heading for the all videos section in the popup"
+  },
+  "noVideosFound": {
+    "message": "Aucune vidéo trouvée",
+    "description": "Message shown when no videos are found in the popup"
+  },
+  "loadingVideosLabel": {
+    "message": "Chargement des vidéos...",
+    "description": "Label shown when videos are loading in the popup"
+  },
+  "goToDashboardButtonLabel": {
+    "message": "Aller au tableau de bord",
+    "description": "Button label to go to the dashboard in the popup"
+  },
+  "welcomePopupTitle": {
+    "message": "Bienvenue sur Screenity",
+    "description": "Title for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionTop": {
+    "message": "Sans pub. Sans suivi. Sans limites.",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupDescriptionBottom": {
+    "message": "Enregistrez, tout simplement.",
+    "description": "Description for the welcome popup shown to new users"
+  },
+  "welcomePopupCTA": {
+    "message": "Essayez gratuitement — sans inscription !",
+    "description": "Call to action button for the welcome popup shown to new users"
+  },
+  "welcomePopupCloudTitle": {
+    "message": "Envie d’en faire plus avec vos vidéos ?",
+    "description": "Title for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupCloudFeature1": {
+    "message": "Stockage cloud, partage par lien",
+    "description": "Feature 1 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature2": {
+    "message": "Combinez plusieurs clips en chapitres",
+    "description": "Feature 2 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature3": {
+    "message": "Zooms intelligents au clic (ou ajoutez les vôtres !)",
+    "description": "Feature 3 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature4": {
+    "message": "Ajoutez des modèles, sous-titres, mockups...",
+    "description": "Feature 4 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudFeature5": {
+    "message": "Fonds et disposition de caméra personnalisés",
+    "description": "Feature 5 for the cloud storage in the welcome popup"
+  },
+  "welcomePopupCloudCTA": {
+    "message": "🔓 Débloquez des fonctionnalités",
+    "description": "Call to action button for the cloud storage feature in the welcome popup"
+  },
+  "welcomePopupSupport": {
+    "message": "+ Soutenez le développement indépendant !",
+    "description": "Message for supporting the indie maker in the welcome popup"
+  },
+  "accountSettingsOption": {
+    "message": "Paramètres du compte",
+    "description": "Label for the account settings option in the popup"
+  },
+  "supportSettingsOption": {
+    "message": "Assistance",
+    "description": "Label for the support option in the popup"
+  },
+  "inactiveSubscriptionTitle": {
+    "message": "Abonnement Pro inactif",
+    "description": "Title shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionDescription": {
+    "message": "Votre abonnement à Screenity Pro est inactif.",
+    "description": "Description shown when the user's subscription is inactive"
+  },
+  "inactiveSubscriptionReactivation": {
+    "message": "Réactivez-le pour retrouver l’accès.",
+    "description": "Message prompting the user to reactivate their subscription"
+  },
+  "inactiveSubscriptionDeletionWarning": {
+    "message": "Vos vidéos et données seront supprimées définitivement le ",
+    "description": "Warning message about the deletion of videos and data"
+  },
+  "manageSubscriptionButton": {
+    "message": "Gérer l’abonnement",
+    "description": "Button to manage the user's subscription"
+  },
+  "inactiveSubscriptionFreeVersion": {
+    "message": "Vous voulez continuer avec la version gratuite ?",
+    "description": "Message prompting the user to continue using the free version"
+  },
+  "downgradeToFreeButton": {
+    "message": "Se déconnecter et passer à la version gratuite",
+    "description": "Button to log out and downgrade to the free version"
+  },
+  "loggedOutTitle": {
+    "message": "Déconnectée",
+    "description": "Title shown when the user is logged out"
+  },
+  "loggedOutDescription": {
+    "message": "Reconnectez-vous pour synchroniser vos enregistrements et accéder aux fonctionnalités Pro.",
+    "description": "Description shown when the user is logged out"
+  },
+  "logBackInButton": {
+    "message": "Se reconnecter",
+    "description": "Button to log back in after being logged out"
+  },
+  "loggedOutFreeVersion": {
+    "message": "Vous pouvez continuer à utiliser l’extension sans compte, mais les enregistrements ne seront pas sauvegardés ni récupérables.",
+    "description": "Message shown when the user is logged out and using the free version"
+  },
+  "continueWithoutLogin": {
+    "message": "Continuer sans se connecter",
+    "description": "Button to continue using the extension without logging in"
+  },
+  "instantRecordingModeLabel": {
+    "message": "Mode d’enregistrement instantané",
+    "description": "Label for the instant recording mode"
+  },
+  "instantRecordingModeTooltip": {
+    "message": "Téléchargement immédiat, mais impossible de modifier la disposition de la caméra après le début.",
+    "description": "Tooltip for the instant recording mode"
+  },
+  "instantRecordingModeTitle": {
+    "message": "Mode d’enregistrement instantané",
+    "description": "Title for the instant recording mode"
+  },
+  "instantRecordingModeDescription": {
+    "message": "Ce mode enregistre tout en une seule vidéo à télécharger et partager immédiatement. Vous ne pourrez pas modifier la disposition de la caméra, mais d’autres modifications restent possibles.",
+    "description": "Description for the instant recording mode"
+  },
+  "instantRecordingModeAction": {
+    "message": "Compris",
+    "description": "Action button for the instant recording mode"
+  },
+  "tabRecordingDisabledTooltip": {
+    "message": "L’enregistrement d’onglet est désactivé sur cette page",
+    "description": "Tooltip shown when tab recording is disabled on a page"
+  },
+  "addingToLabel": {
+    "message": "Ajout à : ",
+    "description": "Label shown when a scene is being recorded to a project"
+  },
+  "multiLabel": {
+    "message": "Multi",
+    "description": "Label for the multi-recording mode"
+  },
+  "finishLabelMulti": {
+    "message": "Terminer",
+    "description": "Label for the finish multi-recording button"
+  },
+  "welcomeProTitle": {
+    "message": "Envie d’en faire plus avec vos enregistrements ?",
+    "description": "Title for the welcome Pro popup"
+  },
+  "welcomeProDescription": {
+    "message": "Connectez-vous pour sauvegarder vos vidéos dans le cloud, les partager par lien et accéder à des outils de montage avancés.",
+    "description": "Description for the welcome Pro popup"
+  },
+  "welcomeProButton": {
+    "message": "Connectez-vous pour débloquer les fonctionnalités Pro",
+    "description": "Button to sign in to Screenity Pro"
+  },
+  "welcomeProSupport": {
+    "message": "Soutenez la créatrice indépendante !",
+    "description": "Message for supporting the indie maker in the welcome Pro popup"
+  },
+  "unlockMoreFeatures": {
+    "message": "Débloquez plus de fonctionnalités",
+    "description": "Button to unlock more features in the editor"
+  },
+  "shareUnlockButton": {
+    "message": "Connectez-vous pour partager (pro)",
+    "description": "Button to sign in to share in the editor"
+  },
+  "proBannerTitle": {
+    "message": "Débloquez le stockage cloud, l’édition multi-scènes, les zooms automatiques, les sous-titres et plus encore",
+    "description": "Pro banner title in the editor"
+  },
+  "proBannerDescription": {
+    "message": "Screenity restera toujours gratuit, open source et sans pub. Pro aide à couvrir les frais de cloud et soutient une créatrice indépendante ❤️",
+    "description": "Pro banner description in the editor"
+  },
+  "proBannerAltButton": {
+    "message": "Ne plus afficher",
+    "description": "Pro banner don't show again button in the editor"
+  },
+  "proBannerButton": {
+    "message": "Essayer",
+    "description": "Pro banner button in the editor"
+  },
+  "multiRecordingModeTitle": {
+    "message": "Mode Multi",
+    "description": "Title for the multi-recording mode modal"
+  },
+  "multiRecordingModeDescription": {
+    "message": "Enregistrez plusieurs scènes, comme votre écran, votre caméra ou les deux, les unes après les autres. Idéal pour faire plusieurs prises, changer de vue ou découper votre enregistrement en parties. Une fois terminé, cliquez sur Terminer pour ouvrir l’éditeur avec toutes vos scènes regroupées dans une seule vidéo.",
+    "description": "Description for the multi-recording mode modal"
+  },
+  "noSubscriptionYetTitle": {
+    "message": "Activez Pro pour commencer",
+    "description": "Title shown when the user has no active subscription"
+  },
+  "noSubscriptionYetDescription": {
+    "message": "Abonnez-vous pour accéder aux fonctionnalités Pro.",
+    "description": "Message prompting the user to subscribe to reactivate their Pro features"
+  },
+  "upgradeToProButton": {
+    "message": "S’abonner à Pro",
+    "description": "Button to upgrade to Pro"
+  },
+  "hostBannerTitle": {
+    "message": "Vous utilisez Screenity en local ? Soutenez son développement !",
+    "description": "Titre de la bannière d’auto-hébergement dans l’éditeur"
+  },
+  "hostBannerDescription": {
+    "message": "Screenity est développé par une créatrice indépendante. L’auto-hébergement est gratuit, mais si vous trouvez l’outil utile, pensez à soutenir avec la version Pro ❤️",
+    "description": "Description de la bannière d’auto-hébergement dans l’éditeur"
+  },
+  "welcomeBackPopupTitle": {
+    "message": "Bienvenue à nouveau sur Screenity",
+    "description": "Titre de la fenêtre popup de bienvenue pour les utilisateurs de retour"
+  },
+  "welcomeBackProTitle": {
+    "message": "✨ Nouveauté : Envie d’aller plus loin avec vos enregistrements ?",
+    "description": "Titre pour la fonctionnalité de stockage cloud dans la popup de bienvenue"
+  },
+  "welcomeBackProDescription": {
+    "message": "Screenity Pro est une nouvelle plateforme optionnelle pour sauvegarder vos vidéos dans le cloud, les partager par lien, et débloquer des outils d’édition avancés, si et quand vous en avez besoin.",
+    "description": "Description de la fonctionnalité de stockage cloud dans la popup de bienvenue"
+  },
+  "welcomeBackProCTA": {
+    "message": "En savoir plus sur Screenity Pro",
+    "description": "Bouton d’appel à l’action pour la fonctionnalité cloud dans la popup de bienvenue"
+  },
+  "welcomeToProTitleModal": {
+    "message": "Bienvenue sur Screenity Pro",
+    "description": "Titre de la fenêtre de bienvenue pour Pro"
+  },
+  "welcomeToProDescriptionModal": {
+    "message": "Vous êtes prêt·e à commencer à enregistrer ! Quelques points à garder en tête :\n\n- La bulle de caméra peut disparaître pendant l’enregistrement — c’est normal. Elle est capturée séparément en arrière-plan, vous pourrez la repositionner comme vous le souhaitez ensuite.\n- Les zooms automatiques ne se déclenchent que sur les clics dans les onglets Chrome, à cause d’une limitation du navigateur. Vous pouvez toujours en ajouter manuellement après l’enregistrement.\n- Pour des enregistrements rapides avec téléchargement immédiat, essayez le Mode Instantané. Notez simplement que les options d’édition sont limitées : pas d’arrière-plans, de mises en page ou de réglages avancés.",
+    "description": "Description de la fenêtre de bienvenue pour Pro"
+  },
+  "welcomeToProActionModal": {
+    "message": "Compris",
+    "description": "Bouton d’action de la fenêtre de bienvenue pour Pro"
+  },
+  "webcodecsToggleLabel": {
+    "message": "Fast MP4",
+    "description": "WebCodecs recorder toggle label"
+  },
+  "webcodecsFailedOffToast": {
+    "message": "Fast MP4 échec — off",
+    "description": "WebCodecs failure auto-disable toast"
+  },
+  "proOnboardingWelcomeTitle": {
+    "message": "Bienvenue dans l'extension Screenity Pro",
+    "description": "Pro onboarding welcome step title"
+  },
+  "proOnboardingWelcomeDescription": {
+    "message": "Quelques conseils rapides avant d'enregistrer.<br/>Les zooms automatiques ne fonctionnent que pour les clics dans les <strong>onglets Chrome</strong>. Vous pourrez toujours en ajouter manuellement ensuite.",
+    "description": "Pro onboarding welcome step description"
+  },
+  "proOnboardingToolbarTitle": {
+    "message": "Barre d'enregistrement et effets",
+    "description": "Pro onboarding toolbar step title"
+  },
+  "proOnboardingToolbarDescription": {
+    "message": "Utilisez cette barre pour dessiner, appliquer des effets de curseur, flouter et contrôler l'enregistrement.<br/><br/><strong>Cette barre est visible dans la vidéo</strong> si vous ne la masquez pas.",
+    "description": "Pro onboarding toolbar step description"
+  },
+  "proOnboardingCameraTitle": {
+    "message": "La caméra est capturée séparément",
+    "description": "Pro onboarding camera step title"
+  },
+  "proOnboardingCameraDescription": {
+    "message": "Votre caméra peut <strong>se masquer ou passer en PiP</strong> pendant l'enregistrement, c'est normal.<br/><br/>Elle est capturée séparément pour pouvoir être repositionnée ensuite.",
+    "description": "Pro onboarding camera step description"
+  },
+  "proOnboardingInstantTitle": {
+    "message": "Mode instantané",
+    "description": "Pro onboarding instant mode step title"
+  },
+  "proOnboardingInstantDescription": {
+    "message": "Parfait pour partager rapidement avec des <strong>téléchargements illimités</strong>.<br/><br/>Les mises en page et options d'édition avancées ne sont pas disponibles dans ce mode.",
+    "description": "Pro onboarding instant mode step description"
+  },
+  "proOnboardingDone": {
+    "message": "Compris",
+    "description": "Pro onboarding done button text"
+  },
+  "proOnboardingNext": {
+    "message": "Suivant",
+    "description": "Pro onboarding next button text"
+  },
+  "proOnboardingBack": {
+    "message": "Retour",
+    "description": "Pro onboarding back button text"
+  },
+  "proOnboardingToolbarLearnMore": {
+    "message": "En savoir plus",
+    "description": "Pro onboarding toolbar learn more link label"
+  },
+  "resetOnboardingOption": {
+    "message": "Réinitialiser l'onboarding",
+    "description": "Reset pro onboarding option label in popup settings menu"
+  },
+  "recoverLastRecordingOption": {
+    "message": "Recover last recording",
+    "description": "Settings menu item to manually trigger cloud recording recovery"
+  },
+  "toastRecoveredSession": {
+    "message": "Recovered unsaved recording from the previous session.",
+    "description": "Toast shown when a crashed recording session is auto-recovered on startup"
+  },
+  "toastStorageCritical": {
+    "message": "Espace disque faible. Sauvegarde de l'enregistrement en cours. Tout ce qui a été capturé est en sécurité.",
+    "description": "Toast shown when available storage drops below the critical threshold during recording; reassures that captured data is preserved"
+  },
+  "toastStorageLow": {
+    "message": "Storage is running low. Upload reliability may degrade for long recordings.",
+    "description": "Toast shown when available storage drops below the warning threshold during recording"
+  },
+  "toastAudioCaptureDegraded": {
+    "message": "Transcription capture paused due to memory pressure. Video upload continues.",
+    "description": "Toast shown when the audio recorder is stopped early because the audio buffer limit was reached"
+  },
+  "toastNetworkOffline": {
+    "message": "Network offline. Upload paused. Screen chunks are saved locally.",
+    "description": "Toast shown when the browser goes offline during a cloud recording upload"
+  },
+  "longRecordingTitle": {
+    "message": "Enregistrement long",
+    "description": "Banner title shown when a recording exceeds the local processing limit but is otherwise successful"
+  },
+  "longRecordingDescription": {
+    "message": "Votre enregistrement est complet et en sécurité. Téléchargez en WebM ci-dessous.",
+    "description": "Banner description for long recordings that can be downloaded but not edited locally"
+  },
+  "notAvailableLongRecording": {
+    "message": "Indisponible pour les longs enregistrements",
+    "description": "Disabled button label for features not available due to recording length"
+  },
+  "notAvailableRecoveryMode": {
+    "message": "Indisponible en mode de récupération",
+    "description": "Disabled button label for features not available in recovery/fallback mode"
+  },
+  "editTooLongTitle": {
+    "message": "Édition audio trop longue",
+    "description": "Alert title when an audio mute/mix edit is rejected because the clip exceeds 15 minutes"
+  },
+  "editTooLongDescription": {
+    "message": "Cette édition audio n'est pas prise en charge pour les clips de plus de 15 minutes. Votre original n'est pas modifié. Essayez d'abord de rogner le clip.",
+    "description": "Alert body explaining the 15-minute limit and suggesting trimming first"
+  },
+  "editTimeoutTitle": {
+    "message": "Expiration de l'édition",
+    "description": "Alert title when an edit operation does not complete within the 5-minute watchdog period"
+  },
+  "editTimeoutDescription": {
+    "message": "L'édition n'a pas pu être terminée à temps. Votre enregistrement original n'est pas modifié. Réessayez ou rognez le clip d'abord.",
+    "description": "Alert body for the timeout case, prompting retry or shorter clip"
+  },
+  "streamEndedWarningToast": {
+    "message": "Le partage d'écran s'est arrêté. Votre enregistrement est sauvegardé. Arrêtez quand vous êtes prêt.",
+    "description": "Toast shown when screen share track ends mid-recording. Recording continues; removes false urgency about data loss."
+  },
+  "recoveryModeDescription": {
+    "message": "Un problème de traitement est survenu, mais votre enregistrement est en sécurité. Vous pouvez le télécharger ci-dessous.",
+    "description": "Recovery mode banner description — reassures user their recording is accessible despite the processing failure"
+  },
+  "editProcessingSafeDescription": {
+    "message": "Traitement de votre modification en cours. L'enregistrement original n'est pas modifié.",
+    "description": "Shown in the editor processing alert when a user-initiated edit is running, to reassure the original is safe"
+  },
+  "editFailedTitle": {
+    "message": "La modification n'a pas pu être appliquée",
+    "description": "Alert title when an edit operation fails due to an encoding or processing error"
+  },
+  "editFailedDescription": {
+    "message": "Une erreur est survenue pendant le traitement. Votre enregistrement original est en sécurité. Vous pouvez réessayer ou le télécharger tel quel.",
+    "description": "Alert body for edit failure; explicitly confirms the original recording is untouched"
+  },
+  "videoTrackEndedToast": {
+    "message": "Le partage d'écran s'est arrêté. Sauvegarde de l'enregistrement en cours. Tout ce qui a été capturé est en sécurité.",
+    "description": "Toast shown when the video track ends mid-recording (e.g. monitor disconnected, screen share revoked)"
+  },
+  "audioTrackEndedToast": {
+    "message": "Audio déconnecté. Sauvegarde de l'enregistrement en cours. La vidéo capturée est en sécurité.",
+    "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
+  },
+  "editorRecoveryToast": {
+    "message": "Votre enregistrement est sauvegardé. L'éditeur ne s'est pas ouvert. Cliquez sur l'icône Screenity pour réessayer.",
+    "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
+  },
+  "stopAckTimeoutToast": {
+    "message": "La sauvegarde prend plus de temps que prévu. Vos données sont en sécurité. L'éditeur s'ouvrira bientôt.",
+    "description": "Toast shown when the recorder does not acknowledge the stop request within a few seconds"
+  },
+  "copyDebugInfoButton": {
+    "message": "Copier les infos de débogage",
+    "description": "Button to copy technical debug info to clipboard for support"
+  },
+  "debugInfoCopiedToast": {
+    "message": "Infos de débogage copiées",
+    "description": "Toast shown after debug info is copied"
+  },
+  "getHelpButton": {
+    "message": "Obtenir de l'aide",
+    "description": "Side button on error modals that opens a prefilled support form"
+  },
+  "recordingTooShortToast": {
+    "message": "L'enregistrement était trop court pour être sauvegardé",
+    "description": "Toast shown when a region recording is stopped by navigation but no chunks were saved"
+  },
+  "fastRecorderFailedTitle": {
+    "message": "L'enregistreur rapide a échoué",
+    "description": "Title for the modal shown when the fast MP4 recorder output could not be validated"
+  },
+  "fastRecorderFailedDescription": {
+    "message": "La sortie de l'enregistreur rapide n'a pas pu être validée sur cet appareil.\nVous pouvez quand même télécharger le fichier.",
+    "description": "Body text for the fast recorder failure modal"
+  },
+  "downloadAnywayButton": {
+    "message": "Télécharger quand même",
+    "description": "Button to download the recording file despite validation failure"
+  },
+  "cancelButton": {
+    "message": "Annuler",
+    "description": "Generic cancel button label"
   }
 }

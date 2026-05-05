@@ -1,16 +1,10 @@
 import React, { useEffect, useRef, useContext } from "react";
 import { fabric } from "fabric";
 
-// Context
 import { contentStateContext } from "../../context/ContentState";
 
-// Components
-import TextToolbar from "./TextToolbar";
-
-// Canvas setup
 import CustomControls from "../modules/CustomControls";
 
-// Canvas tools
 import ArrowTool from "../modules/ArrowTool";
 import EraserTool from "../modules/EraserTool";
 import ShapeTool from "../modules/ShapeTool";
@@ -18,7 +12,6 @@ import TextTool from "../modules/TextTool";
 import PenTool from "../modules/PenTool";
 import SelectTool from "../modules/SelectTool";
 
-// Canvas utils
 import {
   undoCanvas,
   redoCanvas,
@@ -47,7 +40,6 @@ const CanvasWrap = (props) => {
     });
     fabricRef.current = canvas;
 
-    // Get context
     canvas.getContext("2d", { willReadFrequently: true });
 
     // Set width and height of canvas to full size of document
@@ -71,11 +63,10 @@ const CanvasWrap = (props) => {
         ...contentState,
         canvas: canvas,
       },
-      setContentState
+      setContentState,
     );
   }, []);
 
-  // Update canvas dimensions + panning on window resize
   useEffect(() => {
     if (!fabricRef.current) return;
 
@@ -91,6 +82,39 @@ const CanvasWrap = (props) => {
       window.removeEventListener("resize", resizeCanvas);
     };
   }, []);
+
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const tool = contentState.tool;
+
+    const shouldDraw =
+      contentState.drawingMode && (tool === "pen" || tool === "highlighter");
+
+    canvas.isDrawingMode = shouldDraw;
+
+    // Important: when leaving pen/highlighter, clear any in-progress brush stroke
+    if (!shouldDraw && canvas.freeDrawingBrush) {
+      const brush = canvas.freeDrawingBrush;
+      if (Array.isArray(brush._points)) brush._points.length = 0;
+      if (Array.isArray(brush.points)) brush.points.length = 0;
+      if (typeof brush._reset === "function") brush._reset();
+    }
+
+    canvas.requestRenderAll();
+  }, [contentState.tool, contentState.drawingMode]);
+
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    // Only discard selection when leaving select (or when entering a drawing tool)
+    if (contentState.tool !== "select") {
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    }
+  }, [contentState.tool]);
 
   const panXRef = useRef(window.scrollX);
   const panYRef = useRef(window.scrollY);
@@ -137,36 +161,33 @@ const CanvasWrap = (props) => {
   useEffect(() => {
     if (!fabricRef.current) return;
 
-    const eraserDrawing = EraserTool(
-      fabricRef.current,
-      contentState,
-      setContentState
-    );
+    const canvas = fabricRef.current;
 
+    // Pass a ref getter instead of snapshot state
     const arrowDrawing = ArrowTool(
-      fabricRef.current,
-      contentState,
+      canvas,
+      contentStateRef,
       setContentState,
-      saveCanvas
+      saveCanvas,
     );
-
+    const eraserDrawing = EraserTool(canvas, contentStateRef, setContentState);
     const shapeDrawing = ShapeTool(
-      fabricRef.current,
-      contentState,
+      canvas,
+      contentStateRef,
       setContentState,
-      saveCanvas
+      saveCanvas,
     );
     const textDrawing = TextTool(
-      fabricRef.current,
-      contentState,
+      canvas,
+      contentStateRef,
       setContentState,
-      saveCanvas
+      saveCanvas,
     );
     const penDrawing = PenTool(
-      fabricRef.current,
-      contentState,
+      canvas,
+      contentStateRef,
       setContentState,
-      saveCanvas
+      saveCanvas,
     );
 
     return () => {
@@ -176,25 +197,25 @@ const CanvasWrap = (props) => {
       textDrawing.removeEventListeners();
       penDrawing.removeEventListeners();
     };
-  }, [contentState]);
+  }, []);
 
   useEffect(() => {
-    const selection = SelectTool(
-      fabricRef.current,
-      contentState,
-      setContentState
-    );
+    if (!fabricRef.current) return;
+
+    const canvas = fabricRef.current;
+
+    const selection = SelectTool(canvas, contentStateRef, setContentState);
     const objectChanges = checkChanges(
-      fabricRef.current,
-      contentState,
-      setContentState
+      canvas,
+      contentStateRef,
+      setContentState,
     );
 
     return () => {
       selection.removeEventListeners();
       objectChanges.removeEventListeners();
     };
-  }, [fabricRef, contentState]);
+  }, []);
 
   useEffect(() => {
     // Prevent selecting elements unless in select mode
@@ -217,24 +238,30 @@ const CanvasWrap = (props) => {
     }
   }, [contentState.tool]);
 
-  // handle what happens on key press
-  const handleKeyPress = (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key === "z")
-      undoCanvas(contentState, setContentState);
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === "z")
-      redoCanvas(contentState, setContentState);
-  };
-
   useEffect(() => {
-    if (!fabricRef.current) return;
-    // attach the event listener
-    document.addEventListener("keydown", handleKeyPress);
+    const onKeyDown = (event) => {
+      const state = contentStateRef.current;
+      if (!state) return;
 
-    // remove the event listener
-    return () => {
-      document.removeEventListener("keydown", handleKeyPress);
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "z" &&
+        !event.shiftKey
+      ) {
+        undoCanvas(state, setContentState);
+      }
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        (event.key.toLowerCase() === "y" ||
+          (event.shiftKey && event.key.toLowerCase() === "z"))
+      ) {
+        redoCanvas(state, setContentState);
+      }
     };
-  }, [handleKeyPress, fabricRef.current, contentState]);
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!fabricRef.current) return;
