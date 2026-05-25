@@ -1,6 +1,7 @@
 // src/utils/slingui-auth.js
 
 const config = {
+  apiBaseUrl: 'https://api.slingui.com',
   authority: 'https://api.slingui.com/auth/oidc',
   client_id: 'screenity-extension',
   scope: 'openid profile email',
@@ -29,7 +30,7 @@ async function generateCodeChallenge(verifier) {
 }
 
 function getRedirectUrl() {
-  if (chrome && chrome.identity) {
+  if (typeof chrome !== 'undefined' && chrome.identity) {
     return chrome.identity.getRedirectURL('callback.html');
   }
   // Fallback for development
@@ -37,8 +38,16 @@ function getRedirectUrl() {
 }
 
 function parseJwt(token) {
+    if (!token) {
+        return null;
+    }
+
     try {
         const base64Url = token.split('.')[1];
+        if (!base64Url) {
+            return null;
+        }
+
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
             return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
@@ -51,35 +60,148 @@ function parseJwt(token) {
     }
 }
 
+function getTokenProfile(tokens) {
+  return parseJwt(tokens.id_token) || parseJwt(tokens.access_token) || null;
+}
+
+function maskToken(token) {
+  if (!token || typeof token !== 'string') {
+    return token;
+  }
+
+  return `${token.slice(0, 12)}...${token.slice(-8)}`;
+}
+
+function getSafeAuthLogData(data) {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+
+  return Object.entries(data).reduce((safeData, [key, value]) => {
+    const lowerKey = key.toLowerCase();
+    const isSensitive = lowerKey.includes('token') || lowerKey.includes('secret');
+
+    safeData[key] = isSensitive && typeof value === 'string'
+      ? maskToken(value)
+      : value;
+
+    return safeData;
+  }, {});
+}
+
+function hasProfileDisplayName(profile) {
+  return Boolean(
+    profile?.name ||
+    profile?.given_name ||
+    profile?.family_name ||
+    profile?.preferred_username ||
+    profile?.email
+  );
+}
+
+async function fetchUserInfo(accessToken) {
+  if (!accessToken) {
+    console.log('[Slingui Auth] /auth/me skipped: missing access token');
+    return null;
+  }
+
+  try {
+    console.log('[Slingui Auth] Fetching /auth/me with access token:', maskToken(accessToken));
+
+    const response = await fetch(`${config.apiBaseUrl}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn('Could not fetch Slingui /auth/me:', response.status);
+      return null;
+    }
+
+    const userInfo = await response.json();
+    console.log('[Slingui Auth] /auth/me response:', userInfo);
+    return userInfo;
+  } catch (error) {
+    console.warn('Could not fetch Slingui /auth/me:', error);
+    return null;
+  }
+}
+
+async function enrichUserProfile(user) {
+  if (!user || hasProfileDisplayName(user.profile)) {
+    console.log('[Slingui Auth] Profile enrichment skipped:', {
+      hasUser: Boolean(user),
+      hasDisplayName: hasProfileDisplayName(user?.profile),
+      profile: user?.profile || null,
+    });
+    return user;
+  }
+
+  console.log('[Slingui Auth] Profile missing display data, trying /auth/me:', {
+    profileFromToken: user.profile || null,
+  });
+
+  const userInfo = await fetchUserInfo(user.access_token);
+  if (!userInfo) {
+    console.log('[Slingui Auth] Profile enrichment did not receive /auth/me data');
+    return user;
+  }
+
+  const enrichedUser = {
+    ...user,
+    profile: {
+      ...(user.profile || {}),
+      ...userInfo,
+    },
+  };
+
+  console.log('[Slingui Auth] Enriched profile:', enrichedUser.profile);
+  return enrichedUser;
+}
+
 // --- Main Authentication Logic ---
 
-export function login() {
-  return new Promise(async (resolve, reject) => {
-    const redirectURL = getRedirectUrl();
-    const tokenEndpoint = `${config.authority}/token`;
+export async function login() {
+  if (typeof chrome === 'undefined' || !chrome.identity || !chrome.storage) {
+    throw new Error('Chrome identity API is not available.');
+  }
 
-    const codeVerifier = generateRandomString();
-    const codeChallenge = await generateCodeChallenge(codeVerifier);
-    const state = generateRandomString();
+  const redirectURL = getRedirectUrl();
+  const tokenEndpoint = `${config.authority}/token`;
 
-    // Store verifier and state to use them after the redirect
+  const codeVerifier = generateRandomString();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
+  const state = generateRandomString();
+
+  // Store verifier and state to use them after the redirect
+  await new Promise((resolve, reject) => {
     chrome.storage.local.set({
       auth_code_verifier: codeVerifier,
       auth_state: state
+    }, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
     });
+  });
 
-    const authParams = new URLSearchParams({
-      client_id: config.client_id,
-      response_type: 'code',
-      redirect_uri: redirectURL,
-      scope: config.scope,
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
-      state: state,
-    });
+  const authParams = new URLSearchParams({
+    client_id: config.client_id,
+    response_type: 'code',
+    redirect_uri: redirectURL,
+    scope: config.scope,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+    state: state,
+  });
 
-    const authURL = `${config.authority}/auth?${authParams.toString()}`;
-    console.log('Launching auth flow:', authURL);
+  const authURL = `${config.authority}/auth?${authParams.toString()}`;
+  console.log('Launching auth flow:', authURL);
+
+  return new Promise((resolve, reject) => {
     chrome.identity.launchWebAuthFlow({ url: authURL, interactive: true }, async (responseUrl) => {
       if (chrome.runtime.lastError || !responseUrl) {
         return reject(new Error(chrome.runtime.lastError?.message || "Authentication flow failed."));
@@ -123,12 +245,17 @@ export function login() {
         }
 
         const tokens = await tokenResponse.json();
-        const profile = parseJwt(tokens.id_token);
-        const user = { ...tokens, profile };
+        console.log('[Slingui Auth] Token response:', getSafeAuthLogData(tokens));
+
+        const profile = getTokenProfile(tokens);
+        console.log('[Slingui Auth] Profile parsed from token:', profile);
+
+        const user = await enrichUserProfile({ ...tokens, profile });
+        console.log('[Slingui Auth] Final user before storage:', getSafeAuthLogData(user));
 
         chrome.storage.local.set({ user: user }, () => {
           chrome.storage.local.remove(['auth_code_verifier', 'auth_state']);
-          console.log('User profile stored');
+          console.log('[Slingui Auth] User profile stored:', getSafeAuthLogData(user));
           resolve(user);
         });
 
@@ -151,25 +278,51 @@ export function isTokenExpired(user) {
   return Date.now() >= user.expires_at * 1000;
 }
 
-export function getUser() {
-  return new Promise((resolve) => {
-    if (chrome && chrome.storage) {
-      chrome.storage.local.get('user', (result) => {
-        const user = result.user || null;
-        if (user) {
-          user.expired = isTokenExpired(user);
-        }
-        resolve(user);
-      });
-    } else {
-      resolve(null);
-    }
+export async function getUser() {
+  if (typeof chrome === 'undefined' || !chrome.storage) {
+    return null;
+  }
+
+  const result = await new Promise((resolve) => {
+    chrome.storage.local.get('user', resolve);
   });
+
+  const user = result.user || null;
+  if (!user) {
+    console.log('[Slingui Auth] Stored user not found');
+    return null;
+  }
+
+  console.log('[Slingui Auth] Stored user found:', getSafeAuthLogData(user));
+
+  const userWithExpiration = {
+    ...user,
+    expired: isTokenExpired(user),
+  };
+
+  console.log('[Slingui Auth] Stored user expiration status:', {
+    expired: userWithExpiration.expired,
+    expires_at: userWithExpiration.expires_at || null,
+    profileExp: userWithExpiration.profile?.exp || null,
+  });
+
+  if (userWithExpiration.expired) {
+    return userWithExpiration;
+  }
+
+  const enrichedUser = await enrichUserProfile(userWithExpiration);
+  if (enrichedUser !== userWithExpiration) {
+    chrome.storage.local.set({ user: enrichedUser });
+    console.log('[Slingui Auth] Stored user updated after profile enrichment:', getSafeAuthLogData(enrichedUser));
+  }
+
+  console.log('[Slingui Auth] Returning stored user:', getSafeAuthLogData(enrichedUser));
+  return enrichedUser;
 }
 
 export function logout() {
   return new Promise((resolve) => {
-    if (chrome && chrome.storage) {
+    if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.remove('user', () => {
         console.log('User logged out and data removed.');
         resolve();

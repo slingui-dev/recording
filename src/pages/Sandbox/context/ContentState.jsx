@@ -31,6 +31,9 @@ import {
   ALL_FORMATS,
   Conversion,
 } from "mediabunny";
+import { getUser } from "../../../utils/slingui-auth";
+
+const API_BASE = process.env.SCREENITY_API_BASE_URL || "https://api.slingui.com";
 
 localforage.config({
   driver: localforage.INDEXEDDB,
@@ -50,12 +53,241 @@ const DEBUG_RECORDER =
 // Enable post-stop debug logs for sandbox
 const DEBUG_POSTSTOP = DEBUG_RECORDER;
 
+const firstNonEmptyValue = (values) => {
+  const value = values.find(
+    (candidate) =>
+      (typeof candidate === "string" && candidate.trim()) ||
+      typeof candidate === "number",
+  );
+
+  return value == null ? null : String(value).trim();
+};
+
+const resolveMeetingIdFromContext = (meetingContext, fallbackRecordingId = null) => {
+  if (!meetingContext || typeof meetingContext !== "object") {
+    return fallbackRecordingId ? String(fallbackRecordingId).trim() : null;
+  }
+
+  // Prefer explicit/technical identifiers. Human-readable classroom names are
+  // kept only as last-resort fallbacks because the upload API expects the same
+  // meetingId used when the MP3 chunks were stored.
+  return firstNonEmptyValue([
+    meetingContext.meetingId,
+    meetingContext.meetingID,
+    meetingContext.meeting?.id,
+    meetingContext.meeting?.meetingId,
+    meetingContext.meeting?.meetingID,
+    meetingContext.callId,
+    meetingContext.callID,
+    meetingContext.roomId,
+    meetingContext.roomID,
+    meetingContext.classroom?.meetingId,
+    meetingContext.classroom?.meetingID,
+    meetingContext.classroom?.roomId,
+    meetingContext.classroom?.roomID,
+    meetingContext.classroom?.id,
+    meetingContext.classroomId,
+    meetingContext.classroomID,
+    meetingContext.id,
+    fallbackRecordingId,
+    meetingContext.meetingName,
+    meetingContext.roomName,
+    meetingContext.classroom?.name,
+    meetingContext.classroomName,
+    meetingContext.name,
+  ]);
+};
+
+const resolveAudioChunksToken = async () => {
+  try {
+    const user = await getUser();
+    if (user && !user.expired && user.access_token) {
+      return user.access_token;
+    }
+  } catch (error) {
+    console.warn("[Sandbox][MeetingAudioChunks] Failed to read Slingui user", error);
+  }
+
+  try {
+    const { screenityToken } = await chrome.storage.local.get(["screenityToken"]);
+    if (screenityToken) return screenityToken;
+  } catch {
+    // ignore storage fallback failures
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/get-extension-token`, {
+      method: "GET",
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return data?.token || data?.extensionToken || null;
+  } catch {
+    return null;
+  }
+};
+
+const decodeBase64UrlJson = (value) => {
+  const normalized = String(value || "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "=",
+  );
+  const binary = window.atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+};
+
+const decodeMeetingAudioChunkMetadata = (fileName) => {
+  const metadataToken = String(fileName || "").match(/^[^-]+-([^.]+)\.mp3$/i)?.[1];
+  if (!metadataToken) return null;
+
+  try {
+    const compactMetadata = decodeBase64UrlJson(metadataToken);
+    if (!Array.isArray(compactMetadata)) return null;
+
+    const [
+      version,
+      sequence,
+      startedAtEpochMs,
+      durationMs,
+      sampleRate,
+      totalSamples,
+    ] = compactMetadata;
+
+    return {
+      version,
+      sequence,
+      startedAtEpochMs,
+      startedAt: startedAtEpochMs ? new Date(startedAtEpochMs).toISOString() : null,
+      durationMs,
+      sampleRate,
+      totalSamples,
+    };
+  } catch (error) {
+    console.warn("[Sandbox][MeetingAudioChunks] Failed to decode chunk metadata", {
+      fileName,
+      error: error?.message || String(error),
+    });
+    return null;
+  }
+};
+
+const downloadMeetingAudioChunk = async (chunk) => {
+  const metadata = chunk?.metadata || decodeMeetingAudioChunkMetadata(chunk?.fileName);
+
+  if (chunk?.audioBlob instanceof Blob) {
+    return {
+      ...chunk,
+      metadata,
+      audioBlobSize: chunk.audioBlobSize ?? chunk.audioBlob.size,
+      audioBlobType: chunk.audioBlobType ?? chunk.audioBlob.type ?? "audio/mpeg",
+    };
+  }
+
+  if (!chunk?.signedUrl) {
+    return {
+      ...chunk,
+      metadata,
+      audioBlob: null,
+      downloadError: chunk?.downloadError || "Missing signedUrl",
+    };
+  }
+
+  try {
+    const response = await fetch(chunk.signedUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download MP3 chunk (${response.status})`);
+    }
+
+    const audioBlob = await response.blob();
+    return {
+      ...chunk,
+      metadata,
+      audioBlob,
+      audioBlobSize: audioBlob.size,
+      audioBlobType: audioBlob.type || "audio/mpeg",
+    };
+  } catch (error) {
+    console.warn("[Sandbox][MeetingAudioChunks] Failed to download MP3 chunk", {
+      fileName: chunk?.fileName,
+      error: error?.message || String(error),
+    });
+
+    return {
+      ...chunk,
+      metadata,
+      audioBlob: null,
+      downloadError: error?.message || String(error),
+    };
+  }
+};
+
+const listMeetingAudioChunks = async (meetingContext, recordingId = null) => {
+  const meetingId = resolveMeetingIdFromContext(meetingContext, recordingId);
+
+  if (!meetingId) {
+    console.warn("[Sandbox][MeetingAudioChunks] Missing meetingId", {
+      recordingId,
+      meetingContext,
+    });
+    return null;
+  }
+
+  const token = await resolveAudioChunksToken();
+  if (!token) {
+    throw new Error("Missing JWT token for audio chunks request");
+  }
+
+  const res = await fetch(
+    `${API_BASE}/storage/audio/chunks?meetingId=${encodeURIComponent(
+      meetingId,
+    )}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: "include",
+    },
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    throw new Error(`Failed to list audio chunks (${res.status}): ${errorText}`);
+  }
+
+  const data = await res.json();
+  const chunks = Array.isArray(data?.chunks)
+    ? [...data.chunks].sort((a, b) =>
+        String(a?.fileName || "").localeCompare(String(b?.fileName || "")),
+      )
+    : [];
+
+  const enrichedChunks = await Promise.all(
+    chunks.map((chunk) => downloadMeetingAudioChunk(chunk)),
+  );
+
+  return {
+    meetingId: data?.meetingId || meetingId,
+    prefix: data?.prefix || null,
+    chunks: enrichedChunks,
+  };
+};
+
 const ContentState = (props) => {
   const videoChunks = useRef([]);
   const makeVideoCheck = useRef(false);
   const chunkCount = useRef(0);
   const recdbgSessionRef = useRef(null);
   const tabIdRef = useRef(null);
+  const meetingAudioChunksCheckedRef = useRef(false);
   // Stale-result guard + stuck-edit watchdog.
   const opIdRef = useRef(0);
   const editWatchdogRef = useRef(null);
@@ -206,6 +438,7 @@ const ContentState = (props) => {
     bannerSupport: false,
     backupBlob: null,
     recordingMeta: null,
+    meetingAudioChunks: null,
   };
 
   const [contentState, _setContentState] = useState(defaultState);
@@ -233,6 +466,92 @@ const ContentState = (props) => {
       launchModeRef.current = params.get("mode") || "normal";
       launchRecordingIdRef.current = params.get("recordingId") || null;
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (meetingAudioChunksCheckedRef.current) return;
+    if (launchModeRef.current !== "postStop") return;
+    if (window.top !== window.self) return;
+
+    meetingAudioChunksCheckedRef.current = true;
+    let cancelled = false;
+
+    const checkMeetingAudioChunks = async () => {
+      const recordingId = launchRecordingIdRef.current;
+
+      try {
+        const { recordingMeta = null, screenityMeetingState = null } =
+          await chrome.storage.local.get([
+            "recordingMeta",
+            "screenityMeetingState",
+          ]);
+
+        if (cancelled) return;
+
+        const meetingContext =
+          recordingMeta?.meetingContext || screenityMeetingState || null;
+
+        if (!meetingContext) {
+          console.warn("[Sandbox][MeetingAudioChunks] Missing meeting context", {
+            recordingId,
+            hasRecordingMeta: Boolean(recordingMeta),
+            hasScreenityMeetingState: Boolean(screenityMeetingState),
+          });
+          window.alert(
+            "Não foi possível verificar chunks de áudio MP3: contexto da classroom não encontrado.",
+          );
+          return;
+        }
+
+        const audioChunks = await listMeetingAudioChunks(
+          meetingContext,
+          recordingId,
+        );
+
+        if (cancelled || !audioChunks) {
+          if (!audioChunks) {
+            window.alert(
+              "Não foi possível verificar chunks de áudio MP3: meetingId não encontrado.",
+            );
+          }
+          return;
+        }
+
+        console.info("[Sandbox][MeetingAudioChunks] Chunks resolved", {
+          recordingId,
+          meetingId: audioChunks.meetingId,
+          prefix: audioChunks.prefix,
+          total: audioChunks.chunks.length,
+          chunks: audioChunks.chunks,
+        });
+
+        setContentState((prevState) => ({
+          ...prevState,
+          meetingAudioChunks: audioChunks,
+        }));
+
+        window.alert(
+          `Encontramos ${audioChunks.chunks.length} chunk${
+            audioChunks.chunks.length === 1 ? "" : "s"
+          } de áudio MP3 para adicionar nesta gravação.`,
+        );
+      } catch (error) {
+        if (cancelled) return;
+        console.warn("[Sandbox][MeetingAudioChunks] Failed to list chunks", {
+          recordingId,
+          error: error?.message || String(error),
+        });
+        window.alert(
+          "Não foi possível verificar os chunks de áudio MP3 desta gravação.",
+        );
+      }
+    };
+
+    checkMeetingAudioChunks();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -466,7 +785,7 @@ const ContentState = (props) => {
         minute: "2-digit",
         hour12: true,
       });
-      const fallbackTitle = `Screenity video - ${formattedDate}`;
+      const fallbackTitle = `Recording - ${formattedDate}`;
 
       try {
         const { recordingMeta } = await chrome.storage.local.get([
@@ -1522,7 +1841,25 @@ const ContentState = (props) => {
   }, []);
 
   const onMessage = async (event) => {
-    if (event.data.type === "updated-blob") {
+    if (event.data.type === "meeting-audio-chunks") {
+      const audioChunks = event.data.audioChunks || null;
+      if (!audioChunks) return;
+
+      setContentState((prevState) => ({
+        ...prevState,
+        meetingAudioChunks: audioChunks,
+      }));
+
+      console.info("[Sandbox][MeetingAudioChunks] Received chunks in memory", {
+        meetingId: audioChunks.meetingId,
+        prefix: audioChunks.prefix,
+        total: audioChunks.chunks?.length || 0,
+        downloaded:
+          audioChunks.chunks?.filter((chunk) => chunk.audioBlob instanceof Blob)
+            .length || 0,
+        chunks: audioChunks.chunks,
+      });
+    } else if (event.data.type === "updated-blob") {
       // Discard results from a timed-out or superseded operation.
       const msgOpId = event.data._opId;
       if (msgOpId != null && msgOpId !== opIdRef.current) return;

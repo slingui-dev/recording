@@ -9,6 +9,7 @@ const RECOVERABLE_CLOUD_STATUSES = new Set([
   "stopping",
   "finalize-failed",
   "upload-stalled",
+  "restore-available",
 ]);
 
 // Mirror the store names CloudRecorder.jsx uses. createInstance({ name }) sets
@@ -38,6 +39,16 @@ export const checkCloudRestore = async () => {
 
     return {
       cloudRestore: screenCount > 0 || cameraCount > 0 || audioCount > 0,
+      restore: {
+        available: screenCount > 0 || cameraCount > 0 || audioCount > 0,
+        recordingSessionId: recorderSession?.id || null,
+        projectId: recorderSession?.projectId || null,
+        status: recorderSession?.status || null,
+        chunkCount: screenCount,
+        cameraChunkCount: cameraCount,
+        audioChunkCount: audioCount,
+        detectedAt: recorderSession?.restoreAvailableAt || null,
+      },
     };
   } catch (err) {
     console.warn("[CloudRestore] checkCloudRestore failed:", err);

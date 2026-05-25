@@ -45,6 +45,17 @@
   color: $color-text-secondary;
   cursor: pointer;
 }
+.slingUserName {
+  margin-top: -8px;
+  margin-bottom: 12px;
+  font-family: $font-medium;
+  font-size: 14px;
+  color: $color-text-secondary;
+  max-width: calc(100% - 140px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .buttonWrap {
   display: flex;
   flex-direction: column;
@@ -102,6 +113,27 @@
     width: 80px;
     left: 0px;
     top: 0px;
+  }
+}
+.authLoadingButton {
+  cursor: wait !important;
+
+  &::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    margin-left: 24px;
+    margin-right: 12px;
+    border: 2px solid rgba(56, 126, 247, 0.2);
+    border-top-color: $color-primary;
+    border-radius: 50%;
+    animation: authLoadingSpin 0.8s linear infinite;
+  }
+}
+
+@keyframes authLoadingSpin {
+  to {
+    transform: rotate(360deg);
   }
 }
 .buttonLeft,

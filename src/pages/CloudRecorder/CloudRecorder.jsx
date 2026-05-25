@@ -56,6 +56,31 @@ const IS_IFRAME_CONTEXT =
   (window.top !== window.self &&
     !document.referrer.startsWith("chrome-extension://"));
 
+const notifyCloudRestoreAvailable = ({
+  storedSession,
+  chunkCount,
+  cameraChunkCount,
+  audioChunkCount,
+}) => {
+  try {
+    chrome.runtime.sendMessage({
+      type: "cloud-restore-available",
+      restore: {
+        available: true,
+        reason: "durable-chunks",
+        recordingSessionId: storedSession?.id || null,
+        projectId: storedSession?.projectId || null,
+        chunkCount,
+        cameraChunkCount,
+        audioChunkCount,
+        detectedAt: Date.now(),
+      },
+    });
+  } catch (err) {
+    console.warn("Failed to notify cloud restore availability:", err);
+  }
+};
+
 const CloudRecorder = () => {
   // Debug bundle removed; keep a no-op logger to preserve calls
 
@@ -460,6 +485,134 @@ const CloudRecorder = () => {
       // ignore
     }
     return null;
+  };
+
+  const firstNonEmptyValue = (values) => {
+    const value = values.find(
+      (candidate) =>
+        (typeof candidate === "string" && candidate.trim()) ||
+        typeof candidate === "number",
+    );
+
+    return value == null ? null : String(value).trim();
+  };
+
+  const resolveMeetingIdFromContext = (meetingContext, fallbackRecordingId = null) => {
+    if (!meetingContext || typeof meetingContext !== "object") {
+      return fallbackRecordingId ? String(fallbackRecordingId).trim() : null;
+    }
+
+    return firstNonEmptyValue([
+      meetingContext.meetingId,
+      meetingContext.meetingID,
+      meetingContext.meeting?.id,
+      meetingContext.meeting?.meetingId,
+      meetingContext.meeting?.meetingID,
+      meetingContext.callId,
+      meetingContext.callID,
+      meetingContext.roomId,
+      meetingContext.roomID,
+      meetingContext.classroom?.meetingId,
+      meetingContext.classroom?.meetingID,
+      meetingContext.classroom?.roomId,
+      meetingContext.classroom?.roomID,
+      meetingContext.classroom?.id,
+      meetingContext.classroomId,
+      meetingContext.classroomID,
+      meetingContext.id,
+      fallbackRecordingId,
+      meetingContext.meetingName,
+      meetingContext.roomName,
+      meetingContext.classroom?.name,
+      meetingContext.classroomName,
+      meetingContext.name,
+    ]);
+  };
+
+  const listMeetingAudioChunks = async (meetingContext, sceneId) => {
+    const meetingId = resolveMeetingIdFromContext(meetingContext, sceneId);
+
+    if (!meetingId) {
+      console.warn("[CloudRecorder][MeetingAudioChunks] Missing meetingId", {
+        sceneId,
+        meetingContext,
+      });
+      return {
+        meetingId: null,
+        prefix: null,
+        chunks: [],
+      };
+    }
+
+    try {
+      const token = await resolveUploadTelemetryToken();
+      if (!token) {
+        throw new Error("Missing JWT token for audio chunks request");
+      }
+
+    const res = await fetch(
+      `${API_BASE}/storage/audio/chunks?meetingId=${encodeURIComponent(
+          meetingId,
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+        },
+      );
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        throw new Error(
+          `Failed to list audio chunks (${res.status}): ${errorText}`,
+        );
+      }
+
+      const data = await res.json();
+      const chunks = Array.isArray(data?.chunks)
+        ? [...data.chunks].sort((a, b) =>
+            String(a?.fileName || "").localeCompare(String(b?.fileName || "")),
+          )
+        : [];
+
+      console.info("[CloudRecorder][MeetingAudioChunks] Chunks resolved", {
+        sceneId,
+        meetingId,
+        prefix: data?.prefix || null,
+        total: chunks.length,
+        chunks,
+      });
+
+      window.alert(
+        `Encontramos ${chunks.length} chunk${
+          chunks.length === 1 ? "" : "s"
+        } de áudio MP3 para adicionar nesta gravação.`,
+      );
+
+      return {
+        meetingId: data?.meetingId || meetingId,
+        prefix: data?.prefix || null,
+        chunks,
+      };
+    } catch (err) {
+      console.warn("[CloudRecorder][MeetingAudioChunks] Failed to list chunks", {
+        sceneId,
+        meetingId,
+        error: err?.message || String(err),
+      });
+
+      window.alert(
+        "Não foi possível verificar os chunks de áudio MP3 desta gravação.",
+      );
+
+      return {
+        meetingId,
+        prefix: null,
+        chunks: [],
+      };
+    }
   };
 
   const toUploadTelemetryRequest = async (eventPayload) => {
@@ -1956,74 +2109,20 @@ const CloudRecorder = () => {
           recordingSessionId: storedSession?.id || null,
           projectId: storedSession?.projectId || null,
         });
-        const ts = new Date().toISOString();
-
-        if (chunkCount > 0) {
-          const recovered = [];
-          await chunksStore.iterate((value) => {
-            recovered.push(value);
-          });
-          recovered.sort((a, b) => a.index - b.index);
-          const blob = createBlobFromChunks(
-            recovered.map((c) => c.chunk),
-            "video/webm",
-          );
-          if (blob) {
-            const objectUrl = URL.createObjectURL(blob);
-            try {
-              await chrome.downloads.download({
-                url: objectUrl,
-                filename: `Screenity-Recovered-${ts}.webm`,
-                saveAs: false,
-              });
-            } finally {
-              URL.revokeObjectURL(objectUrl);
-            }
-          }
-        }
-
-        if (cameraChunkCount > 0) {
-          const cameraRecovered = [];
-          await cameraChunksStore.iterate((value) => {
-            cameraRecovered.push(value);
-          });
-          cameraRecovered.sort((a, b) => (a.index || 0) - (b.index || 0));
-          const cameraBlob = createBlobFromChunks(
-            cameraRecovered.map((c) => c.chunk),
-            "video/webm",
-          );
-          if (cameraBlob) {
-            const cameraObjectUrl = URL.createObjectURL(cameraBlob);
-            try {
-              await chrome.downloads.download({
-                url: cameraObjectUrl,
-                filename: `Screenity-Recovered-Camera-${ts}.webm`,
-                saveAs: false,
-              });
-            } finally {
-              URL.revokeObjectURL(cameraObjectUrl);
-            }
-          }
-        }
-
-        chrome.runtime.sendMessage({
-          type: "show-toast",
-          message: chrome.i18n.getMessage("toastRecoveredSession"),
+        notifyCloudRestoreAvailable({
+          storedSession,
+          chunkCount,
+          cameraChunkCount,
+          audioChunkCount,
         });
-
-        await chunksStore.clear();
-        await clearAudioChunkStore("recovery");
-        await clearCameraChunkStore("recovery");
-        // Clear stale journals and sceneId so the next recording can't accidentally
-        // resume the old partial Bunny upload and produce a garbled video.
-        await clearStaleUploadJournals(storedSession);
         await chrome.storage.local.set({
           recorderSession: {
             ...storedSession,
-            status: "recovered",
-            recoveredAt: Date.now(),
+            status: "restore-available",
+            restoreAvailableAt: Date.now(),
             recoveredChunkCount: chunkCount,
             recoveredCameraChunkCount: cameraChunkCount,
+            recoveredAudioChunkCount: audioChunkCount,
           },
         });
       } else if (storedSession && isRecoverable) {
@@ -4030,6 +4129,12 @@ const CloudRecorder = () => {
       normalizedParticipants,
       total: normalizedParticipants.length,
     });
+
+    const meetingAudioChunks = await listMeetingAudioChunks(
+      meetingContext,
+      sceneId,
+    );
+
     const existingStatus = await getSceneCreateStatus(sceneId);
     let sceneOutcome = null;
     let shouldIncrementMultiSceneCount = false;
@@ -4103,6 +4208,7 @@ const CloudRecorder = () => {
         isTab: isTab.current && !regionRef.current,
         domain: recordedTabDomain || null,
         participants: normalizedParticipants,
+        meetingAudioChunks,
       };
 
       const res = await fetch(`${API_BASE}/videos/${projectId}/scenes`, {

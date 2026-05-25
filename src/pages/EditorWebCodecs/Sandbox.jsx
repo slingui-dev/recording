@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import addAudioToVideo from "./utils/addAudioToVideo";
 import convertWebmToMp4 from "./utils/convertWebmToMp4";
@@ -11,15 +11,271 @@ import getFrame from "./utils/getFrame";
 import hasAudio from "./utils/hasAudio";
 import convertMp4ToWebm from "./utils/convertMp4ToWebm";
 import blobToArrayBuffer from "./utils/blobToArrayBuffer";
+import { getUser, login } from "../../utils/slingui-auth";
+
+const API_BASE = process.env.SCREENITY_API_BASE_URL || "https://api.slingui.com";
+
+const firstNonEmptyValue = (values) => {
+  const value = values.find(
+    (candidate) =>
+      (typeof candidate === "string" && candidate.trim()) ||
+      typeof candidate === "number",
+  );
+
+  return value == null ? null : String(value).trim();
+};
+
+const resolveMeetingIdFromContext = (meetingContext, fallbackRecordingId = null) => {
+  if (!meetingContext || typeof meetingContext !== "object") {
+    return fallbackRecordingId ? String(fallbackRecordingId).trim() : null;
+  }
+
+  // Prefer explicit/technical identifiers. Human-readable names like
+  // `name`/`roomName` are intentionally only fallbacks because classroom names
+  // such as "teste" are not necessarily the meetingId used to upload chunks.
+  return firstNonEmptyValue([
+    meetingContext.meetingId,
+    meetingContext.meetingID,
+    meetingContext.meeting?.id,
+    meetingContext.meeting?.meetingId,
+    meetingContext.meeting?.meetingID,
+    meetingContext.callId,
+    meetingContext.callID,
+    meetingContext.roomId,
+    meetingContext.roomID,
+    meetingContext.classroom?.meetingId,
+    meetingContext.classroom?.meetingID,
+    meetingContext.classroom?.roomId,
+    meetingContext.classroom?.roomID,
+    meetingContext.classroom?.id,
+    meetingContext.classroomId,
+    meetingContext.classroomID,
+    meetingContext.id,
+    fallbackRecordingId,
+    meetingContext.meetingName,
+    meetingContext.roomName,
+    meetingContext.classroom?.name,
+    meetingContext.classroomName,
+    meetingContext.name,
+  ]);
+};
+
+const resolveAudioChunksToken = async (preferredUser = null) => {
+  if (preferredUser && !preferredUser.expired && preferredUser.access_token) {
+    return preferredUser.access_token;
+  }
+
+  try {
+    const user = await getUser();
+    if (user && !user.expired && user.access_token) {
+      return user.access_token;
+    }
+  } catch (error) {
+    console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to read Slingui user", error);
+  }
+
+  try {
+    const { screenityToken } = await chrome.storage.local.get(["screenityToken"]);
+    if (screenityToken) return screenityToken;
+  } catch {
+    // ignore storage fallback failures
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/get-extension-token`, {
+      method: "GET",
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return data?.token || data?.extensionToken || null;
+  } catch {
+    return null;
+  }
+};
+
+const decodeBase64UrlJson = (value) => {
+  const normalized = String(value || "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "=",
+  );
+  const binary = window.atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+};
+
+const decodeMeetingAudioChunkMetadata = (fileName) => {
+  const metadataToken = String(fileName || "").match(/^[^-]+-([^.]+)\.mp3$/i)?.[1];
+  if (!metadataToken) return null;
+
+  try {
+    const compactMetadata = decodeBase64UrlJson(metadataToken);
+    if (!Array.isArray(compactMetadata)) return null;
+
+    const [
+      version,
+      sequence,
+      startedAtEpochMs,
+      durationMs,
+      sampleRate,
+      totalSamples,
+    ] = compactMetadata;
+
+    return {
+      version,
+      sequence,
+      startedAtEpochMs,
+      startedAt: startedAtEpochMs ? new Date(startedAtEpochMs).toISOString() : null,
+      durationMs,
+      sampleRate,
+      totalSamples,
+    };
+  } catch (error) {
+    console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to decode chunk metadata", {
+      fileName,
+      error: error?.message || String(error),
+    });
+    return null;
+  }
+};
+
+const downloadMeetingAudioChunk = async (chunk) => {
+  const metadata = decodeMeetingAudioChunkMetadata(chunk?.fileName);
+
+  if (!chunk?.signedUrl) {
+    return {
+      ...chunk,
+      metadata,
+      audioBlob: null,
+      downloadError: "Missing signedUrl",
+    };
+  }
+
+  try {
+    const response = await fetch(chunk.signedUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download MP3 chunk (${response.status})`);
+    }
+
+    const audioBlob = await response.blob();
+    return {
+      ...chunk,
+      metadata,
+      audioBlob,
+      audioBlobSize: audioBlob.size,
+      audioBlobType: audioBlob.type || "audio/mpeg",
+    };
+  } catch (error) {
+    console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to download MP3 chunk", {
+      fileName: chunk?.fileName,
+      error: error?.message || String(error),
+    });
+
+    return {
+      ...chunk,
+      metadata,
+      audioBlob: null,
+      downloadError: error?.message || String(error),
+    };
+  }
+};
+
+const toSerializableMeetingAudioChunks = (audioChunks) => ({
+  ...audioChunks,
+  chunks: Array.isArray(audioChunks?.chunks)
+    ? audioChunks.chunks.map(({ audioBlob, ...chunk }) => ({
+        ...chunk,
+        audioBlobSize: chunk.audioBlobSize ?? audioBlob?.size ?? null,
+        audioBlobType: chunk.audioBlobType ?? audioBlob?.type ?? null,
+        hasAudioBlobInMemory: Boolean(audioBlob),
+      }))
+    : [],
+});
+
+const listMeetingAudioChunks = async (
+  meetingContext,
+  recordingId = null,
+  preferredUser = null,
+) => {
+  const meetingId = resolveMeetingIdFromContext(meetingContext, recordingId);
+
+  if (!meetingId) {
+    console.warn("[EditorWebCodecs][MeetingAudioChunks] Missing meetingId", {
+      recordingId,
+      meetingContext,
+    });
+    return null;
+  }
+
+  const token = await resolveAudioChunksToken(preferredUser);
+  if (!token) {
+    throw new Error("Missing JWT token for audio chunks request");
+  }
+
+  const res = await fetch(
+    `${API_BASE}/storage/audio/chunks?meetingId=${encodeURIComponent(
+      meetingId,
+    )}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: "include",
+    },
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    throw new Error(`Failed to list audio chunks (${res.status}): ${errorText}`);
+  }
+
+  const data = await res.json();
+  const chunks = Array.isArray(data?.chunks)
+    ? [...data.chunks].sort((a, b) =>
+        String(a?.fileName || "").localeCompare(String(b?.fileName || "")),
+      )
+    : [];
+
+  const enrichedChunks = await Promise.all(
+    chunks.map((chunk) => downloadMeetingAudioChunk(chunk)),
+  );
+
+  return {
+    meetingId: data?.meetingId || meetingId,
+    prefix: data?.prefix || null,
+    chunks: enrichedChunks,
+  };
+};
 
 const Sandbox = () => {
   const iframeRef = useRef(null);
   const triggerLoad = useRef(false);
   const ffmpegInstance = useRef(null);
   const mediabunnyLoaded = useRef(false);
+  const authAttemptedRef = useRef(false);
+  const meetingAudioChunksCheckedRef = useRef(false);
+  const meetingAudioChunksRef = useRef(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [slingUser, setSlingUser] = useState(null);
 
   const sendMessage = (message) => {
     iframeRef.current?.contentWindow?.postMessage(message, "*");
+  };
+
+  const sendAuthStateToIframe = (user, loading = false) => {
+    sendMessage({
+      type: "slingui-auth-state",
+      user,
+      loading,
+      authenticated: Boolean(user && !user.expired),
+    });
   };
 
   const loadFfmpeg = async () => {
@@ -290,12 +546,146 @@ const Sandbox = () => {
     return () => window.removeEventListener("message", handler);
   }, []);
 
+  useEffect(() => {
+    const authenticateOnLoad = async () => {
+      if (authAttemptedRef.current) return;
+      authAttemptedRef.current = true;
+      setIsAuthLoading(true);
+
+      try {
+        const storedUser = await getUser();
+        if (storedUser && !storedUser.expired) {
+          setSlingUser(storedUser);
+          sendAuthStateToIframe(storedUser, false);
+          return;
+        }
+
+        const authenticatedUser = await login();
+        setSlingUser(authenticatedUser);
+        sendAuthStateToIframe(authenticatedUser, false);
+      } catch (error) {
+        console.error("Slingui authentication on editor load failed:", error);
+        setSlingUser(null);
+        sendAuthStateToIframe(null, false);
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+
+    authenticateOnLoad();
+  }, []);
+
+  useEffect(() => {
+    if (meetingAudioChunksCheckedRef.current) return;
+
+    let params = null;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch {
+      return;
+    }
+
+    if (params.get("mode") !== "postStop") return;
+    if (isAuthLoading) return;
+
+    meetingAudioChunksCheckedRef.current = true;
+    let cancelled = false;
+
+    const checkMeetingAudioChunks = async () => {
+      const recordingId = params.get("recordingId") || null;
+
+      try {
+        const { recordingMeta = null, screenityMeetingState = null } =
+          await chrome.storage.local.get([
+            "recordingMeta",
+            "screenityMeetingState",
+          ]);
+
+        if (cancelled) return;
+
+        const meetingContext =
+          recordingMeta?.meetingContext || screenityMeetingState || null;
+
+        const audioChunks = await listMeetingAudioChunks(
+          meetingContext,
+          recordingId,
+          slingUser,
+        );
+
+        if (cancelled) return;
+
+        if (!audioChunks) {
+          window.alert(
+            "Não foi possível verificar chunks de áudio MP3: meetingId não encontrado.",
+          );
+          return;
+        }
+
+        console.info("[EditorWebCodecs][MeetingAudioChunks] Chunks resolved", {
+          recordingId,
+          meetingId: audioChunks.meetingId,
+          prefix: audioChunks.prefix,
+          total: audioChunks.chunks.length,
+          chunks: audioChunks.chunks,
+          downloaded: audioChunks.chunks.filter((chunk) => chunk.audioBlob).length,
+        });
+
+        meetingAudioChunksRef.current = audioChunks;
+        sendMessage({
+          type: "meeting-audio-chunks",
+          audioChunks,
+        });
+
+        try {
+          await chrome.storage.local.set({
+            [`meetingAudioChunks:${recordingId || audioChunks.meetingId}`]:
+              toSerializableMeetingAudioChunks(audioChunks),
+          });
+        } catch {
+          // Persisting is best-effort; the alert is the required behavior here.
+        }
+
+        window.alert(
+          `Encontramos ${audioChunks.chunks.length} chunk${
+            audioChunks.chunks.length === 1 ? "" : "s"
+          } de áudio MP3 para adicionar nesta gravação.`,
+        );
+      } catch (error) {
+        if (cancelled) return;
+        console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to list chunks", {
+          recordingId,
+          error: error?.message || String(error),
+        });
+        window.alert(
+          "Não foi possível verificar os chunks de áudio MP3 desta gravação.",
+        );
+      }
+    };
+
+    checkMeetingAudioChunks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthLoading, slingUser]);
+
+  const handleIframeLoad = () => {
+    sendAuthStateToIframe(slingUser, isAuthLoading);
+    if (meetingAudioChunksRef.current) {
+      sendMessage({
+        type: "meeting-audio-chunks",
+        audioChunks: meetingAudioChunksRef.current,
+      });
+    }
+  };
+
   return (
     <div>
       <iframe
         ref={iframeRef}
         src={`sandbox.html${window.location.search || ""}`}
         allowFullScreen
+        onLoad={handleIframeLoad}
         style={{
           width: "100%",
           border: "none",
@@ -303,8 +693,52 @@ const Sandbox = () => {
           position: "absolute",
           top: 0,
           left: 0,
+          visibility: isAuthLoading ? "hidden" : "visible",
         }}
       />
+      {isAuthLoading && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            gap: 16,
+            background: "#ffffff",
+            color: "#111827",
+            fontFamily:
+              "Inter, Satoshi, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          }}
+        >
+          <div
+            aria-hidden="true"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              border: "4px solid rgba(17, 24, 39, 0.14)",
+              borderTopColor: "#3b82f6",
+              animation: "slingui-auth-spin 0.8s linear infinite",
+            }}
+          />
+          <div style={{ fontSize: 16, fontWeight: 600 }}>
+            Autenticando na Slingui...
+          </div>
+          <div style={{ maxWidth: 360, textAlign: "center", fontSize: 13, color: "#6b7280" }}>
+            Aguarde enquanto verificamos sua sessão antes de abrir o editor.
+          </div>
+          <style>{`
+            @keyframes slingui-auth-spin {
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
     </div>
   );
 };

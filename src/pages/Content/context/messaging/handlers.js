@@ -74,6 +74,15 @@ export const setupHandlers = () => {
     return true;
   };
 
+  const postCloudRestoreStatus = ({ requestId = null, restore = null }) =>
+    postProjectHandoff({
+      type: "screenity-cloud-restore-status",
+      source: "screenity-cloud-restore-status",
+      requestId,
+      restore: restore || { available: false },
+      handoffAt: Date.now(),
+    });
+
   const revokeActiveLocalPlaybackSource = (reason = "unknown") => {
     if (activeLocalPlaybackSource?.url) {
       URL.revokeObjectURL(activeLocalPlaybackSource.url);
@@ -260,6 +269,52 @@ export const setupHandlers = () => {
     if (event.source !== window) return;
     if (event.origin !== TRUSTED_APP_ORIGIN) return;
     const data = event?.data || {};
+    if (data?.type === "screenity-cloud-restore-check") {
+      void chrome.runtime
+        .sendMessage({ type: "check-cloud-restore" })
+        .then((response) => {
+          postCloudRestoreStatus({
+            requestId: data?.requestId || null,
+            restore: response?.restore || {
+              available: Boolean(response?.cloudRestore),
+            },
+          });
+        })
+        .catch((err) => {
+          postCloudRestoreStatus({
+            requestId: data?.requestId || null,
+            restore: {
+              available: false,
+              error: err?.message || "cloud-restore-check-failed",
+            },
+          });
+        });
+      return;
+    }
+
+    if (data?.type === "screenity-cloud-restore-open") {
+      void chrome.runtime
+        .sendMessage({ type: "restore-cloud-recording" })
+        .then(() => {
+          postProjectHandoff({
+            type: "screenity-cloud-restore-opened",
+            source: "screenity-cloud-restore-opened",
+            requestId: data?.requestId || null,
+            handoffAt: Date.now(),
+          });
+        })
+        .catch((err) => {
+          postProjectHandoff({
+            type: "screenity-cloud-restore-opened",
+            source: "screenity-cloud-restore-opened",
+            requestId: data?.requestId || null,
+            error: err?.message || "cloud-restore-open-failed",
+            handoffAt: Date.now(),
+          });
+        });
+      return;
+    }
+
     if (data?.type !== "screenity-local-playback-request") return;
 
     const requestedProjectId = data?.projectId || null;
@@ -372,6 +427,16 @@ export const setupHandlers = () => {
   registerMessage("time", () => {
     // Timer is driven by ContentState's storage-based tick.
     // Ignore external timer pushes to avoid jitter/skips.
+  });
+
+  registerMessage("cloud-restore-available", (message) => {
+    const restore = message?.restore || { available: true };
+    postProjectHandoff({
+      type: "screenity-cloud-restore-available",
+      source: "screenity-cloud-restore-available",
+      restore,
+      handoffAt: Date.now(),
+    });
   });
 
   registerMessage("toggle-popup", () => {

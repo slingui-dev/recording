@@ -20,23 +20,40 @@ import { ContentStateContext } from "../../context/ContentState"; // Import the 
 const RightPanel = () => {
   const [contentState, setContentState] = useContext(ContentStateContext); // Access the ContentState context
   const [slingUser, setSlingUser] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const contentStateRef = useRef(contentState);
   const consoleErrorRef = useRef([]);
+  const authAttemptedRef = useRef(false);
 
   useEffect(() => {
     console.error = (error) => {
       consoleErrorRef.current.push(error);
     };
 
-    const checkUser = async () => {
-      const user = await getUser();
-      if (user && !user.expired) {
-        setSlingUser(user);
+    const authenticateOnLoad = async () => {
+      if (authAttemptedRef.current) return;
+      authAttemptedRef.current = true;
+      setIsAuthLoading(true);
+
+      try {
+        const storedUser = await getUser();
+        if (storedUser && !storedUser.expired) {
+          setSlingUser(storedUser);
+          return;
+        }
+
+        const authenticatedUser = await login();
+        setSlingUser(authenticatedUser);
+      } catch (error) {
+        console.error("Slingui authentication on load failed:", error);
+        setSlingUser(null);
+      } finally {
+        setIsAuthLoading(false);
       }
     };
-    checkUser();
+    authenticateOnLoad();
 
 
 
@@ -65,6 +82,22 @@ const RightPanel = () => {
     }
     return base;
   };
+
+  const getSlingUserDisplayName = (user) => {
+    const profile = user?.profile || {};
+    return (
+      profile.name ||
+      [profile.given_name, profile.family_name].filter(Boolean).join(" ") ||
+      profile.preferred_username ||
+      profile.email ||
+      user?.email ||
+      user?.preferred_username ||
+      null
+    );
+  };
+
+  const slingUserDisplayName = getSlingUserDisplayName(slingUser);
+  const slingUserAccountLabel = slingUserDisplayName || "sua conta Slingui";
 
   const saveToDrive = () => {
     setContentState((prevContentState) => ({
@@ -530,7 +563,7 @@ const RightPanel = () => {
           {!contentState.fallback && contentState.offline && (
             <div className={styles.alert}>
               <div className={styles.buttonLeft}>
-                <ReactSVG src={URL + "editor/icons/no-internet.svg"} />
+                <ReactSVG src={EXT_URL + "editor/icons/no-internet.svg"} />
               </div>
               <div className={styles.buttonMiddle}>
                 <div className={styles.buttonTitle}>
@@ -548,7 +581,7 @@ const RightPanel = () => {
           {contentState.fallback && contentState.noffmpeg && contentState.editLimit === 0 && (
             <div className={styles.alert}>
               <div className={styles.buttonLeft}>
-                <ReactSVG src={URL + "editor/icons/alert.svg"} />
+                <ReactSVG src={EXT_URL + "editor/icons/alert.svg"} />
               </div>
               <div className={styles.buttonMiddle}>
                 <div className={styles.buttonTitle}>
@@ -569,7 +602,7 @@ const RightPanel = () => {
           {contentState.fallback && contentState.noffmpeg && contentState.editLimit !== 0 && (
             <div className={styles.alert}>
               <div className={styles.buttonLeft}>
-                <ReactSVG src={URL + "editor/icons/alert.svg"} />
+                <ReactSVG src={EXT_URL + "editor/icons/alert.svg"} />
               </div>
               <div className={styles.buttonMiddle}>
                 <div className={styles.buttonTitle}>
@@ -593,7 +626,7 @@ const RightPanel = () => {
             contentState.duration <= contentState.editLimit && (
               <div className={styles.alert}>
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/alert.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/alert.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -620,7 +653,7 @@ const RightPanel = () => {
             !contentState.updateChrome && (
               <div className={styles.alert}>
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/alert.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/alert.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -679,7 +712,7 @@ const RightPanel = () => {
             !contentState.noffmpeg && (
               <div className={styles.alert}>
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/alert.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/alert.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -714,7 +747,7 @@ const RightPanel = () => {
             ) && (
               <div className={styles.alert}>
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/alert.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/alert.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -737,7 +770,7 @@ const RightPanel = () => {
           {!contentState.fallback && contentState.editErrorType === "timeout" && (
             <div className={styles.alert}>
               <div className={styles.buttonLeft}>
-                <ReactSVG src={URL + "editor/icons/alert.svg"} />
+                <ReactSVG src={EXT_URL + "editor/icons/alert.svg"} />
               </div>
               <div className={styles.buttonMiddle}>
                 <div className={styles.buttonTitle}>
@@ -760,7 +793,7 @@ const RightPanel = () => {
           {!contentState.fallback && contentState.editErrorType === "failed" && (
             <div className={styles.alert}>
               <div className={styles.buttonLeft}>
-                <ReactSVG src={URL + "editor/icons/alert.svg"} />
+                <ReactSVG src={EXT_URL + "editor/icons/alert.svg"} />
               </div>
               <div className={styles.buttonMiddle}>
                 <div className={styles.buttonTitle}>
@@ -797,7 +830,7 @@ const RightPanel = () => {
                 }
               >
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/trim.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/trim.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -817,7 +850,7 @@ const RightPanel = () => {
                   </div>
                 </div>
                 <div className={styles.buttonRight}>
-                  <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                 </div>
               </div>
               <div
@@ -832,7 +865,7 @@ const RightPanel = () => {
                 }
               >
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/crop.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/crop.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -852,7 +885,7 @@ const RightPanel = () => {
                   </div>
                 </div>
                 <div className={styles.buttonRight}>
-                  <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                 </div>
               </div>
               <div
@@ -867,7 +900,7 @@ const RightPanel = () => {
                 }
               >
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/audio.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/audio.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -887,7 +920,7 @@ const RightPanel = () => {
                   </div>
                 </div>
                 <div className={styles.buttonRight}>
-                  <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                 </div>
               </div>
             </div>
@@ -896,6 +929,11 @@ const RightPanel = () => {
             <div className={styles.sectionTitle}>
               {chrome.i18n.getMessage("sandboxSaveTitle")}
             </div>
+            {slingUser ? (
+              <div className={styles.slingUserName}>
+                Logado como {slingUserAccountLabel}
+              </div>
+            ) : null}
             {slingUser ? (
               <div
                 className={styles.buttonLogout}
@@ -918,7 +956,21 @@ const RightPanel = () => {
               </div>
             )}
             <div className={styles.buttonWrap}>
-              {slingUser ? (
+              {isAuthLoading ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={`${styles.button} ${styles.authLoadingButton}`}
+                  disabled
+                >
+                  <div className={styles.buttonMiddle} style={{ paddingLeft: '24px' }}>
+                    <div className={styles.buttonTitle}>Autenticando na Slingui...</div>
+                    <div className={styles.buttonDescription}>
+                      Aguarde enquanto verificamos sua sessão
+                    </div>
+                  </div>
+                </div>
+              ) : slingUser ? (
                 <div
                   role="button"
                   className={styles.button}
@@ -933,12 +985,12 @@ const RightPanel = () => {
                     </div>
                     <div className={styles.buttonDescription}>
                       {contentState.mp4ready
-                        ? "Salvar o vídeo MP4 na sua conta Slingui"
-                        : "Salvar o vídeo WEBM na sua conta Slingui"}
+                        ? `Salvar o vídeo MP4 na ${slingUserAccountLabel}`
+                        : `Salvar o vídeo WEBM na ${slingUserAccountLabel}`}
                     </div>
                   </div>
                   <div className={styles.buttonRight}>
-                    <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                    <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                   </div>
                 </div>
               ) : (
@@ -981,7 +1033,7 @@ const RightPanel = () => {
                   disabled={contentState.isFfmpegRunning}
                 >
                   <div className={styles.buttonLeft}>
-                    <ReactSVG src={URL + "editor/icons/download.svg"} />
+                    <ReactSVG src={EXT_URL + "editor/icons/download.svg"} />
                   </div>
                   <div className={styles.buttonMiddle}>
                     <div className={styles.buttonTitle}>
@@ -994,7 +1046,7 @@ const RightPanel = () => {
                     </div>
                   </div>
                   <div className={styles.buttonRight}>
-                    <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                    <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                   </div>
                 </div>
               )}
@@ -1027,7 +1079,7 @@ const RightPanel = () => {
                     disabled={mp4Disabled}
                   >
                     <div className={styles.buttonLeft}>
-                      <ReactSVG src={URL + "editor/icons/download.svg"} />
+                      <ReactSVG src={EXT_URL + "editor/icons/download.svg"} />
                     </div>
                     <div className={styles.buttonMiddle}>
                       <div className={styles.buttonTitle}>
@@ -1048,7 +1100,7 @@ const RightPanel = () => {
                       </div>
                     </div>
                     <div className={styles.buttonRight}>
-                      <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                      <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                     </div>
                   </div>
                 );
@@ -1061,7 +1113,7 @@ const RightPanel = () => {
                   disabled={contentState.isFfmpegRunning}
                 >
                   <div className={styles.buttonLeft}>
-                    <ReactSVG src={URL + "editor/icons/download.svg"} />
+                    <ReactSVG src={EXT_URL + "editor/icons/download.svg"} />
                   </div>
                   <div className={styles.buttonMiddle}>
                     <div className={styles.buttonTitle}>
@@ -1078,7 +1130,7 @@ const RightPanel = () => {
                     </div>
                   </div>
                   <div className={styles.buttonRight}>
-                    <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                    <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                   </div>
                 </div>
               )}
@@ -1097,7 +1149,7 @@ const RightPanel = () => {
                 }
               >
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/gif.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/gif.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -1119,7 +1171,7 @@ const RightPanel = () => {
                   </div>
                 </div>
                 <div className={styles.buttonRight}>
-                  <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                 </div>
               </div>
             </div>
@@ -1138,7 +1190,7 @@ const RightPanel = () => {
                 }}
               >
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/download.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/download.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -1149,7 +1201,7 @@ const RightPanel = () => {
                   </div>
                 </div>
                 <div className={styles.buttonRight}>
-                  <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                 </div>
               </div>
               <div
@@ -1160,7 +1212,7 @@ const RightPanel = () => {
                 }}
               >
                 <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/flag.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/flag.svg"} />
                 </div>
                 <div className={styles.buttonMiddle}>
                   <div className={styles.buttonTitle}>
@@ -1171,7 +1223,7 @@ const RightPanel = () => {
                   </div>
                 </div>
                 <div className={styles.buttonRight}>
-                  <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                 </div>
               </div>
             </div>

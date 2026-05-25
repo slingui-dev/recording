@@ -1310,6 +1310,25 @@ export const setupHandlers = () => {
     }
   });
   registerMessage("restore-recording", (message) => restoreRecording(message));
+  registerMessage("cloud-restore-available", async (message) => {
+    const restore = message?.restore || { available: true };
+    try {
+      const appOrigin = new URL(APP_BASE).origin;
+      const tabs = await chrome.tabs.query({ url: `${appOrigin}/*` });
+      await Promise.allSettled(
+        tabs
+          .filter((tab) => tab?.id)
+          .map((tab) =>
+            sendMessageTab(tab.id, {
+              type: "cloud-restore-available",
+              restore,
+            }),
+          ),
+      );
+    } catch (err) {
+      console.warn("[CloudRestore] failed to notify webapp tabs", err);
+    }
+  });
   registerMessage("check-restore", async (message, sender, sendResponse) => {
     const response = await checkRestore();
     sendResponse(response);
