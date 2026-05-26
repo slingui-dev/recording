@@ -99,6 +99,219 @@ const RightPanel = () => {
   const slingUserDisplayName = getSlingUserDisplayName(slingUser);
   const slingUserAccountLabel = slingUserDisplayName || "sua conta Slingui";
 
+  const firstNonEmptyValue = (values) => {
+    const value = values.find(
+      (candidate) =>
+        (typeof candidate === "string" && candidate.trim()) ||
+        typeof candidate === "number",
+    );
+
+    return value == null ? null : String(value).trim();
+  };
+
+  const resolveMeetingIdFromContext = (meetingContext, fallbackMeetingId = null) => {
+    if (!meetingContext || typeof meetingContext !== "object") {
+      return fallbackMeetingId ? String(fallbackMeetingId).trim() : null;
+    }
+
+    return firstNonEmptyValue([
+      fallbackMeetingId,
+      meetingContext.meetingId,
+      meetingContext.meetingID,
+      meetingContext.meeting?.id,
+      meetingContext.meeting?.meetingId,
+      meetingContext.meeting?.meetingID,
+      meetingContext.callId,
+      meetingContext.callID,
+      meetingContext.roomId,
+      meetingContext.roomID,
+      meetingContext.classroom?.meetingId,
+      meetingContext.classroom?.meetingID,
+      meetingContext.classroom?.roomId,
+      meetingContext.classroom?.roomID,
+      meetingContext.classroom?.id,
+      meetingContext.classroomId,
+      meetingContext.classroomID,
+      meetingContext.id,
+    ]);
+  };
+
+  const getParticipantAccessId = (participant) => {
+    if (!participant) return null;
+    if (typeof participant === "string" || typeof participant === "number") {
+      return String(participant).trim() || null;
+    }
+    if (typeof participant !== "object") return null;
+
+    return firstNonEmptyValue([
+      participant._id,
+      participant.userId,
+      participant.externalUserId,
+      participant.id,
+      participant.sub,
+      participant.customerId,
+      participant.attendeeId,
+      participant.email,
+      participant.mail,
+      participant.userEmail,
+    ]);
+  };
+
+  const extractParticipantsFromValue = (participants) => {
+    if (!participants) return [];
+
+    const rawParticipants = [];
+
+    if (Array.isArray(participants)) {
+      rawParticipants.push(...participants);
+    } else if (typeof participants === "object") {
+      if (Array.isArray(participants.ids)) rawParticipants.push(...participants.ids);
+      if (Array.isArray(participants.items)) rawParticipants.push(...participants.items);
+      if (Array.isArray(participants.attendees)) rawParticipants.push(...participants.attendees);
+      if (Array.isArray(participants.users)) rawParticipants.push(...participants.users);
+      if (Array.isArray(participants.list)) rawParticipants.push(...participants.list);
+      if (Array.isArray(participants.values)) rawParticipants.push(...participants.values);
+      if (Array.isArray(participants.userIds)) rawParticipants.push(...participants.userIds);
+      if (Array.isArray(participants.emails)) rawParticipants.push(...participants.emails);
+
+      Object.entries(participants).forEach(([key, value]) => {
+        if (
+          [
+            "ids",
+            "items",
+            "attendees",
+            "users",
+            "list",
+            "values",
+            "userIds",
+            "emails",
+            "total",
+          ].includes(key)
+        ) {
+          return;
+        }
+        if (
+          typeof value === "string" ||
+          typeof value === "number" ||
+          (value && typeof value === "object" && !Array.isArray(value))
+        ) {
+          rawParticipants.push(value);
+        }
+      });
+    }
+
+    return rawParticipants;
+  };
+
+  const extractParticipantsFromContext = (meetingContext) => {
+    if (!meetingContext || typeof meetingContext !== "object") return [];
+
+    return [
+      ...extractParticipantsFromValue(meetingContext.participants),
+      ...extractParticipantsFromValue(meetingContext.usersCanAccess),
+      ...extractParticipantsFromValue(meetingContext.users),
+      ...extractParticipantsFromValue(meetingContext.attendees),
+      ...extractParticipantsFromValue(meetingContext.meeting?.participants),
+      ...extractParticipantsFromValue(meetingContext.meeting?.usersCanAccess),
+      ...extractParticipantsFromValue(meetingContext.meeting?.users),
+      ...extractParticipantsFromValue(meetingContext.meeting?.attendees),
+      ...extractParticipantsFromValue(meetingContext.classroom?.participants),
+      ...extractParticipantsFromValue(meetingContext.classroom?.usersCanAccess),
+      ...extractParticipantsFromValue(meetingContext.classroom?.users),
+      ...extractParticipantsFromValue(meetingContext.classroom?.attendees),
+      ...extractParticipantsFromContext(meetingContext.meetingContext),
+      ...extractParticipantsFromContext(meetingContext.lastMeetingState),
+    ];
+  };
+
+  const buildUsersCanAccess = (...meetingContexts) => {
+    const seen = new Set();
+    const usersCanAccess = [];
+    const localAccessIds = new Set();
+
+    meetingContexts.forEach((meetingContext) => {
+      const localUser = meetingContext?.localUser;
+      [
+        localUser?._id,
+        localUser?.userId,
+        localUser?.externalUserId,
+        localUser?.id,
+        localUser?.sub,
+        localUser?.email,
+      ]
+        .map((value) => (value == null ? null : String(value).trim()))
+        .filter(Boolean)
+        .forEach((value) => localAccessIds.add(value));
+    });
+
+    meetingContexts
+      .flatMap(extractParticipantsFromContext)
+      .forEach((participant) => {
+        const accessId = getParticipantAccessId(participant);
+        if (!accessId || localAccessIds.has(accessId) || seen.has(accessId)) return;
+        seen.add(accessId);
+        usersCanAccess.push(accessId);
+      });
+
+    return usersCanAccess;
+  };
+
+  const buildDocumentMeetingState = ({
+    meetingContext,
+    screenityMeetingState,
+    meetingId,
+    participants,
+  }) => {
+    const baseState =
+      meetingContext && typeof meetingContext === "object"
+        ? meetingContext
+        : screenityMeetingState || null;
+
+    const participantIds = Array.isArray(participants) ? participants : [];
+    const currentParticipants =
+      baseState?.participants && typeof baseState.participants === "object"
+        ? baseState.participants
+        : {};
+
+    if (!baseState || typeof baseState !== "object") {
+      return meetingId
+        ? {
+            meetingId,
+            meeting: { meetingId },
+            classroom: screenityMeetingState?.classroom || null,
+            participants: {
+              ids: participantIds,
+              total: participantIds.length,
+            },
+          }
+        : null;
+    }
+
+    return {
+      ...baseState,
+      meetingId: meetingId || baseState.meetingId || null,
+      meeting: {
+        ...(baseState.meeting || {}),
+        meetingId: meetingId || baseState.meeting?.meetingId || null,
+      },
+      classroom: baseState.classroom || screenityMeetingState?.classroom || null,
+      participants: {
+        ...currentParticipants,
+        ids:
+          participantIds.length > 0
+            ? participantIds
+            : Array.isArray(currentParticipants.ids)
+              ? currentParticipants.ids
+              : [],
+        total:
+          participantIds.length > 0
+            ? participantIds.length
+            : currentParticipants.total ||
+              (Array.isArray(currentParticipants.ids) ? currentParticipants.ids.length : 0),
+      },
+    };
+  };
+
   const saveToDrive = () => {
     setContentState((prevContentState) => ({
       ...prevContentState,
@@ -453,7 +666,7 @@ const RightPanel = () => {
 
   const handleSlinguiUpload = async (user) => {
     let currentUser = user;
-    if (currentUser.expired) {
+    if (currentUser?.expired) {
       try {
         currentUser = await login();
         setSlingUser(currentUser);
@@ -463,7 +676,12 @@ const RightPanel = () => {
       }
     }
 
-    const blobToUpload = (contentStateRef.current.mp4ready && contentStateRef.current.blob) ? contentStateRef.current.blob : contentStateRef.current.webm;
+    const contentSnapshot = contentStateRef.current || {};
+    const blobToUpload =
+      contentSnapshot.mp4ready && contentSnapshot.blob
+        ? contentSnapshot.blob
+        : contentSnapshot.webm;
+
     if (!blobToUpload) {
       console.error("No blob available to upload");
       return;
@@ -474,29 +692,28 @@ const RightPanel = () => {
 
     try {
       // Step 1: Get the signed URL
-      const response = await fetch('https://api.slingui.com/storage/upload', {
-        method: 'PUT',
+      const response = await fetch("https://api.slingui.com/storage/upload", {
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + currentUser.access_token,
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + currentUser.access_token,
         },
         body: JSON.stringify({
-          contentType: blobToUpload.type.split('/')[1].split(';')[0],
-          strategy: 'recording',
+          contentType: blobToUpload.type.split("/")[1].split(";")[0],
+          strategy: "recording",
         }),
       });
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to get upload URL');
+        throw new Error(data.message || "Failed to get upload URL");
       }
-      const uploadURL = data.uploadURL;
 
       // Step 2: Upload the file using XMLHttpRequest
       await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('PUT', uploadURL, true);
-        xhr.setRequestHeader('Content-Type', blobToUpload.type);
+        xhr.open("PUT", data.uploadURL, true);
+        xhr.setRequestHeader("Content-Type", blobToUpload.type);
         xhr.upload.onprogress = (event) => {
           if (!event.lengthComputable) return;
           const progress = Math.round((event.loaded / event.total) * 100);
@@ -507,44 +724,120 @@ const RightPanel = () => {
             setUploadProgress(100);
             resolve(xhr.response);
           } else {
-            reject(new Error('File upload failed with status: ' + xhr.status));
+            reject(new Error("File upload failed with status: " + xhr.status));
           }
         };
-        xhr.onerror = () => reject(new Error('File upload failed due to a network error.'));
+        xhr.onerror = () => reject(new Error("File upload failed due to a network error."));
         xhr.send(blobToUpload);
       });
-      const { screenityMeetingState = null } = await chrome.storage.local.get([
-        'screenityMeetingState',
+
+      const {
+        recordingMeta = null,
+        screenityMeetingState = null,
+        latestMeetingDocumentContext = null,
+        latestMeetingAudioChunks = null,
+      } = await chrome.storage.local.get([
+        "recordingMeta",
+        "screenityMeetingState",
+        "latestMeetingDocumentContext",
+        "latestMeetingAudioChunks",
       ]);
-      console.log(screenityMeetingState);
+
+      const latestContentSnapshot = contentStateRef.current || contentSnapshot;
+      const persistedDocumentContext = latestMeetingDocumentContext || null;
+      const meetingAudioChunks =
+        latestContentSnapshot.meetingAudioChunks || latestMeetingAudioChunks || null;
+      const contentRecordingMeta = latestContentSnapshot.recordingMeta || null;
+      const persistedRecordingMeta = persistedDocumentContext?.recordingMeta || null;
+      const persistedScreenityMeetingState =
+        persistedDocumentContext?.screenityMeetingState || null;
+      const currentScreenityMeetingState = screenityMeetingState || null;
+      const documentScreenityMeetingState =
+        persistedScreenityMeetingState || currentScreenityMeetingState || null;
+      const contentMeetingContext = contentRecordingMeta?.meetingContext || null;
+      const persistedMeetingContext =
+        persistedDocumentContext?.meetingContext || persistedRecordingMeta?.meetingContext || null;
+      const storedMeetingContext = recordingMeta?.meetingContext || null;
+      const meetingContextCandidates = [
+        contentMeetingContext ||
+          persistedMeetingContext ||
+          storedMeetingContext ||
+          persistedScreenityMeetingState ||
+          null,
+        meetingAudioChunks?.lastMeetingState || null,
+        meetingAudioChunks?.meetingContext || null,
+        currentScreenityMeetingState,
+      ].filter(Boolean);
+      const meetingContext =
+        meetingContextCandidates.find((candidate) =>
+          Boolean(resolveMeetingIdFromContext(candidate)),
+        ) ||
+        meetingContextCandidates[0] ||
+        null;
+      const meetingId = resolveMeetingIdFromContext(
+        meetingContext,
+        meetingAudioChunks?.meetingId || persistedDocumentContext?.meetingId || null,
+      );
+      const usersCanAccess = buildUsersCanAccess(
+        contentMeetingContext,
+        persistedMeetingContext,
+        storedMeetingContext,
+        persistedRecordingMeta,
+        persistedScreenityMeetingState,
+        meetingAudioChunks?.lastMeetingState,
+        meetingAudioChunks?.meetingContext,
+        currentScreenityMeetingState,
+        meetingAudioChunks,
+      );
+      const lastMeetingState = buildDocumentMeetingState({
+        meetingContext,
+        screenityMeetingState: documentScreenityMeetingState,
+        meetingId,
+        participants: usersCanAccess,
+      });
+
+      const documentPayload = {
+        name: latestContentSnapshot.title || "Untitled Recording",
+        path: "recording",
+        type: "recording",
+        meetingId,
+        lastMeetingState,
+        usersCanAccess,
+        storageUrl: data.urlFile,
+      };
+
+      console.info("[Slingui Upload] Document payload resolved", {
+        meetingId,
+        usersCanAccess,
+        contextSources: {
+          hasContentMeetingContext: Boolean(contentMeetingContext),
+          hasPersistedMeetingContext: Boolean(persistedMeetingContext),
+          hasStoredMeetingContext: Boolean(storedMeetingContext),
+          hasDocumentScreenityMeetingState: Boolean(documentScreenityMeetingState),
+          hasMeetingAudioChunks: Boolean(meetingAudioChunks),
+        },
+        documentPayload,
+      });
 
       // Step 3: Create the document entry
-      const documentResponse = await fetch('https://api.slingui.com/classroom/documents', {
-        method: 'POST',
+      const documentResponse = await fetch("https://api.slingui.com/classroom/documents", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + currentUser.access_token,
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + currentUser.access_token,
         },
-        body: JSON.stringify({
-          name: contentStateRef.current.title || 'Untitled Recording',
-          path: 'recording',
-          type: 'recording',
-          lastMeetingState: screenityMeetingState,
-          usersCanAccess: screenityMeetingState.participants.ids,
-          storageUrl: data.urlFile,
-        }),
+        body: JSON.stringify(documentPayload),
       });
 
       if (!documentResponse.ok) {
         const errorData = await documentResponse.json();
-        throw new Error(errorData.message || 'Failed to create document entry');
+        throw new Error(errorData.message || "Failed to create document entry");
       }
 
       await documentResponse.json();
 
       // Step 4: Redirect
-      chrome.tabs.create({ url: 'https://meeting.slingui.com/recordings' });
-
+      chrome.tabs.create({ url: "https://meeting.slingui.com/recordings" });
     } catch (error) {
       console.error("Upload failed", error);
       alert("Falha ao salvar na Slingui: " + error.message);

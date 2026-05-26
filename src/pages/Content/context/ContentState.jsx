@@ -71,6 +71,7 @@ const ContentState = (props) => {
   const lastBeepStartTimeRef = useRef(null);
   const recordingBeepTabIdRef = useRef(null);
   const verifyDebounceRef = useRef(null);
+  const hasAnnouncedScreenityPongRef = useRef(false);
 
   const isTargetTab = useCallback(() => {
     const tabId = tabIdRef.current;
@@ -1061,8 +1062,10 @@ const ContentState = (props) => {
   contentStateRef.current = contentState;
 
   useEffect(() => {
-    window.postMessage({ type: "screenity-pong" }, "*");
-
+    if (!hasAnnouncedScreenityPongRef.current) {
+      hasAnnouncedScreenityPongRef.current = true;
+      window.postMessage({ type: "screenity-pong" }, "*");
+    }
 
     const handleMessage = (event) => {
       if (event.data.type === "screenity-permissions") {
@@ -1106,14 +1109,45 @@ const ContentState = (props) => {
           defaultAudioInput: contentState.defaultAudioInput,
         });
       } else if (event.data.type === SCREENITY_MEETING_STATE_MESSAGE) {
-        chrome.storage.local.set({
-          screenityMeetingState: {
-            ...event.data,
-            capturedAt: Date.now(),
-            pageUrl: window.location.href,
+        const nextMeetingState = {
+          ...event.data,
+          capturedAt: Date.now(),
+          pageUrl: window.location.href,
+        };
+
+        console.groupCollapsed("[Screenity Meeting State][Content] received postMessage");
+        console.info("event.origin", event.origin);
+        console.info("window.location.href", window.location.href);
+        console.info("raw event.data", event.data);
+        console.info("meeting", event.data?.meeting || null);
+        console.info("classroom", event.data?.classroom || null);
+        console.info("participants", event.data?.participants || null);
+        console.info("localUser", event.data?.localUser || null);
+        console.info("state being saved to chrome.storage.local", nextMeetingState);
+        console.groupEnd();
+
+        chrome.storage.local.set(
+          {
+            screenityMeetingState: nextMeetingState,
+            screenityMeetingEndedAt: null,
           },
-          screenityMeetingEndedAt: null,
-        });
+          () => {
+            if (chrome.runtime.lastError) {
+              console.error(
+                "[Screenity Meeting State][Content] failed to save screenityMeetingState",
+                chrome.runtime.lastError,
+              );
+              return;
+            }
+
+            console.info("[Screenity Meeting State][Content] saved screenityMeetingState", {
+              meetingId: nextMeetingState?.meeting?.meetingId || nextMeetingState?.meetingId || null,
+              participantsIds: nextMeetingState?.participants?.ids || [],
+              participantsTotal: nextMeetingState?.participants?.total || 0,
+              capturedAt: nextMeetingState?.capturedAt,
+            });
+          },
+        );
       } else if (event.data.type === SCREENITY_MEETING_ENDED_MESSAGE) {
         chrome.storage.local.set({
           screenityMeetingEndedAt:

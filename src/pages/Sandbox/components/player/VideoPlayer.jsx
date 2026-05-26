@@ -20,12 +20,43 @@ const VideoPlayer = (props) => {
   }, [contentState]);
 
   const getProcessingBannerText = () => {
-    const base = chrome.i18n.getMessage("processingBannerEditor");
+    const isApplyingMeetingAudio =
+      contentStateRef.current.applyingMeetingAudioChunks;
+    const base = isApplyingMeetingAudio
+      ? "Including meeting audio in the recording..."
+      : chrome.i18n.getMessage("processingBannerEditor");
     const pct = Math.round(contentStateRef.current.processingProgress || 0);
     if (pct > 0 && pct < 100) {
       return `${base} (${pct}%)`;
     }
     return base;
+  };
+
+  const setProcessingBannerContent = () => {
+    if (!bannerRef.current) return;
+    bannerRef.current.innerHTML =
+      "<img src='" +
+      chrome.runtime.getURL("assets/editor/icons/alert-white.svg") +
+      "'/> <span>" +
+      getProcessingBannerText() +
+      "</span>";
+  };
+
+  const removeProcessingBanner = () => {
+    if (!bannerRef.current) return;
+    bannerRef.current.style.display = "none";
+    bannerRef.current.remove();
+    bannerRef.current = null;
+  };
+
+  const ensureProcessingBanner = () => {
+    const playerElement = document.querySelector(".plyr--video");
+    if (!playerElement || bannerRef.current) return;
+
+    bannerRef.current = document.createElement("div");
+    bannerRef.current.classList.add("videoBanner");
+    setProcessingBannerContent();
+    playerElement.appendChild(bannerRef.current);
   };
 
   useEffect(() => {
@@ -92,10 +123,7 @@ const VideoPlayer = (props) => {
     if (contentState.webm || contentState.blob) {
       let vid;
       if (contentState.blob) {
-        if (bannerRef.current) {
-          bannerRef.current.style.display = "none";
-          bannerRef.current.remove();
-        }
+        if (!contentState.applyingMeetingAudioChunks) removeProcessingBanner();
         vid = contentState.blob;
       } else if (contentState.webm) {
         vid = contentState.webm;
@@ -120,21 +148,29 @@ const VideoPlayer = (props) => {
     contentState.webm,
     contentState.blob,
     contentState.hasBeenEdited,
+    contentState.applyingMeetingAudioChunks,
     playerRef,
   ]);
 
   // Use a mutation observer to check if .plyr--video is added to the DOM
   useEffect(() => {
-    if (contentStateRef.current.mp4ready || contentStateRef.current.blob)
+    if (
+      (contentStateRef.current.mp4ready || contentStateRef.current.blob) &&
+      !contentStateRef.current.applyingMeetingAudioChunks
+    )
       return;
     const config = { attributes: true, childList: true, subtree: true };
 
     const callback = function (mutationsList, observer) {
       for (let mutation of mutationsList) {
+        const shouldShowInitialProcessing =
+          !contentStateRef.current.mp4ready && !contentStateRef.current.blob;
+        const shouldShowMeetingAudioProcessing =
+          contentStateRef.current.applyingMeetingAudioChunks;
+
         if (
           document.querySelector(".plyr--video") &&
-          !contentStateRef.current.mp4ready &&
-          !contentStateRef.current.blob &&
+          (shouldShowInitialProcessing || shouldShowMeetingAudioProcessing) &&
           !bannerRef.current &&
           !contentStateRef.current.noffmpeg &&
           !(
@@ -143,16 +179,7 @@ const VideoPlayer = (props) => {
             !contentStateRef.current.override
           )
         ) {
-          bannerRef.current = document.createElement("div");
-          bannerRef.current.classList.add("videoBanner");
-          bannerRef.current.innerHTML =
-            "<img src='" +
-            chrome.runtime.getURL("assets/editor/icons/alert-white.svg") +
-            "'/> <span>" +
-            getProcessingBannerText() +
-            "</span>";
-
-          document.querySelector(".plyr--video").appendChild(bannerRef.current);
+          ensureProcessingBanner();
         }
       }
     };
@@ -162,24 +189,20 @@ const VideoPlayer = (props) => {
 
     return () => {
       observer.disconnect();
-
-      if (bannerRef.current) {
-        bannerRef.current.style.display = "none";
-        bannerRef.current.remove();
-        bannerRef.current = null;
-      }
+      removeProcessingBanner();
     };
   }, []);
 
   useEffect(() => {
-    if (!bannerRef.current) return;
-    bannerRef.current.innerHTML =
-      "<img src='" +
-      chrome.runtime.getURL("assets/editor/icons/alert-white.svg") +
-      "'/> <span>" +
-      getProcessingBannerText() +
-      "</span>";
-  }, [contentState.processingProgress]);
+    if (contentState.applyingMeetingAudioChunks) {
+      ensureProcessingBanner();
+      setProcessingBannerContent();
+    } else if (contentState.mp4ready || contentState.blob) {
+      removeProcessingBanner();
+    } else {
+      setProcessingBannerContent();
+    }
+  }, [contentState.processingProgress, contentState.applyingMeetingAudioChunks]);
 
   return (
     <div className="videoPlayer">

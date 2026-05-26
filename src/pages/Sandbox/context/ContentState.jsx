@@ -34,6 +34,31 @@ import {
 import { getUser } from "../../../utils/slingui-auth";
 
 const API_BASE = process.env.SCREENITY_API_BASE_URL || "https://api.slingui.com";
+const MEETING_AUDIO_LOG_PREFIX = "[Sandbox][MeetingAudioChunks]";
+
+const meetingAudioLog = (message, payload = null) => {
+  if (payload == null) {
+    console.info(`${MEETING_AUDIO_LOG_PREFIX} ${message}`);
+    return;
+  }
+  console.info(`${MEETING_AUDIO_LOG_PREFIX} ${message}`, payload);
+};
+
+const summarizeMeetingAudioChunk = (chunk) => ({
+  fileName: chunk?.fileName || null,
+  sequence: chunk?.sequence ?? chunk?.metadata?.sequence ?? null,
+  startedAt: chunk?.startedAt ?? chunk?.metadata?.startedAt ?? null,
+  startedAtEpochMs:
+    chunk?.startedAtEpochMs ?? chunk?.metadata?.startedAtEpochMs ?? null,
+  durationMs: chunk?.durationMs ?? chunk?.metadata?.durationMs ?? null,
+  sampleRate: chunk?.sampleRate ?? chunk?.metadata?.sampleRate ?? null,
+  totalSamples: chunk?.totalSamples ?? chunk?.metadata?.totalSamples ?? null,
+  isFinalChunk: chunk?.isFinalChunk ?? chunk?.metadata?.isFinalChunk ?? null,
+  signedUrlPresent: Boolean(chunk?.signedUrl),
+  audioBlobSize: chunk?.audioBlob?.size ?? chunk?.audioBlobSize ?? null,
+  audioBlobType: chunk?.audioBlob?.type ?? chunk?.audioBlobType ?? null,
+  downloadError: chunk?.downloadError || null,
+});
 
 localforage.config({
   driver: localforage.INDEXEDDB,
@@ -145,53 +170,76 @@ const decodeBase64UrlJson = (value) => {
 };
 
 const decodeMeetingAudioChunkMetadata = (fileName) => {
-  const metadataToken = String(fileName || "").match(/^[^-]+-([^.]+)\.mp3$/i)?.[1];
-  if (!metadataToken) return null;
+  const fileNameWithoutExtension = String(fileName || "").replace(/\.(mp3|webm|opus|ogg|m4a|aac)$/i, "");
+  const parts = fileNameWithoutExtension.split("-");
+  const metadataCandidates = [fileNameWithoutExtension];
 
-  try {
-    const compactMetadata = decodeBase64UrlJson(metadataToken);
-    if (!Array.isArray(compactMetadata)) return null;
-
-    const [
-      version,
-      sequence,
-      startedAtEpochMs,
-      durationMs,
-      sampleRate,
-      totalSamples,
-    ] = compactMetadata;
-
-    return {
-      version,
-      sequence,
-      startedAtEpochMs,
-      startedAt: startedAtEpochMs ? new Date(startedAtEpochMs).toISOString() : null,
-      durationMs,
-      sampleRate,
-      totalSamples,
-    };
-  } catch (error) {
-    console.warn("[Sandbox][MeetingAudioChunks] Failed to decode chunk metadata", {
-      fileName,
-      error: error?.message || String(error),
-    });
-    return null;
+  for (let index = 1; index < parts.length; index += 1) {
+    metadataCandidates.push(parts.slice(index).join("-"));
   }
+
+  for (const metadataToken of metadataCandidates) {
+    if (!metadataToken) continue;
+
+    try {
+      const compactMetadata = decodeBase64UrlJson(metadataToken);
+      if (!Array.isArray(compactMetadata)) continue;
+
+      const [
+        version,
+        sequence,
+        startedAtEpochMs,
+        durationMs,
+        sampleRate,
+        totalSamples,
+        isFinalChunk,
+      ] = compactMetadata;
+
+      return {
+        version,
+        sequence,
+        startedAtEpochMs,
+        startedAt: startedAtEpochMs ? new Date(startedAtEpochMs).toISOString() : null,
+        durationMs,
+        sampleRate,
+        totalSamples,
+        isFinalChunk: Boolean(isFinalChunk),
+      };
+    } catch {
+      // Try the next suffix. This supports meetingId/prefix values containing
+      // hyphens while preserving base64url tokens that may also contain hyphens.
+    }
+  }
+
+  console.warn("[Sandbox][MeetingAudioChunks] Failed to decode chunk metadata", {
+    fileName,
+  });
+  return null;
 };
 
 const downloadMeetingAudioChunk = async (chunk) => {
   const metadata = chunk?.metadata || decodeMeetingAudioChunkMetadata(chunk?.fileName);
 
+  meetingAudioLog("download chunk start", {
+    chunk: summarizeMeetingAudioChunk({ ...chunk, metadata }),
+  });
+
   if (chunk?.audioBlob instanceof Blob) {
+    meetingAudioLog("download chunk skipped: already in memory", {
+      chunk: summarizeMeetingAudioChunk({ ...chunk, metadata }),
+    });
     return {
       ...chunk,
       metadata,
       audioBlobSize: chunk.audioBlobSize ?? chunk.audioBlob.size,
-      audioBlobType: chunk.audioBlobType ?? chunk.audioBlob.type ?? "audio/mpeg",
+      audioBlobType: chunk.audioBlobType ?? chunk.audioBlob.type ?? chunk?.contentType ?? chunk?.mimeType ?? "audio/mpeg",
     };
   }
 
   if (!chunk?.signedUrl) {
+    meetingAudioLog("download chunk skipped: missing signedUrl", {
+      chunk: summarizeMeetingAudioChunk({ ...chunk, metadata }),
+    });
     return {
       ...chunk,
       metadata,
@@ -202,20 +250,38 @@ const downloadMeetingAudioChunk = async (chunk) => {
 
   try {
     const response = await fetch(chunk.signedUrl);
+    meetingAudioLog("download chunk response", {
+      fileName: chunk?.fileName || null,
+      status: response.status,
+      ok: response.ok,
+      contentType: response.headers.get("content-type"),
+      contentLength: response.headers.get("content-length"),
+    });
     if (!response.ok) {
-      throw new Error(`Failed to download MP3 chunk (${response.status})`);
+      throw new Error(`Failed to download audio chunk (${response.status})`);
     }
 
     const audioBlob = await response.blob();
+    const responseContentType = response.headers.get("content-type") || "";
+    const audioBlobType = audioBlob.type || responseContentType || chunk?.contentType || chunk?.mimeType || "audio/mpeg";
+    meetingAudioLog("download chunk done", {
+      chunk: summarizeMeetingAudioChunk({
+        ...chunk,
+        metadata,
+        audioBlob,
+        audioBlobSize: audioBlob.size,
+        audioBlobType,
+      }),
+    });
     return {
       ...chunk,
       metadata,
       audioBlob,
       audioBlobSize: audioBlob.size,
-      audioBlobType: audioBlob.type || "audio/mpeg",
+      audioBlobType,
     };
   } catch (error) {
-    console.warn("[Sandbox][MeetingAudioChunks] Failed to download MP3 chunk", {
+    console.warn("[Sandbox][MeetingAudioChunks] Failed to download audio chunk", {
       fileName: chunk?.fileName,
       error: error?.message || String(error),
     });
@@ -232,6 +298,13 @@ const downloadMeetingAudioChunk = async (chunk) => {
 const listMeetingAudioChunks = async (meetingContext, recordingId = null) => {
   const meetingId = resolveMeetingIdFromContext(meetingContext, recordingId);
 
+  meetingAudioLog("list start", {
+    recordingId,
+    meetingId,
+    meetingContext,
+    apiBase: API_BASE,
+  });
+
   if (!meetingId) {
     console.warn("[Sandbox][MeetingAudioChunks] Missing meetingId", {
       recordingId,
@@ -241,6 +314,11 @@ const listMeetingAudioChunks = async (meetingContext, recordingId = null) => {
   }
 
   const token = await resolveAudioChunksToken();
+  meetingAudioLog("token resolved", {
+    recordingId,
+    meetingId,
+    hasToken: Boolean(token),
+  });
   if (!token) {
     throw new Error("Missing JWT token for audio chunks request");
   }
@@ -258,6 +336,13 @@ const listMeetingAudioChunks = async (meetingContext, recordingId = null) => {
     },
   );
 
+  meetingAudioLog("list response", {
+    recordingId,
+    meetingId,
+    status: res.status,
+    ok: res.ok,
+  });
+
   if (!res.ok) {
     const errorText = await res.text().catch(() => "");
     throw new Error(`Failed to list audio chunks (${res.status}): ${errorText}`);
@@ -270,9 +355,27 @@ const listMeetingAudioChunks = async (meetingContext, recordingId = null) => {
       )
     : [];
 
+  meetingAudioLog("list payload", {
+    recordingId,
+    requestedMeetingId: meetingId,
+    responseMeetingId: data?.meetingId || null,
+    prefix: data?.prefix || null,
+    total: chunks.length,
+    chunks: chunks.map(summarizeMeetingAudioChunk),
+  });
+
   const enrichedChunks = await Promise.all(
     chunks.map((chunk) => downloadMeetingAudioChunk(chunk)),
   );
+
+  meetingAudioLog("list enriched", {
+    recordingId,
+    meetingId: data?.meetingId || meetingId,
+    total: enrichedChunks.length,
+    downloaded: enrichedChunks.filter((chunk) => chunk.audioBlob instanceof Blob).length,
+    failed: enrichedChunks.filter((chunk) => chunk.downloadError).length,
+    chunks: enrichedChunks.map(summarizeMeetingAudioChunk),
+  });
 
   return {
     meetingId: data?.meetingId || meetingId,
@@ -288,6 +391,7 @@ const ContentState = (props) => {
   const recdbgSessionRef = useRef(null);
   const tabIdRef = useRef(null);
   const meetingAudioChunksCheckedRef = useRef(false);
+  const meetingAudioChunksApplyStartedRef = useRef(false);
   // Stale-result guard + stuck-edit watchdog.
   const opIdRef = useRef(0);
   const editWatchdogRef = useRef(null);
@@ -439,6 +543,9 @@ const ContentState = (props) => {
     backupBlob: null,
     recordingMeta: null,
     meetingAudioChunks: null,
+    applyingMeetingAudioChunks: false,
+    meetingAudioChunksApplied: false,
+    meetingAudioChunksError: null,
   };
 
   const [contentState, _setContentState] = useState(defaultState);
@@ -491,6 +598,15 @@ const ContentState = (props) => {
         const meetingContext =
           recordingMeta?.meetingContext || screenityMeetingState || null;
 
+        meetingAudioLog("postStop storage context", {
+          recordingId,
+          hasRecordingMeta: Boolean(recordingMeta),
+          hasScreenityMeetingState: Boolean(screenityMeetingState),
+          recordingMeta,
+          screenityMeetingState,
+          meetingContext,
+        });
+
         if (!meetingContext) {
           console.warn("[Sandbox][MeetingAudioChunks] Missing meeting context", {
             recordingId,
@@ -528,7 +644,15 @@ const ContentState = (props) => {
         setContentState((prevState) => ({
           ...prevState,
           meetingAudioChunks: audioChunks,
+          recordingMeta: recordingMeta || prevState.recordingMeta,
         }));
+
+        meetingAudioLog("postStop state updated with chunks", {
+          recordingId,
+          meetingId: audioChunks.meetingId,
+          total: audioChunks.chunks.length,
+          downloaded: audioChunks.chunks.filter((chunk) => chunk.audioBlob instanceof Blob).length,
+        });
 
         window.alert(
           `Encontramos ${audioChunks.chunks.length} chunk${
@@ -1845,9 +1969,22 @@ const ContentState = (props) => {
       const audioChunks = event.data.audioChunks || null;
       if (!audioChunks) return;
 
+      meetingAudioLog("postMessage received meeting-audio-chunks", {
+        meetingId: audioChunks.meetingId,
+        prefix: audioChunks.prefix,
+        hasRecordingMeta: Boolean(event.data.recordingMeta),
+        total: audioChunks.chunks?.length || 0,
+        downloaded:
+          audioChunks.chunks?.filter((chunk) => chunk.audioBlob instanceof Blob)
+            .length || 0,
+        chunks: audioChunks.chunks?.map(summarizeMeetingAudioChunk) || [],
+      });
+
       setContentState((prevState) => ({
         ...prevState,
         meetingAudioChunks: audioChunks,
+        recordingMeta: event.data.recordingMeta || prevState.recordingMeta,
+        meetingAudioChunksError: null,
       }));
 
       console.info("[Sandbox][MeetingAudioChunks] Received chunks in memory", {
@@ -1871,6 +2008,17 @@ const ContentState = (props) => {
       const wasCropping = contentState.cropping;
       const isTopLevel = event.data.topLevel === true;
       const isFromAudio = event.data.fromAudio === true;
+      const meetingAudioChunksApplied =
+        event.data.meetingAudioChunksApplied === true;
+
+      if (meetingAudioChunksApplied) {
+        meetingAudioLog("postMessage received updated-blob after meeting chunks", {
+          opId: event.data._opId ?? null,
+          topLevel: isTopLevel,
+          blobSize: blob?.size ?? null,
+          blobType: blob?.type ?? null,
+        });
+      }
 
       if (isFromAudio) {
         // Mid-chain: add-audio succeeded; reencode is still pending.
@@ -1903,6 +2051,12 @@ const ContentState = (props) => {
           cutting: false,
           muting: false,
           cropping: false,
+          applyingMeetingAudioChunks: false,
+          meetingAudioChunksApplied:
+            meetingAudioChunksApplied || prev.meetingAudioChunksApplied,
+          meetingAudioChunksError: meetingAudioChunksApplied
+            ? null
+            : prev.meetingAudioChunksError,
           processingProgress: 0,
           editErrorType: null,
           hasTempChanges: !isTopLevel,
@@ -2027,6 +2181,10 @@ const ContentState = (props) => {
           trimming: false,
           reencoding: false,
           cropping: false,
+          applyingMeetingAudioChunks: false,
+          meetingAudioChunksError: prev.applyingMeetingAudioChunks
+            ? "failed"
+            : prev.meetingAudioChunksError,
           processingProgress: 0,
           editErrorType: wasEditing ? "failed" : prev.editErrorType,
           ...(prev.rawBlob || prev.webm
@@ -2047,6 +2205,10 @@ const ContentState = (props) => {
         trimming: false,
         reencoding: false,
         cropping: false,
+        applyingMeetingAudioChunks: false,
+        meetingAudioChunksError: prev.applyingMeetingAudioChunks
+          ? "too-long"
+          : prev.meetingAudioChunksError,
         processingProgress: 0,
         editErrorType: "too-long",
       }));
@@ -2220,6 +2382,10 @@ const ContentState = (props) => {
         trimming: false,
         reencoding: false,
         cropping: false,
+        applyingMeetingAudioChunks: false,
+        meetingAudioChunksError: prev.applyingMeetingAudioChunks
+          ? "timeout"
+          : prev.meetingAudioChunksError,
         processingProgress: 0,
         editErrorType: "timeout",
       }));
@@ -2264,6 +2430,100 @@ const ContentState = (props) => {
       _opId: opId,
     });
   };
+
+  const applyMeetingAudioChunks = async () => {
+    const current = contentStateRef.current;
+    meetingAudioLog("apply requested", {
+      isFfmpegRunning: current.isFfmpegRunning,
+      hasBlob: Boolean(current.blob),
+      blobSize: current.blob?.size ?? null,
+      blobType: current.blob?.type ?? null,
+      duration: current.duration,
+      hasRecordingMeta: Boolean(current.recordingMeta),
+      meetingId: current.meetingAudioChunks?.meetingId || null,
+      totalChunks: current.meetingAudioChunks?.chunks?.length || 0,
+    });
+    if (current.isFfmpegRunning) {
+      meetingAudioLog("apply skipped: ffmpeg already running");
+      return false;
+    }
+
+    const audioChunks = current.meetingAudioChunks;
+    const downloadedChunks = Array.isArray(audioChunks?.chunks)
+      ? audioChunks.chunks.filter((chunk) => chunk.audioBlob instanceof Blob)
+      : [];
+
+    if (!current.blob || downloadedChunks.length === 0) {
+      meetingAudioLog("apply skipped: missing input", {
+        hasBlob: Boolean(current.blob),
+        downloadedChunks: downloadedChunks.length,
+        totalChunks: audioChunks?.chunks?.length || 0,
+        chunks: audioChunks?.chunks?.map(summarizeMeetingAudioChunk) || [],
+      });
+      setContentState((prev) => ({
+        ...prev,
+        meetingAudioChunksError: !current.blob ? "missing-video" : "missing-audio",
+      }));
+      return false;
+    }
+
+    const opId = beginEditOp();
+
+    meetingAudioLog("apply sending to parent", {
+      opId,
+      recordingDuration: current.duration,
+      recordingMeta: current.recordingMeta,
+      downloadedChunks: downloadedChunks.length,
+      chunks: audioChunks.chunks.map(summarizeMeetingAudioChunk),
+    });
+
+    setContentState((prev) => ({
+      ...prev,
+      isFfmpegRunning: true,
+      applyingMeetingAudioChunks: true,
+      meetingAudioChunksError: null,
+      processingProgress: 0,
+      editErrorType: null,
+    }));
+
+    sendMessage({
+      type: "apply-meeting-audio-chunks",
+      blob: current.blob,
+      audioChunks,
+      recordingMeta: current.recordingMeta,
+      recordingDuration: current.duration,
+      topLevel: true,
+      _opId: opId,
+    });
+
+    return true;
+  };
+
+  useEffect(() => {
+    if (launchModeRef.current !== "postStop") return;
+    if (meetingAudioChunksApplyStartedRef.current) return;
+    if (!contentState.ready || !contentState.mp4ready || !contentState.blob) return;
+    if (!contentState.meetingAudioChunks) return;
+    if (contentState.meetingAudioChunksApplied) return;
+    if (contentState.isFfmpegRunning) return;
+
+    meetingAudioChunksApplyStartedRef.current = true;
+    meetingAudioLog("auto-apply conditions met", {
+      ready: contentState.ready,
+      mp4ready: contentState.mp4ready,
+      hasBlob: Boolean(contentState.blob),
+      meetingAudioChunksApplied: contentState.meetingAudioChunksApplied,
+      duration: contentState.duration,
+    });
+    applyMeetingAudioChunks();
+  }, [
+    contentState.ready,
+    contentState.mp4ready,
+    contentState.blob,
+    contentState.meetingAudioChunks,
+    contentState.meetingAudioChunksApplied,
+    contentState.isFfmpegRunning,
+  ]);
 
   const handleTrim = async (cut) => {
     if (contentState.isFfmpegRunning) return;

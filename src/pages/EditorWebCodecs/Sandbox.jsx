@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import addAudioToVideo from "./utils/addAudioToVideo";
+import addMeetingAudioChunksToVideo from "./utils/addMeetingAudioChunksToVideo";
 import convertWebmToMp4 from "./utils/convertWebmToMp4";
 import cropVideo from "./utils/cropVideo";
 import cutVideo from "./utils/cutVideo";
@@ -14,6 +15,14 @@ import blobToArrayBuffer from "./utils/blobToArrayBuffer";
 import { getUser, login } from "../../utils/slingui-auth";
 
 const API_BASE = process.env.SCREENITY_API_BASE_URL || "https://api.slingui.com";
+
+const isPostStopMode = () => {
+  try {
+    return new URLSearchParams(window.location.search).get("mode") === "postStop";
+  } catch {
+    return false;
+  }
+};
 
 const firstNonEmptyValue = (values) => {
   const value = values.find(
@@ -111,44 +120,67 @@ const decodeBase64UrlJson = (value) => {
 };
 
 const decodeMeetingAudioChunkMetadata = (fileName) => {
-  const metadataToken = String(fileName || "").match(/^[^-]+-([^.]+)\.mp3$/i)?.[1];
-  if (!metadataToken) return null;
+  const fileNameWithoutExtension = String(fileName || "").replace(/\.(mp3|webm|opus|ogg|m4a|aac)$/i, "");
+  const parts = fileNameWithoutExtension.split("-");
+  const metadataCandidates = [fileNameWithoutExtension];
 
-  try {
-    const compactMetadata = decodeBase64UrlJson(metadataToken);
-    if (!Array.isArray(compactMetadata)) return null;
-
-    const [
-      version,
-      sequence,
-      startedAtEpochMs,
-      durationMs,
-      sampleRate,
-      totalSamples,
-    ] = compactMetadata;
-
-    return {
-      version,
-      sequence,
-      startedAtEpochMs,
-      startedAt: startedAtEpochMs ? new Date(startedAtEpochMs).toISOString() : null,
-      durationMs,
-      sampleRate,
-      totalSamples,
-    };
-  } catch (error) {
-    console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to decode chunk metadata", {
-      fileName,
-      error: error?.message || String(error),
-    });
-    return null;
+  for (let index = 1; index < parts.length; index += 1) {
+    metadataCandidates.push(parts.slice(index).join("-"));
   }
+
+  for (const metadataToken of metadataCandidates) {
+    if (!metadataToken) continue;
+
+    try {
+      const compactMetadata = decodeBase64UrlJson(metadataToken);
+      if (!Array.isArray(compactMetadata)) continue;
+
+      const [
+        version,
+        sequence,
+        startedAtEpochMs,
+        durationMs,
+        sampleRate,
+        totalSamples,
+        isFinalChunk,
+      ] = compactMetadata;
+
+      return {
+        version,
+        sequence,
+        startedAtEpochMs,
+        startedAt: startedAtEpochMs ? new Date(startedAtEpochMs).toISOString() : null,
+        durationMs,
+        sampleRate,
+        totalSamples,
+        isFinalChunk: Boolean(isFinalChunk),
+      };
+    } catch {
+      // Try the next suffix. This supports meetingId/prefix values containing
+      // hyphens while preserving base64url tokens that may also contain hyphens.
+    }
+  }
+
+  console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to decode chunk metadata", {
+    fileName,
+  });
+  return null;
 };
 
 const downloadMeetingAudioChunk = async (chunk) => {
   const metadata = decodeMeetingAudioChunkMetadata(chunk?.fileName);
 
+  console.info("[EditorWebCodecs][MeetingAudioChunks] Download chunk start", {
+    fileName: chunk?.fileName || null,
+    metadata,
+    hasSignedUrl: Boolean(chunk?.signedUrl),
+  });
+
   if (!chunk?.signedUrl) {
+    console.info("[EditorWebCodecs][MeetingAudioChunks] Download chunk skipped: missing signedUrl", {
+      fileName: chunk?.fileName || null,
+      metadata,
+    });
     return {
       ...chunk,
       metadata,
@@ -159,20 +191,35 @@ const downloadMeetingAudioChunk = async (chunk) => {
 
   try {
     const response = await fetch(chunk.signedUrl);
+    console.info("[EditorWebCodecs][MeetingAudioChunks] Download chunk response", {
+      fileName: chunk?.fileName || null,
+      status: response.status,
+      ok: response.ok,
+      contentType: response.headers.get("content-type"),
+      contentLength: response.headers.get("content-length"),
+    });
     if (!response.ok) {
-      throw new Error(`Failed to download MP3 chunk (${response.status})`);
+      throw new Error(`Failed to download audio chunk (${response.status})`);
     }
 
     const audioBlob = await response.blob();
+    const responseContentType = response.headers.get("content-type") || "";
+    const audioBlobType = audioBlob.type || responseContentType || chunk?.contentType || chunk?.mimeType || "audio/mpeg";
+    console.info("[EditorWebCodecs][MeetingAudioChunks] Download chunk done", {
+      fileName: chunk?.fileName || null,
+      metadata,
+      audioBlobSize: audioBlob.size,
+      audioBlobType,
+    });
     return {
       ...chunk,
       metadata,
       audioBlob,
       audioBlobSize: audioBlob.size,
-      audioBlobType: audioBlob.type || "audio/mpeg",
+      audioBlobType,
     };
   } catch (error) {
-    console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to download MP3 chunk", {
+    console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to download audio chunk", {
       fileName: chunk?.fileName,
       error: error?.message || String(error),
     });
@@ -205,6 +252,13 @@ const listMeetingAudioChunks = async (
 ) => {
   const meetingId = resolveMeetingIdFromContext(meetingContext, recordingId);
 
+  console.info("[EditorWebCodecs][MeetingAudioChunks] List start", {
+    recordingId,
+    meetingId,
+    meetingContext,
+    hasPreferredUser: Boolean(preferredUser),
+  });
+
   if (!meetingId) {
     console.warn("[EditorWebCodecs][MeetingAudioChunks] Missing meetingId", {
       recordingId,
@@ -214,6 +268,11 @@ const listMeetingAudioChunks = async (
   }
 
   const token = await resolveAudioChunksToken(preferredUser);
+  console.info("[EditorWebCodecs][MeetingAudioChunks] Token resolved", {
+    recordingId,
+    meetingId,
+    hasToken: Boolean(token),
+  });
   if (!token) {
     throw new Error("Missing JWT token for audio chunks request");
   }
@@ -231,6 +290,13 @@ const listMeetingAudioChunks = async (
     },
   );
 
+  console.info("[EditorWebCodecs][MeetingAudioChunks] List response", {
+    recordingId,
+    meetingId,
+    status: res.status,
+    ok: res.ok,
+  });
+
   if (!res.ok) {
     const errorText = await res.text().catch(() => "");
     throw new Error(`Failed to list audio chunks (${res.status}): ${errorText}`);
@@ -243,9 +309,32 @@ const listMeetingAudioChunks = async (
       )
     : [];
 
+  console.info("[EditorWebCodecs][MeetingAudioChunks] List payload", {
+    recordingId,
+    requestedMeetingId: meetingId,
+    responseMeetingId: data?.meetingId || null,
+    prefix: data?.prefix || null,
+    total: chunks.length,
+    chunks,
+  });
+
   const enrichedChunks = await Promise.all(
     chunks.map((chunk) => downloadMeetingAudioChunk(chunk)),
   );
+
+  console.info("[EditorWebCodecs][MeetingAudioChunks] List enriched", {
+    recordingId,
+    meetingId: data?.meetingId || meetingId,
+    total: enrichedChunks.length,
+    downloaded: enrichedChunks.filter((chunk) => chunk.audioBlob instanceof Blob).length,
+    failed: enrichedChunks.filter((chunk) => chunk.downloadError).length,
+    chunks: enrichedChunks.map(({ signedUrl, audioBlob, ...chunk }) => ({
+      ...chunk,
+      hasSignedUrl: Boolean(signedUrl),
+      audioBlobSize: audioBlob?.size ?? chunk.audioBlobSize ?? null,
+      audioBlobType: audioBlob?.type ?? chunk.audioBlobType ?? null,
+    })),
+  });
 
   return {
     meetingId: data?.meetingId || meetingId,
@@ -262,7 +351,9 @@ const Sandbox = () => {
   const authAttemptedRef = useRef(false);
   const meetingAudioChunksCheckedRef = useRef(false);
   const meetingAudioChunksRef = useRef(null);
+  const recordingMetaRef = useRef(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isPostStopProcessing, setIsPostStopProcessing] = useState(() => isPostStopMode());
   const [slingUser, setSlingUser] = useState(null);
 
   const sendMessage = (message) => {
@@ -347,6 +438,47 @@ const Sandbox = () => {
             fromAudio: true,
             _opId: message._opId,
           });
+          break;
+        }
+
+        case "apply-meeting-audio-chunks": {
+          setIsPostStopProcessing(true);
+          console.info("[EditorWebCodecs][MeetingAudioChunks] Apply message received", {
+            opId: message._opId ?? null,
+            videoBlobSize: message.blob?.size ?? null,
+            videoBlobType: message.blob?.type ?? null,
+            recordingDuration: message.recordingDuration ?? message.duration ?? null,
+            hasRecordingMeta: Boolean(message.recordingMeta),
+            meetingId: message.audioChunks?.meetingId || null,
+            totalChunks: message.audioChunks?.chunks?.length || 0,
+            downloaded: message.audioChunks?.chunks?.filter((chunk) => chunk.audioBlob instanceof Blob).length || 0,
+          });
+          const blob = await addMeetingAudioChunksToVideo(
+            ffmpegInstance.current,
+            message.blob,
+            message.audioChunks,
+            message.recordingMeta,
+            message.recordingDuration ?? message.duration,
+            (progress) =>
+              sendMessage({
+                type: "ffmpeg-progress",
+                progress: Math.round(progress * 100),
+              })
+          );
+          console.info("[EditorWebCodecs][MeetingAudioChunks] Apply complete, serializing result", {
+            opId: message._opId ?? null,
+            outputBlobSize: blob?.size ?? null,
+            outputBlobType: blob?.type ?? null,
+          });
+          const base64 = await toBase64(blob);
+          sendMessage({
+            type: "updated-blob",
+            base64,
+            topLevel: true,
+            meetingAudioChunksApplied: true,
+            _opId: message._opId,
+          });
+          setIsPostStopProcessing(false);
           break;
         }
 
@@ -532,6 +664,9 @@ const Sandbox = () => {
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
+      if (message.type === "apply-meeting-audio-chunks") {
+        setIsPostStopProcessing(false);
+      }
       if (errMsg.includes("too long")) {
         sendMessage({ type: "edit-too-long", _opId: message._opId });
       } else {
@@ -594,6 +729,12 @@ const Sandbox = () => {
     const checkMeetingAudioChunks = async () => {
       const recordingId = params.get("recordingId") || null;
 
+      console.info("[EditorWebCodecs][MeetingAudioChunks] PostStop check start", {
+        recordingId,
+        isAuthLoading,
+        hasSlingUser: Boolean(slingUser && !slingUser.expired),
+      });
+
       try {
         const { recordingMeta = null, screenityMeetingState = null } =
           await chrome.storage.local.get([
@@ -606,6 +747,15 @@ const Sandbox = () => {
         const meetingContext =
           recordingMeta?.meetingContext || screenityMeetingState || null;
 
+        console.info("[EditorWebCodecs][MeetingAudioChunks] PostStop storage context", {
+          recordingId,
+          hasRecordingMeta: Boolean(recordingMeta),
+          hasScreenityMeetingState: Boolean(screenityMeetingState),
+          recordingMeta,
+          screenityMeetingState,
+          meetingContext,
+        });
+
         const audioChunks = await listMeetingAudioChunks(
           meetingContext,
           recordingId,
@@ -615,9 +765,7 @@ const Sandbox = () => {
         if (cancelled) return;
 
         if (!audioChunks) {
-          window.alert(
-            "Não foi possível verificar chunks de áudio MP3: meetingId não encontrado.",
-          );
+          setIsPostStopProcessing(false);
           return;
         }
 
@@ -631,34 +779,49 @@ const Sandbox = () => {
         });
 
         meetingAudioChunksRef.current = audioChunks;
+        recordingMetaRef.current = recordingMeta;
+        console.info("[EditorWebCodecs][MeetingAudioChunks] Sending chunks to iframe", {
+          recordingId,
+          meetingId: audioChunks.meetingId,
+          total: audioChunks.chunks.length,
+          downloaded: audioChunks.chunks.filter((chunk) => chunk.audioBlob instanceof Blob).length,
+          hasRecordingMeta: Boolean(recordingMeta),
+        });
         sendMessage({
           type: "meeting-audio-chunks",
           audioChunks,
+          recordingMeta,
         });
 
         try {
           await chrome.storage.local.set({
             [`meetingAudioChunks:${recordingId || audioChunks.meetingId}`]:
               toSerializableMeetingAudioChunks(audioChunks),
+            latestMeetingAudioChunks: toSerializableMeetingAudioChunks(audioChunks),
+            latestMeetingAudioChunksKey: recordingId || audioChunks.meetingId || null,
+            latestMeetingDocumentContext: {
+              recordingId,
+              meetingId: audioChunks.meetingId || null,
+              recordingMeta,
+              screenityMeetingState,
+              meetingContext,
+              capturedAt: Date.now(),
+            },
           });
         } catch {
           // Persisting is best-effort; the alert is the required behavior here.
         }
 
-        window.alert(
-          `Encontramos ${audioChunks.chunks.length} chunk${
-            audioChunks.chunks.length === 1 ? "" : "s"
-          } de áudio MP3 para adicionar nesta gravação.`,
-        );
+        if (!audioChunks.chunks.some((chunk) => chunk.audioBlob instanceof Blob)) {
+          setIsPostStopProcessing(false);
+        }
       } catch (error) {
         if (cancelled) return;
         console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to list chunks", {
           recordingId,
           error: error?.message || String(error),
         });
-        window.alert(
-          "Não foi possível verificar os chunks de áudio MP3 desta gravação.",
-        );
+        setIsPostStopProcessing(false);
       }
     };
 
@@ -672,12 +835,22 @@ const Sandbox = () => {
   const handleIframeLoad = () => {
     sendAuthStateToIframe(slingUser, isAuthLoading);
     if (meetingAudioChunksRef.current) {
+      console.info("[EditorWebCodecs][MeetingAudioChunks] Iframe load: resending chunks", {
+        meetingId: meetingAudioChunksRef.current.meetingId,
+        total: meetingAudioChunksRef.current.chunks?.length || 0,
+        downloaded:
+          meetingAudioChunksRef.current.chunks?.filter((chunk) => chunk.audioBlob instanceof Blob).length || 0,
+        hasRecordingMeta: Boolean(recordingMetaRef.current),
+      });
       sendMessage({
         type: "meeting-audio-chunks",
         audioChunks: meetingAudioChunksRef.current,
+        recordingMeta: recordingMetaRef.current,
       });
     }
   };
+
+  const showBlockingSplash = isAuthLoading || isPostStopProcessing;
 
   return (
     <div>
@@ -693,10 +866,10 @@ const Sandbox = () => {
           position: "absolute",
           top: 0,
           left: 0,
-          visibility: isAuthLoading ? "hidden" : "visible",
+          visibility: showBlockingSplash ? "hidden" : "visible",
         }}
       />
-      {isAuthLoading && (
+      {showBlockingSplash && (
         <div
           role="status"
           aria-live="polite"
@@ -710,31 +883,36 @@ const Sandbox = () => {
             flexDirection: "column",
             gap: 16,
             background: "#ffffff",
-            color: "#111827",
             fontFamily:
               "Inter, Satoshi, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
           }}
         >
           <div
-            aria-hidden="true"
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              border: "4px solid rgba(17, 24, 39, 0.14)",
-              borderTopColor: "#3b82f6",
-              animation: "slingui-auth-spin 0.8s linear infinite",
+              width: 180,
+              height: 180,
+              borderRadius: 32,
+              background: "#ffffff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-          />
-          <div style={{ fontSize: 16, fontWeight: 600 }}>
-            Autenticando na Slingui...
-          </div>
-          <div style={{ maxWidth: 360, textAlign: "center", fontSize: 13, color: "#6b7280" }}>
-            Aguarde enquanto verificamos sua sessão antes de abrir o editor.
+          >
+            <img
+              src={chrome.runtime.getURL("assets/logo.png")}
+              alt="Slingui"
+              style={{
+                width: 96,
+                height: 96,
+                objectFit: "contain",
+                animation: "slingui-post-stop-pulse 1.4s ease-in-out infinite",
+              }}
+            />
           </div>
           <style>{`
-            @keyframes slingui-auth-spin {
-              to { transform: rotate(360deg); }
+            @keyframes slingui-post-stop-pulse {
+              0%, 100% { opacity: 0.2; }
+              50% { opacity: 1; }
             }
           `}</style>
         </div>
