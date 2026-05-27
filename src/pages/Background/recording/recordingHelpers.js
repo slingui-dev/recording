@@ -10,20 +10,46 @@ import { addAlarmListener } from "../alarms/addAlarmListener";
 import { getStreamingData } from "./getStreamingData";
 import { discardOffscreenDocuments } from "../offscreen/discardOffscreenDocuments";
 import { diagEvent, endDiagSession } from "../../utils/diagnosticLog";
+import { perfMark, perfSpan } from "../../utils/perfMarks";
 import { classifyError } from "../../utils/errorCodes";
 import { resetWatchdogState } from "./resetWatchdogState";
+import { sweepRecorderTabs } from "./sweepRecorderTabs";
+
+// Mirrors CloudRecorder.appendUploadTelemetryEvent so BG-side projectId mutations
+// land in the same `cloudUploadTelemetryEvents` storage key surfaced by
+// buildDiagnosticZip → upload-telemetry.json. Diagnostic-only; best-effort.
+const BG_UPLOAD_TELEMETRY_KEY = "cloudUploadTelemetryEvents";
+const BG_UPLOAD_TELEMETRY_MAX = 300;
+const appendBgUploadTelemetryEvent = async (payload) => {
+  try {
+    const existing = await chrome.storage.local.get([BG_UPLOAD_TELEMETRY_KEY]);
+    const current = Array.isArray(existing?.[BG_UPLOAD_TELEMETRY_KEY])
+      ? existing[BG_UPLOAD_TELEMETRY_KEY]
+      : [];
+    const eventPayload = {
+      ts: Date.now(),
+      uploaderType: "bg_recording",
+      ...payload,
+    };
+    const next = [...current, eventPayload].slice(-BG_UPLOAD_TELEMETRY_MAX);
+    await chrome.storage.local.set({
+      [BG_UPLOAD_TELEMETRY_KEY]: next,
+      lastUploadTelemetryEvent: eventPayload,
+    });
+  } catch {
+    // best-effort; telemetry must never break recording
+  }
+};
+
 export const checkCapturePermissions = async ({ isLoggedIn, isSubscribed }) => {
   const permissions = ["desktopCapture", "alarms", "offscreen"];
 
-  // Add clipboardWrite and notifications only for subscribed users
   if (isLoggedIn && isSubscribed) {
     permissions.push("clipboardWrite");
   }
 
-  // Must be the first await. Any preceding await consumes the user-gesture
-  // context propagated from the content-script click, and Chrome rejects
-  // request() with "must be called during a user gesture" even when all
-  // perms are already granted.
+  // MUST be the first await; preceding awaits consume the user-gesture context
+  // and Chrome rejects request() with "must be called during a user gesture"
   const granted = await new Promise((resolve) => {
     chrome.permissions.request({ permissions }, resolve);
   });
@@ -46,7 +72,6 @@ export const handlePip = async (started = false) => {
 };
 
 export const handleOnGetPermissions = async (request) => {
-  // Send a message to (actual) active tab
   const activeTab = await getCurrentTab();
   if (activeTab) {
     sendMessageTab(activeTab.id, {
@@ -57,30 +82,43 @@ export const handleOnGetPermissions = async (request) => {
 };
 
 export const handleRecordingComplete = async () => {
-  const { recordingTab } = await chrome.storage.local.get(["recordingTab"]);
+  perfMark("BG.recordingHelpers handleRecordingComplete.enter");
+  const { recordingTab, completingRecordingTab } =
+    await chrome.storage.local.get([
+      "recordingTab",
+      "completingRecordingTab",
+    ]);
 
-  if (recordingTab) {
-    chrome.tabs.get(recordingTab, (tab) => {
+  // snapshot at stop time; live recordingTab may belong to a new session by now
+  const target = completingRecordingTab ?? null;
+
+  if (target) {
+    chrome.tabs.get(target, (tab) => {
       if (chrome.runtime.lastError || !tab) return;
-      // Check if tab url contains chrome-extension and recorder.html
       if (
         tab.url.includes("chrome-extension") &&
         tab.url.includes("recorder.html")
       ) {
-        // FLAG: For testing purposes -> comment to debug
-        removeTab(recordingTab);
+        removeTab(target);
       }
     });
   }
-  // Clear so subsequent recordings don't conflict
-  chrome.storage.local.set({ recordingTab: null, offscreen: false });
-  console.log("[Screenity][BG] handleRecordingComplete fired, recordingTab:", recordingTab);
+
+  // null recordingTab only if still pointing at the tab we just finished
+  const updates = { offscreen: false, completingRecordingTab: null };
+  if (target != null && recordingTab === target) {
+    updates.recordingTab = null;
+  }
+  chrome.storage.local.set(updates);
+  console.log(
+    "[Screenity][BG] handleRecordingComplete fired",
+    { target, liveRecordingTab: recordingTab, cleared: target === recordingTab },
+  );
 };
 
 export const handleRecordingError = async (request) => {
   console.warn("[Screenity][handleRecordingError]", request);
 
-  // Propagate or derive error code
   const errorCode =
     request?.errorCode ||
     classifyError(request?.why || "", request?.error || "");
@@ -117,8 +155,7 @@ export const handleRecordingError = async (request) => {
     errorCode,
   });
 
-  // For stream-ended, we just notify the user but DON'T stop the recording
-  // The user can decide whether to continue or stop
+  // stream-ended: notify only, never stop. user decides whether to continue
   if (isWarningOnly) {
     sendMessageTab(activeTab, {
       type: "stream-ended-warning",
@@ -126,20 +163,85 @@ export const handleRecordingError = async (request) => {
     }).catch((err) => {
       diagEvent("warning", { note: "stream-ended-warning undelivered", err: String(err).slice(0, 80) });
     });
-    return; // Don't continue with the normal error handling
+    return;
   }
 
   endDiagSession("error");
 
+  // mirrors discardRecording: 1+ scenes saved -> preserve project for retry
+  const {
+    multiMode,
+    multiSceneCount,
+    projectId: projectIdBeforeClear,
+    sceneId: sceneIdBeforeClear,
+    recordingAttemptId: attemptIdAtClear,
+  } = await chrome.storage.local.get([
+    "multiMode",
+    "multiSceneCount",
+    "projectId",
+    "sceneId",
+    "recordingAttemptId",
+  ]);
+  const preserveMultiProject =
+    Boolean(multiMode) && Number(multiSceneCount) > 0;
+  // Clear sceneId/sceneIdStatus/pendingSceneIndex when projectId
+  // clears; a retry inheriting a stale sceneId reaches the
+  // cloudrecorder with projectId=null and sceneIdStatus="recording".
+  // pendingSceneIndex must clear to `[]`, not null: it's consumed
+  // via destructuring defaults that don't fire for null, and a null
+  // value crashes the next .includes() in CloudRecorder.
+  const multiState = preserveMultiProject
+    ? {}
+    : {
+        multiMode: false,
+        multiSceneCount: 0,
+        multiProjectId: null,
+        multiLastSceneId: null,
+        recordingToScene: false,
+        projectId: null,
+        activeSceneId: null,
+        sceneId: null,
+        sceneIdStatus: null,
+        pendingSceneIndex: [],
+      };
+
   await chrome.storage.local.set({
     recording: false,
+    // Clear pendingRecording at stop. countdownEverShown is per-tab
+    // React state, so a tab that wasn't the recorder reads stale
+    // pendingRecording:true and the "Preparing…" loader sticks.
+    pendingRecording: false,
     recordingUiTabId: null,
     tabRecordedID: null,
     offscreen: false,
     postStopEditorOpened: false,
+    // releases the editor-opening lock; otherwise next stopRecording refuses to open editor
+    postStopEditorOpening: false,
     region: false,
     customRegion: false,
+    // PiP + pause must follow recording down; otherwise next session inherits paused=true
+    pipForceClose: Date.now(),
+    paused: false,
+    pausedAt: null,
+    totalPausedMs: 0,
+    ...multiState,
   });
+
+  if (!preserveMultiProject && projectIdBeforeClear) {
+    void appendBgUploadTelemetryEvent({
+      event: "project_state_change",
+      source: "bg-recording-error",
+      from: projectIdBeforeClear,
+      to: null,
+      sceneId: sceneIdBeforeClear || null,
+      reason: request?.error || "recording-error",
+      why: request?.why || null,
+      errorCode,
+      recordingAttemptId: attemptIdAtClear || null,
+    });
+  }
+
+  chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
 
   chrome.runtime
     .sendMessage({
@@ -150,6 +252,36 @@ export const handleRecordingError = async (request) => {
       diagEvent("warning", { note: "clear-session-safe undelivered", err: String(err).slice(0, 80) });
     });
 
+  // sandboxed editor: runtime.onMessage unreliable, storage.onChanged fires.
+  // try message first, ALWAYS write the storage flag.
+  const { sandboxTab } = await chrome.storage.local.get(["sandboxTab"]);
+  let sandboxAlive = false;
+  if (Number.isInteger(sandboxTab)) {
+    try {
+      await chrome.tabs.get(sandboxTab);
+      sandboxAlive = true;
+      sendMessageTab(sandboxTab, {
+        type: "recording-error",
+        error: request?.error || null,
+        why: request?.why || null,
+        errorCode,
+      }).catch(() => {});
+    } catch {}
+  }
+  // a later-mounting editor reads this on boot to surface the modal;
+  // sandboxTab filters stale entries from prior sessions
+  try {
+    await chrome.storage.local.set({
+      editorRecordingError: {
+        ts: Date.now(),
+        sandboxTab: Number.isInteger(sandboxTab) ? sandboxTab : null,
+        error: request?.error || null,
+        why: request?.why || null,
+        errorCode,
+      },
+    });
+  } catch {}
+
   sendMessageRecord({ type: "recording-error" }).then(() => {
     const candidateTabs = [activeTab, recordingUiTabId, tabRecordedID].filter(
       (id, idx, arr) => Number.isInteger(id) && arr.indexOf(id) === idx,
@@ -157,7 +289,10 @@ export const handleRecordingError = async (request) => {
     candidateTabs.forEach((id) => {
       sendMessageTab(id, { type: "stop-pending" }).catch(() => {});
     });
-    focusTab(activeTab);
+    // refocus only when no editor is open
+    if (!sandboxAlive) {
+      focusTab(activeTab);
+    }
     if (request.error === "stream-error") {
       sendMessageTab(activeTab, { type: "stream-error", errorCode });
     } else if (request.error === "backup-error") {
@@ -172,10 +307,11 @@ export const handleRecordingError = async (request) => {
       if (tab?.url?.startsWith(chrome.runtime.getURL(""))) {
         removeTab(recordingTab);
       }
-    } catch {
-      // Tab doesn't exist
-    }
+    } catch {}
   }
+  // recordingTab names at most one recorder tab; sweep catches any other
+  // recorder tab a racing start may have spawned and orphaned.
+  await sweepRecorderTabs();
   chrome.storage.local.set({ recordingTab: null });
   try {
     await discardOffscreenDocuments();
@@ -183,16 +319,58 @@ export const handleRecordingError = async (request) => {
   await resetWatchdogState();
 };
 
+// Push streaming-data to the recorder tab. Used for the SW-initiated
+// path (openRecorderTab). Dropped delivery causes REC_START_NO_STREAM_MSG
+// at the tab's 12s gate; the tab side is idempotent so retries are safe.
+const pushStreamingData = async (dataStr) => {
+  const payload = { type: "streaming-data", data: dataStr };
+  const backoffMs = [0, 300, 800];
+  for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    if (backoffMs[attempt] > 0) {
+      await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+    }
+    try {
+      await sendMessageRecord(payload);
+      if (attempt > 0) {
+        diagEvent("sw-streaming-data-send-ok", { attempt });
+      }
+      return;
+    } catch (err) {
+      diagEvent("sw-streaming-data-send-fail", {
+        attempt,
+        err: String(err?.message || err).slice(0, 120),
+      });
+      if (attempt === backoffMs.length - 1) {
+        console.warn("handleGetStreamingData: all push attempts failed", err);
+      }
+    }
+  }
+};
+
 export const handleGetStreamingData = async () => {
+  perfMark("BG.handleGetStreamingData.enter");
   const data = await getStreamingData();
-  sendMessageRecord({ type: "streaming-data", data: JSON.stringify(data) });
+  const dataStr = JSON.stringify(data);
+  // Fire-and-forget push (SW-initiated openRecorderTab path). Not awaited:
+  // a `get-streaming-data` pull must get its response immediately, not
+  // after the push retry loop.
+  void pushStreamingData(dataStr);
+  // Returned to a `get-streaming-data` pull as the direct response. This
+  // is the robust delivery path; it does not depend on the recorder
+  // tab's onMessage listener being registered yet, nor on `recordingTab`
+  // routing being correct.
+  return { ok: true, data: dataStr };
 };
 
 export const videoReady = async () => {
-  const { backupTab, recordingDuration } = await chrome.storage.local.get([
-    "backupTab",
-    "recordingDuration",
-  ]);
+  perfMark("BG.recordingHelpers videoReady.enter");
+  const { backupTab, recordingDuration, recordingTab, lastRecordingBackendRef } =
+    await chrome.storage.local.get([
+      "backupTab",
+      "recordingDuration",
+      "recordingTab",
+      "lastRecordingBackendRef",
+    ]);
   diagEvent("sw-received-video-ready", {
     recordingDurationMs: Number(recordingDuration) || 0,
     backupTabPresent: Boolean(backupTab),
@@ -208,6 +386,33 @@ export const videoReady = async () => {
     .catch((err) => {
       diagEvent("warning", { note: "clear-session-safe undelivered (video-ready)", err: String(err).slice(0, 80) });
     });
+  // For OPFS the editor reads chunks directly, so the recorder tab can
+  // close as soon as video-ready fires. Keeping it alive holds Chrome's
+  // tab-capture binding, which makes the next getMediaStreamId reject
+  // with "Cannot capture a tab with an active stream" until Chrome
+  // restarts. Cloudrecorder runs its own close on finalize, so skip it.
+  if (lastRecordingBackendRef?.backend === "opfs" && recordingTab) {
+    try {
+      const tab = await chrome.tabs.get(recordingTab).catch(() => null);
+      const tabUrl = tab?.url ? new URL(tab.url) : null;
+      const isFreeRecorder =
+        tabUrl?.pathname === "/recorder.html" &&
+        tabUrl?.origin === chrome.runtime.getURL("").replace(/\/$/, "");
+      if (isFreeRecorder) {
+        diagEvent("eager-recorder-close", {
+          recordingTab,
+          reason: "video-ready-opfs",
+        });
+        await chrome.tabs.remove(recordingTab).catch(() => {});
+        chrome.storage.local.set({ recordingTab: null });
+      }
+    } catch (closeErr) {
+      diagEvent("warning", {
+        note: "eager-recorder-close failed",
+        err: String(closeErr?.message || closeErr).slice(0, 120),
+      });
+    }
+  }
   await stopRecording();
 };
 

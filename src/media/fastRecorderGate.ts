@@ -1,7 +1,13 @@
 declare const chrome: any;
 
-// @ts-ignore — mediabunny ships types but this file is loose with any
-import { Input, BlobSource, ALL_FORMATS } from "mediabunny";
+// mediabunny is ~3MB; defer until validateFastRecorderOutputBlob runs.
+let _mediabunnyPromise: Promise<typeof import("mediabunny")> | null = null;
+const loadMediabunny = () => {
+  if (!_mediabunnyPromise) {
+    _mediabunnyPromise = import("mediabunny");
+  }
+  return _mediabunnyPromise;
+};
 
 export type FastRecorderProbeResult = {
   ok: boolean;
@@ -90,11 +96,45 @@ export const getFastRecorderStickyState = async (): Promise<FastRecorderStickySt
   }
 };
 
+// Stream-setup failures, not codec issues. Don't sticky-disable on these.
+const TRANSIENT_ERROR_PATTERNS = [
+  /no video track/i,
+  /stream missing/i,
+  /display stream missing/i,
+  /track ended/i,
+  /track inactive/i,
+  /capture stream is not ready/i,
+  // Hardware codec reclaimed by Chrome (idle/background/pressure).
+  /codec reclaimed/i,
+  /reclaimed due to inactivity/i,
+  // stop() raced with an in-flight encode/flush.
+  /encoder.*closed/i,
+  /encoder is closed/i,
+];
+
+export const isTransientFastRecorderError = (errorString: string) => {
+  if (!errorString) return false;
+  return TRANSIENT_ERROR_PATTERNS.some((re) => re.test(errorString));
+};
+const isTransientError = isTransientFastRecorderError;
+
 export const markFastRecorderFailure = async (
   reasonCode: string,
   details: Record<string, any> = {}
 ) => {
   try {
+    const errStr = typeof details?.error === "string" ? details.error : "";
+    if (isTransientError(errStr)) {
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.lastFailureAt]: Date.now(),
+        fastRecorderTransientFailure: {
+          reasonCode,
+          details,
+          at: Date.now(),
+        },
+      });
+      return;
+    }
     await chrome.storage.local.set({
       [STORAGE_KEYS.stickyDisabled]: true,
       [STORAGE_KEYS.stickyReason]: reasonCode,
@@ -106,7 +146,236 @@ export const markFastRecorderFailure = async (
   }
 };
 
+// Round-trip 4 synthetic frames through a real VideoEncoder to
+// confirm it emits chunks. isConfigSupported() only validates shape
+// and misses the "28-byte ftyp" failure. 30 frames would also catch
+// first-keyframe-only bugs, but ~900ms/frame under pressure = 27s of
+// blocking; runtime watchdogs handle that. 1.5s flush cap: any chunk
+// landed = healthy-but-slow, zero chunks = no-output.
+const PROBE_FRAME_COUNT = 4;
+const PROBE_WALL_CLOCK_CAP_MS = 1500;
+const verifyEncoderProducesOutput = async (
+  config: VideoEncoderConfig
+): Promise<{ ok: boolean; reason?: string; chunks: number; ms: number }> => {
+  const started = Date.now();
+  if (
+    typeof VideoEncoder === "undefined" ||
+    typeof VideoFrame === "undefined" ||
+    typeof OffscreenCanvas === "undefined"
+  ) {
+    // Can't run the round-trip in this context; report it as
+    // unverified rather than penalizing the probe.
+    return { ok: true, reason: "unverified", chunks: 0, ms: 0 };
+  }
+  let chunks = 0;
+  let encoderError: string | null = null;
+  let encoder: VideoEncoder | null = null;
+  const frames: VideoFrame[] = [];
+  const width = Number(config.width) || 1280;
+  const height = Number(config.height) || 720;
+  try {
+    encoder = new VideoEncoder({
+      output: () => {
+        chunks += 1;
+      },
+      error: (e: any) => {
+        encoderError = String(e?.message || e);
+      },
+    });
+    encoder.configure(config);
+    const canvas = new OffscreenCanvas(width, height);
+    // getContext('2d') returns the union OffscreenRenderingContext; cast
+    // narrows to the only variant we use so strict TS (build:bs) accepts
+    // fillStyle/fillRect without complaining about ImageBitmapRenderingContext.
+    const ctx = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D | null;
+    const frameDurationUs = Math.round(1_000_000 / 30);
+    for (let i = 0; i < PROBE_FRAME_COUNT; i += 1) {
+      if (ctx) {
+        ctx.fillStyle = i % 2 === 0 ? "#1a1a1a" : "#e8e8e8";
+        ctx.fillRect(0, 0, width, height);
+      }
+      const frame = new VideoFrame(canvas, {
+        timestamp: i * frameDurationUs,
+        duration: frameDurationUs,
+      });
+      frames.push(frame);
+      encoder.encode(frame, { keyFrame: i === 0 });
+    }
+    // Wall-clock-bounded flush. A slow but healthy encoder can drain
+    // for tens of seconds under system memory/GPU pressure; we don't
+    // make the user wait. If timeout hits, the chunks counter has
+    // whatever the encoder produced; we'll classify below.
+    let flushTimedOut = false;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        encoder.flush(),
+        new Promise<void>((_, reject) => {
+          flushTimer = setTimeout(() => {
+            flushTimedOut = true;
+            reject(new Error("flush-timeout"));
+          }, PROBE_WALL_CLOCK_CAP_MS);
+        }),
+      ]);
+    } catch (err: any) {
+      // If we timed out and at least one chunk landed, that's an OK
+      // signal; encoder is producing output, just slow. Don't bubble
+      // an error in that case.
+      if (!flushTimedOut || chunks === 0) {
+        encoderError = encoderError || String(err?.message || err);
+      }
+    } finally {
+      if (flushTimer) clearTimeout(flushTimer);
+    }
+  } catch (err: any) {
+    encoderError = encoderError || String(err?.message || err);
+  } finally {
+    for (const f of frames) {
+      try {
+        f.close();
+      } catch {}
+    }
+    try {
+      encoder?.close();
+    } catch {}
+  }
+  const ms = Date.now() - started;
+  if (encoderError) return { ok: false, reason: "error", chunks, ms };
+  // The only firm fail signal is zero output. With the small frame
+  // count + bounded flush, "too-few-chunks" heuristics produce false
+  // negatives (a slow but healthy encoder might only land 1 chunk
+  // within the cap). Runtime watchdogs in WebCodecsRecorder catch
+  // the rest.
+  if (chunks === 0) return { ok: false, reason: "no-output", chunks, ms };
+  return { ok: true, chunks, ms };
+};
+
+// Round-trip 1s of synthetic audio through a real AudioEncoder. Same
+// purpose as the video probe: isConfigSupported says "yes" but the
+// encoder might still fail at first encode under platform-specific
+// constraints (Opus 48k internal mismatch, AAC channel layout issues,
+// etc). Cheap; ~10 AudioData inputs at 4800 samples each.
+const verifyAudioEncoderProducesOutput = async (
+  config: AudioEncoderConfig
+): Promise<{ ok: boolean; reason?: string; chunks: number; ms: number }> => {
+  const started = Date.now();
+  if (typeof AudioEncoder === "undefined" || typeof AudioData === "undefined") {
+    return { ok: true, reason: "unverified", chunks: 0, ms: 0 };
+  }
+  let chunks = 0;
+  let encoderError: string | null = null;
+  let encoder: AudioEncoder | null = null;
+  const sampleRate = config.sampleRate || 48000;
+  const channels = config.numberOfChannels || 2;
+  // 10 chunks × 4800 samples = ~1s at 48kHz.
+  const CHUNKS = 10;
+  const SAMPLES_PER_CHUNK = Math.round(sampleRate / 10);
+  try {
+    encoder = new AudioEncoder({
+      output: () => {
+        chunks += 1;
+      },
+      error: (e: any) => {
+        encoderError = String(e?.message || e);
+      },
+    });
+    encoder.configure(config);
+    // Interleaved f32 silence; zero buffer keeps it deterministic and
+    // doesn't allocate per-channel.
+    const data = new Float32Array(SAMPLES_PER_CHUNK * channels);
+    for (let i = 0; i < CHUNKS; i += 1) {
+      const audioData = new AudioData({
+        format: "f32",
+        sampleRate,
+        numberOfFrames: SAMPLES_PER_CHUNK,
+        numberOfChannels: channels,
+        timestamp: Math.round((i * SAMPLES_PER_CHUNK * 1_000_000) / sampleRate),
+        data,
+      });
+      try {
+        encoder.encode(audioData);
+      } finally {
+        audioData.close();
+      }
+    }
+    await encoder.flush();
+  } catch (err: any) {
+    encoderError = encoderError || String(err?.message || err);
+  } finally {
+    try {
+      encoder?.close();
+    } catch {}
+  }
+  const ms = Date.now() - started;
+  if (encoderError) return { ok: false, reason: "error", chunks, ms };
+  if (chunks === 0) return { ok: false, reason: "no-output", chunks, ms };
+  return { ok: true, chunks, ms };
+};
+
+// Probe cache TTL. Probe is 250-350ms warm, seconds cold; re-running
+// every start showed up as countdown-to-record delay. Key is
+// { userAgent + GATE_VERSION }. ok=false isn't cached so a driver
+// recovery re-probes immediately.
+const PROBE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Short window for failed probes: coalesces back-to-back calls during
+// one startup without masking driver recovery.
+const PROBE_FAILURE_CACHE_TTL_MS = 60 * 1000;
+let _probeInMemory: FastRecorderProbeResult | null = null;
+let _probeInMemoryAt = 0;
+let _probeInFlight: Promise<FastRecorderProbeResult> | null = null;
+
+const tryReadCachedProbe = async (): Promise<FastRecorderProbeResult | null> => {
+  if (_probeInMemory) {
+    if (_probeInMemory.ok) return _probeInMemory;
+    if (Date.now() - _probeInMemoryAt < PROBE_FAILURE_CACHE_TTL_MS) {
+      return _probeInMemory;
+    }
+  }
+  try {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const { [STORAGE_KEYS.probe]: cached } = await chrome.storage.local.get([
+      STORAGE_KEYS.probe,
+    ]);
+    if (
+      cached &&
+      cached.ok === true &&
+      typeof cached.at === "number" &&
+      Date.now() - cached.at < PROBE_CACHE_TTL_MS &&
+      cached.details?.userAgent === ua &&
+      cached.details?.gateVersion === GATE_VERSION
+    ) {
+      _probeInMemory = cached;
+      return cached;
+    }
+  } catch {}
+  return null;
+};
+
 export const probeFastRecorderSupport = async (): Promise<FastRecorderProbeResult> => {
+  const cached = await tryReadCachedProbe();
+  if (cached) return cached;
+  if (_probeInFlight) return _probeInFlight;
+  _probeInFlight = _probeFastRecorderSupportUncached().finally(() => {
+    _probeInFlight = null;
+  });
+  const result = await _probeInFlight;
+  // Cache both success and failure in memory. Success rides the long
+  // TTL via storage; failure rides the short in-memory TTL only so a
+  // hardware/driver fix is rediscovered within a minute.
+  _probeInMemory = result;
+  _probeInMemoryAt = Date.now();
+  return result;
+};
+
+// Best-effort pre-warm: kicks the probe asynchronously so the result is
+// ready in memory by the time preflight needs it. Safe to call multiple
+// times; coalesces via _probeInFlight.
+export const prewarmFastRecorderProbe = (): void => {
+  if (_probeInMemory || _probeInFlight) return;
+  void probeFastRecorderSupport().catch(() => {});
+};
+
+const _probeFastRecorderSupportUncached = async (): Promise<FastRecorderProbeResult> => {
   try {
     debugLog("probe start", GATE_VERSION, Date.now());
     const reasons: string[] = [];
@@ -281,22 +550,175 @@ export const probeFastRecorderSupport = async (): Promise<FastRecorderProbeResul
   const isLinux = /Linux/i.test(ua);
   details.userAgent = ua;
   details.isLinux = isLinux;
+  details.gateVersion = GATE_VERSION;
 
     if (isLinux && playableCodecs.length === 0) {
       reasons.push("linux-missing-codecs");
     }
 
-    const ok = reasons.length === 0;
+    let containerKind: "mp4" | "webm" = "mp4";
+    const mp4Reasons = [...reasons];
+    const mp4Ok = mp4Reasons.length === 0;
+
+    if (!mp4Ok && hasVideoEncoder && hasAudioEncoder) {
+      const webmAudioConfig = {
+        codec: "opus",
+        sampleRate: 48000,
+        numberOfChannels: 2,
+        bitrate: 128000,
+      } as AudioEncoderConfig;
+      const webmVideoBase = {
+        codec: "vp09.00.10.08",
+        width: 1280,
+        height: 720,
+        bitrate: 4_000_000,
+        framerate: 30,
+        bitrateMode: "constant",
+        latencyMode: "realtime",
+      } as VideoEncoderConfig;
+
+      let webmAudioSupport: any = null;
+      try {
+        webmAudioSupport = await AudioEncoder.isConfigSupported(webmAudioConfig);
+      } catch (err) {
+        details.webmAudioError = String(err);
+      }
+
+      let selectedWebmVideo: VideoEncoderConfig | null = null;
+      const webmHwOptions: Array<VideoEncoderConfig["hardwareAcceleration"]> = [
+        "prefer-hardware",
+        "prefer-software",
+      ];
+      for (const hw of webmHwOptions) {
+        try {
+          const candidate: any = { ...webmVideoBase, hardwareAcceleration: hw };
+          const support = await VideoEncoder.isConfigSupported(candidate);
+          if (support?.supported) {
+            selectedWebmVideo = support.config || candidate;
+            break;
+          }
+        } catch {}
+      }
+
+      if (selectedWebmVideo && webmAudioSupport?.supported) {
+        containerKind = "webm";
+        details.containerKind = "webm";
+        details.webmSelectedVideoConfig = selectedWebmVideo;
+        details.webmAudioConfig = webmAudioSupport.config || webmAudioConfig;
+        details.selectedVideoConfig = selectedWebmVideo;
+        details.audioConfig = webmAudioSupport.config || webmAudioConfig;
+        details.videoConfigSupported = true;
+        details.audioConfigSupported = true;
+        details.mp4FallbackReasons = mp4Reasons;
+        const carryOver = new Set([
+          "no-video-encoder",
+          "no-audio-encoder",
+          "no-track-processor",
+          "probe_exception",
+        ]);
+        for (let i = reasons.length - 1; i >= 0; i--) {
+          if (!carryOver.has(reasons[i])) reasons.splice(i, 1);
+        }
+      }
+    }
+
+    if (containerKind === "mp4") details.containerKind = "mp4";
+
+    // Verify the selected encoder actually produces output, not just
+    // that the config is "supported". This is the proactive guard:
+    // a machine whose encoder emits zero frames is caught here and
+    // routed to MediaRecorder, instead of the user losing a recording.
+    if (details.selectedVideoConfig) {
+      // Retry once on transient encoder errors. VTDecoderXPCService
+      // (macOS), NVIDIA driver hand-offs (Windows), intel-VAAPI
+      // (Linux) all reject the first configure() right after another
+      // encoder ran, then succeed on the retry. Without this, a one-
+      // off "error" reason stickied MediaRecorder for the session.
+      // "no-output" is a real HW bug and does NOT retry.
+      let encodeCheck = await verifyEncoderProducesOutput(
+        details.selectedVideoConfig as VideoEncoderConfig
+      );
+      if (!encodeCheck.ok && encodeCheck.reason === "error") {
+        await new Promise((r) => setTimeout(r, 200));
+        const retry = await verifyEncoderProducesOutput(
+          details.selectedVideoConfig as VideoEncoderConfig
+        );
+        details.encodeRoundTripRetry = retry;
+        if (retry.ok) {
+          encodeCheck = retry;
+        }
+      }
+      details.encodeRoundTrip = encodeCheck;
+      if (!encodeCheck.ok) {
+        reasons.push(`video-encode-${encodeCheck.reason}`);
+      }
+    }
+
+    // Audio round-trip guard. Catches Opus 48k mismatch and AAC
+    // platform configure-time bugs that isConfigSupported misses.
+    // Doesn't block video; just tags the audio reason separately.
+    if (details.audioConfig && (details as any).audioConfigSupported) {
+      const audioEncodeCheck = await verifyAudioEncoderProducesOutput(
+        details.audioConfig as AudioEncoderConfig
+      );
+      details.audioEncodeRoundTrip = audioEncodeCheck;
+      if (!audioEncodeCheck.ok) {
+        reasons.push(`audio-encode-${audioEncodeCheck.reason}`);
+      }
+    }
+
+    let ok = reasons.length === 0;
     const at = Date.now();
+
+    // Optimistic override: if the only failures are transient encode
+    // errors and a clean probe ran in the last 7 days, trust it.
+    // In-session swap to MediaRecorder is wired up; the cost of a
+    // false-negative IDB recording is higher than a WebCodecs retry.
+    if (!ok) {
+      const onlyTransientReasons = reasons.every((r) =>
+        r === "video-encode-error" || r === "audio-encode-error"
+      );
+      if (onlyTransientReasons) {
+        try {
+          const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+          const { [STORAGE_KEYS.probe]: prior } =
+            await chrome.storage.local.get([STORAGE_KEYS.probe]);
+          const PROBE_TRUST_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+          if (
+            prior &&
+            prior.ok === true &&
+            typeof prior.at === "number" &&
+            Date.now() - prior.at < PROBE_TRUST_WINDOW_MS &&
+            prior.details?.userAgent === ua &&
+            prior.details?.gateVersion === GATE_VERSION
+          ) {
+            details.transientFailureOverridden = true;
+            details.transientReasons = reasons.slice();
+            ok = true;
+          }
+        } catch {}
+      }
+    }
+
     debugLog("probe result", { ok, reasons, details, at });
 
     try {
-      await chrome.storage.local.set({
-        [STORAGE_KEYS.probe]: { ok, reasons, details, at },
-      });
-    } catch {
-      // ignore
-    }
+      if (ok) {
+        // Refresh the storage probe on success: longest TTL applies.
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.probe]: { ok, reasons, details, at },
+        });
+      } else {
+        // Don't overwrite a known-good cached probe with a failure
+        // (one bad VTDecoder run shouldn't wipe a week of confidence).
+        // But also persist the failure separately so the next start
+        // can short-circuit a re-probe for the in-memory TTL window
+        // even if the SW restarted between recordings.
+        await chrome.storage.local.set({
+          fastRecorderProbeLastFailure: { reasons, details, at },
+        });
+      }
+    } catch {}
 
     return { ok, reasons, details, at };
   } catch (err: any) {
@@ -315,9 +737,7 @@ export const probeFastRecorderSupport = async (): Promise<FastRecorderProbeResul
       await chrome.storage.local.set({
         [STORAGE_KEYS.probe]: result,
       });
-    } catch {
-      // ignore
-    }
+    } catch {}
     return result;
   }
 };
@@ -358,7 +778,7 @@ export const validateFastRecorderOutputBlob = async (
     reasons.push("blob-too-small");
   }
 
-  if (!blob.type || !blob.type.includes("mp4")) {
+  if (!blob.type || !(blob.type.includes("mp4") || blob.type.includes("webm"))) {
     reasons.push("unexpected-mime");
   }
 
@@ -366,14 +786,10 @@ export const validateFastRecorderOutputBlob = async (
     details.recordingId = opts.recordingId;
   }
 
-  // Structural validation via the mediabunny demuxer. Handles moov-at-end
-  // (fastStart: false) efficiently, unlike the <video> element which has to
-  // scan the full file. This replaces the earlier <video>.onloadedmetadata +
-  // seek + requestVideoFrameCallback + black-frame pixel sample pipeline —
-  // those were designed around paranoia when we had no other structural check,
-  // and they stacked to ~3-4s of sequential timeouts against fastStart-false
-  // MP4s.
+  // mediabunny handles moov-at-end without the ~3-4s timeout stacking
+  // the old <video>+seek+rVFC pipeline incurred.
   try {
+    const { Input, BlobSource, ALL_FORMATS } = await loadMediabunny();
     const demuxInput: any = new Input({
       formats: ALL_FORMATS,
       source: new BlobSource(blob),
@@ -404,15 +820,22 @@ export const validateFastRecorderOutputBlob = async (
     reasons.push("demuxer-error");
   }
 
-  const videoCodec = opts.videoCodec || "avc1.42E01E";
+  const containerKind = blob.type.includes("webm") ? "webm" : "mp4";
+  const defaultVideoCodec = containerKind === "webm" ? "vp9" : "avc1.42E01E";
+  const defaultAudioCodec = containerKind === "webm" ? "opus" : "mp4a.40.2";
+  const videoCodec = opts.videoCodec || defaultVideoCodec;
   const audioCodec =
-    opts.audioCodec === undefined ? "mp4a.40.2" : opts.audioCodec;
+    opts.audioCodec === undefined ? defaultAudioCodec : opts.audioCodec;
   const codecSuffix = audioCodec ? `, ${audioCodec}` : "";
-  const mp4Mime = `video/mp4; codecs="${videoCodec}${codecSuffix}"`;
+  const playMime =
+    containerKind === "webm"
+      ? `video/webm; codecs="${videoCodec}${codecSuffix}"`
+      : `video/mp4; codecs="${videoCodec}${codecSuffix}"`;
+  details.containerKind = containerKind;
   details.expectedVideoCodec = videoCodec;
   details.expectedAudioCodec = audioCodec;
-  details.canPlayType = safeCanPlayType(mp4Mime);
-  details.mediaSourceSupported = safeMseSupport(mp4Mime);
+  details.canPlayType = safeCanPlayType(playMime);
+  details.mediaSourceSupported = safeMseSupport(playMime);
 
   const hardFail =
     reasons.includes("no-blob") ||
@@ -434,9 +857,7 @@ export const validateFastRecorderOutputBlob = async (
         ts: Date.now(),
       },
     });
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   return { ok, hardFail, reasons, details };
 };

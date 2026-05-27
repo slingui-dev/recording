@@ -3,6 +3,8 @@ import { sendMessageTab } from "./sendMessageTab";
 import { startRecording } from "../recording/startRecording";
 import { getCurrentTab } from "./getCurrentTab";
 import { traceStep } from "../../utils/startFlowTrace";
+import { perfMark, perfSpan } from "../../utils/perfMarks";
+import { handleRecordingError } from "../recording/recordingHelpers";
 
 export const restartActiveTab = async (message = {}) => {
   try {
@@ -18,9 +20,8 @@ export const restartActiveTab = async (message = {}) => {
       const { countdown } = await chrome.storage.local.get(["countdown"]);
 
       if (!countdown) {
-        startRecording();
+        startRecording("restartActiveTab-no-countdown");
       }
-      // With countdown, content shows the UI and sends "countdown-finished".
     } else {
       console.error("No active tab found.");
     }
@@ -30,49 +31,80 @@ export const restartActiveTab = async (message = {}) => {
 };
 
 export const resetActiveTab = async (forceRestart = false, message = {}) => {
-  const { activeTab } = await chrome.storage.local.get(["activeTab"]);
-  const { surface } = await chrome.storage.local.get(["surface"]);
+  perfMark("BG.resetActiveTab.enter", { forceRestart });
+  // One storage IPC + the active-tab query in parallel. Two sequential
+  // gets here were costing ~60-80ms; the read of activeTab/surface and
+  // the active-tab query are independent so they should overlap.
+  const [{ activeTab, surface }, [currentTab]] = await Promise.all([
+    chrome.storage.local.get(["activeTab", "surface"]),
+    chrome.tabs.query({ active: true, currentWindow: true }),
+  ]);
 
   if (forceRestart) {
     return restartActiveTab(message);
   }
 
-  const [currentTab] = await chrome.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
-
-  const shouldFocusTab =
-    surface !== "browser" ||
-    (activeTab && (await isRestrictedDomain(activeTab)));
-
   if (activeTab) {
     try {
-      const tab = await chrome.tabs.get(activeTab);
+      let tab = null;
+      try {
+        // Single chrome.tabs.get (was 2 via isRestrictedDomain).
+        // Saves ~30-60ms on the start path.
+        tab = await chrome.tabs.get(activeTab);
+      } catch (err) {
+        // source tab closed between picker-confirm and ready-to-record
+        console.warn(
+          "[Screenity][resetActiveTab] source tab gone, surfacing recording-error",
+          { activeTab, err: String(err).slice(0, 120) },
+        );
+        // chrome.runtime.sendMessage from SW doesn't fire SW's own listeners
+        await handleRecordingError({
+          error: "stream-error",
+          why: "source tab closed during stream acquisition",
+          errorCode: "REC_START_SOURCE_TAB_GONE",
+        });
+        return;
+      }
       if (!tab) {
         console.error("Active tab not found.");
         return;
       }
 
-      // Focus and update only if needed
+      // Decide focus from the already-fetched tab; no second
+      // chrome.tabs.get inside isRestrictedDomain.
+      let restricted = false;
+      try {
+        const url = new URL(tab.url || "");
+        restricted =
+          url.hostname.includes("google.com") ||
+          url.protocol === "chrome:" ||
+          url.protocol === "chrome-extension:" ||
+          url.protocol === "about:";
+      } catch {}
+      const shouldFocusTab = surface !== "browser" || restricted;
+
       if (shouldFocusTab) {
-        await chrome.windows.update(tab.windowId, { focused: true });
-        await chrome.tabs.update(activeTab, {
-          active: true,
-          selected: true,
-          highlighted: true,
-        });
-        await focusTab(activeTab);
+        const endFocus = perfSpan("BG.resetActiveTab focus-back-to-tab");
+        // Three focus ops in parallel. Chrome resolves them in the same
+        // tick anyway and Promise.all halves the wall-clock cost.
+        await Promise.all([
+          chrome.windows.update(tab.windowId, { focused: true }),
+          chrome.tabs.update(activeTab, {
+            active: true,
+            selected: true,
+            highlighted: true,
+          }),
+          focusTab(activeTab),
+        ]);
+        endFocus();
       }
 
-      // Always prefer the stored activeTab (the user's page, set before the
-      // recorder tab is created). Falling back to currentTab can target the
-      // pinned recorder tab when surface === "browser".
+      // currentTab fallback would hit the pinned recorder tab when surface==="browser"
       const targetTabId = activeTab || currentTab?.id;
 
-      // Persist routing decision to the start-flow trace. Awaited so the
-      // write lands before sendMessageTab triggers the content-side write.
-      await traceStep("readyToRecordSent", {
+      // traceStep is a storage write for the diagnostic startflow trace -
+      // not load-bearing for the message send below, so fire-and-forget.
+      traceStep("readyToRecordSent", {
         routing: {
           targetTabId,
           activeTab,
@@ -83,17 +115,14 @@ export const resetActiveTab = async (forceRestart = false, message = {}) => {
       });
 
       if (targetTabId) {
+        perfMark("BG.resetActiveTab ready-to-record.sent", { targetTabId });
         sendMessageTab(targetTabId, { type: "ready-to-record" }).catch(() => {});
 
         const { countdown } = await chrome.storage.local.get(["countdown"]);
 
         if (!countdown) {
-          // No countdown — start immediately.  The recorder's readiness gate
-          // will wait for the stream to be live before actually recording.
-          startRecording();
+          startRecording("resetActiveTab-no-countdown", { storedCountdown: countdown });
         }
-        // With countdown: Content shows the countdown UI and sends
-        // "countdown-finished" when done, which triggers startAfterCountdown().
       } else {
         console.error("No valid tab to send message to.");
       }

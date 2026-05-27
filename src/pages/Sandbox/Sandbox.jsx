@@ -1,22 +1,32 @@
 import "./styles/edit/_VideoPlayer.scss";
 import "./styles/global/_app.scss";
 
-import React, { useEffect, useRef, useContext } from "react";
-// Layout
-import Editor from "./layout/editor/Editor";
+import React, { useEffect, useRef, useContext, Suspense, lazy } from "react";
+// Editor (trim/cut/timeline UI) only mounts when user enters edit mode.
+// Initial open is "player" mode; defer Editor + its TrimUI dependencies.
+const Editor = lazy(() => import("./layout/editor/Editor"));
 import Player from "./layout/player/Player";
 import Modal from "./components/global/Modal";
+import Toast from "./components/global/Toast";
 
 import HelpButton from "./components/player/HelpButton";
 
-// Context
-import { ContentStateContext } from "./context/ContentState"; // Import the ContentState context
+import { ContentStateContext } from "./context/ContentState";
 import { diagForward } from "../utils/diagForward";
+import { perfMark } from "../utils/perfMarks";
+import { triggerSupportDownload } from "../utils/triggerSupportDownload";
 
 const Sandbox = () => {
-  const [contentState, setContentState] = useContext(ContentStateContext); // Access the ContentState context
+  const [contentState, setContentState] = useContext(ContentStateContext);
   const parentRef = useRef(null);
   const progress = useRef("");
+  // ref so the stuck-timer closure (deps=[]) can read current state
+  const loadStateRef = useRef({
+    ready: false,
+    hasBlob: false,
+    chunkIndex: 0,
+    chunkCount: 0,
+  });
 
   const getChromeVersion = () => {
     var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
@@ -42,16 +52,13 @@ const Sandbox = () => {
   useEffect(() => {
     if (!contentState.blob || !contentState.ffmpeg) return;
     if (contentState.frame) return;
-    // Frame extraction now works in fallback mode using Canvas API
     contentState.getFrame();
   }, [contentState.blob, contentState.ffmpeg]);
 
-  // Programmatically add custom scrollbars
   useEffect(() => {
     if (!parentRef) return;
     if (!parentRef.current) return;
 
-    // Check if on mac
     const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
     if (isMac) return;
 
@@ -100,7 +107,18 @@ const Sandbox = () => {
   }, [contentState.chunkIndex, contentState.chunkCount]);
 
   useEffect(() => {
-    // Check if we need to show support banner
+    loadStateRef.current.ready = Boolean(contentState.ready);
+    loadStateRef.current.hasBlob = Boolean(contentState.blob);
+    loadStateRef.current.chunkIndex = contentState.chunkIndex || 0;
+    loadStateRef.current.chunkCount = contentState.chunkCount || 0;
+  }, [
+    contentState.ready,
+    contentState.blob,
+    contentState.chunkIndex,
+    contentState.chunkCount,
+  ]);
+
+  useEffect(() => {
     chrome.runtime.sendMessage({ type: "check-banner-support" }, (response) => {
       if (response && response.bannerSupport) {
         setContentState((prev) => ({
@@ -111,35 +129,128 @@ const Sandbox = () => {
     });
   }, []);
 
-  // If editor was opened manually and we don't yet have a blob/ready state,
-  // proactively ask the background to send chunks to this sandbox tab.
+  // Editor opened without a blob/ready state: ask BG to send chunks.
+  // Retry because BG may be dormant on first wake, and a single dropped
+  // message would leave the editor stuck at "Preparing recording..." forever.
   useEffect(() => {
-    let requested = false;
-    if (requested) return; // guard
-    requested = true;
+    const RETRY_DELAYS_MS = [400, 2000, 6000, 14000];
+    let cancelled = false;
+    const timers = [];
 
-    const tryRequest = () => {
+    const tryRequest = async (attempt) => {
+      if (cancelled) return;
       try {
-        if (!contentState.blob && !contentState.ready) {
+        if (contentState.blob || contentState.ready) return;
+        // OPFS-backed: sandbox reads the file directly in makeVideoTab.
+        const { lastRecordingBackendRef } = await chrome.storage.local.get([
+          "lastRecordingBackendRef",
+        ]);
+        if (lastRecordingBackendRef?.backend === "opfs") {
           console.debug(
-            "[Screenity][Sandbox] requesting chunks from background (send-chunks-to-sandbox)",
+            "[Screenity][Sandbox] OPFS-backed recording; skipping SW chunk relay request",
           );
-          // Ask background to send chunks to this tab (background will
-          // determine the target tab or use this sender)
-          chrome.runtime.sendMessage(
-            { type: "send-chunks-to-sandbox" },
-            () => {},
-          );
+          return;
         }
+        console.debug(
+          "[Screenity][Sandbox] requesting chunks from background",
+          { attempt: attempt + 1 },
+        );
+        perfMark("Sandbox send-chunks-to-sandbox.requested", {
+          attempt: attempt + 1,
+        });
+        chrome.runtime.sendMessage(
+          { type: "send-chunks-to-sandbox" },
+          () => {},
+        );
       } catch (err) {}
     };
 
-    // Delay slightly to allow initial message listeners to be registered
-    const t = setTimeout(tryRequest, 400);
-    return () => clearTimeout(t);
+    perfMark("Sandbox boot");
+    RETRY_DELAYS_MS.forEach((ms, i) => {
+      timers.push(setTimeout(() => tryRequest(i), ms));
+    });
+
+    // Long IDB-backed recordings can take minutes to transfer from SW
+    // to sandbox (chunks are base64-encoded and batched). A flat 60s
+    // timeout would fire on healthy slow loads. Re-arm while chunks
+    // keep arriving; only fire when nothing has progressed for 30s.
+    const STUCK_FIRST_CHECK_MS = 60_000;
+    const STUCK_RECHECK_MS = 15_000;
+    const STUCK_NO_PROGRESS_MS = 30_000;
+    const STUCK_MAX_TOTAL_MS = 10 * 60_000;
+    const startAt = Date.now();
+    let lastChunkIndex = 0;
+    let lastProgressAt = startAt;
+    const checkStuck = () => {
+      try {
+        if (cancelled) return;
+        if (loadStateRef.current.ready || loadStateRef.current.hasBlob) {
+          chrome.runtime
+            .sendMessage({
+              type: "diag-forward",
+              event: "sandbox-stuck-timeout-suppressed",
+              data: {
+                afterMs: Date.now() - startAt,
+                ready: loadStateRef.current.ready,
+                hasBlob: loadStateRef.current.hasBlob,
+              },
+            })
+            .catch(() => {});
+          return;
+        }
+        const now = Date.now();
+        const idx = loadStateRef.current.chunkIndex || 0;
+        const count = loadStateRef.current.chunkCount || 0;
+        if (idx > lastChunkIndex) {
+          lastChunkIndex = idx;
+          lastProgressAt = now;
+        }
+        const sinceProgress = now - lastProgressAt;
+        const totalWaited = now - startAt;
+        const chunksFlowing =
+          count > 0 && idx < count && sinceProgress < STUCK_NO_PROGRESS_MS;
+        // After the last chunk lands the sandbox still has to assemble
+        // the blob; give it longer before declaring stuck.
+        const assemblingBlob =
+          count > 0 && idx >= count && sinceProgress < 90_000;
+        if (
+          (chunksFlowing || assemblingBlob) &&
+          totalWaited < STUCK_MAX_TOTAL_MS
+        ) {
+          timers.push(setTimeout(checkStuck, STUCK_RECHECK_MS));
+          return;
+        }
+        chrome.runtime
+          .sendMessage({
+            type: "diag-forward",
+            event: "sandbox-stuck-timeout",
+            data: {
+              afterMs: totalWaited,
+              chunkIndex: idx,
+              chunkCount: count,
+              sinceProgressMs: sinceProgress,
+            },
+          })
+          .catch(() => {});
+        chrome.storage.local.set({
+          editorRecordingError: {
+            ts: Date.now(),
+            sandboxTab: null,
+            error: "editor-stuck",
+            why: chrome.i18n.getMessage("editorStuckDescription"),
+            errorCode: "EDITOR_STUCK_TIMEOUT",
+          },
+        });
+      } catch {}
+    };
+    timers.push(setTimeout(checkStuck, STUCK_FIRST_CHECK_MS));
+
+    return () => {
+      cancelled = true;
+      timers.forEach((t) => clearTimeout(t));
+    };
   }, []);
 
-  // Regenerate frame when entering crop mode to reflect current blob
   useEffect(() => {
     if (
       contentState.mode === "crop" &&
@@ -147,7 +258,7 @@ const Sandbox = () => {
       contentState.blob &&
       contentState.ffmpeg
     ) {
-      // Small delay to ensure state updates have propagated
+      // Let state updates propagate first.
       setTimeout(() => {
         contentState.getFrame();
       }, 50);
@@ -157,11 +268,15 @@ const Sandbox = () => {
   return (
     <div ref={parentRef}>
       <Modal />
+      <Toast />
       <video></video>
-      {/* Render the WaveformGenerator component and pass the ffmpeg instance as a prop */}
       {contentState.ffmpeg &&
         contentState.ready &&
-        contentState.mode === "edit" && <Editor />}
+        contentState.mode === "edit" && (
+          <Suspense fallback={null}>
+            <Editor />
+          </Suspense>
+        )}
       {contentState.mode != "edit" && contentState.ready && <Player />}
       {!contentState.ready && (
         <div className="wrap">
@@ -198,17 +313,20 @@ const Sandbox = () => {
                       chrome.runtime.sendMessage({ type: "restore-recording" });
                     },
                     () => {
-                      chrome.runtime.sendMessage({ type: "report-bug" });
+                      triggerSupportDownload({ source: "sandbox-report-bug" });
+                      chrome.runtime.sendMessage({ type: "report-bug", zipBundled: true });
                     },
-                    null, // image
-                    null, // learnMore
-                    null, // learnMoreLink
-                    false, // colorSafe
+                    null,
+                    null,
+                    null,
+                    false,
                     chrome.i18n.getMessage("getHelpButton"),
                     () => {
+                      triggerSupportDownload({ source: "processing-stuck" });
                       chrome.runtime.sendMessage({
                         type: "report-error",
                         source: "processing-stuck",
+                        zipBundled: true,
                       });
                     },
                   );

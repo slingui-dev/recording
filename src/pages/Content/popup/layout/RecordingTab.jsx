@@ -36,14 +36,15 @@ const RecordingTab = (props) => {
   const [tabRecordingDisabled, setTabRecordingDisabled] = useState(false);
   const [showModalSoon, setShowModalSoon] = useState(false); // 👈 NEW
 
+  // On pages that can't do tab/region capture (chrome://, app pages),
+  // swap the visible selection to "screen" but don't persist; the
+  // user's stored preference rehydrates on the next mount elsewhere.
   useEffect(() => {
     if (tabRecordingDisabled && contentState.recordingType === "region") {
       setContentState((prev) => ({
         ...prev,
         recordingType: "screen",
       }));
-      chrome.storage.local.set({ recordingType: "screen" });
-
       contentState.openToast?.(
         chrome.i18n.getMessage("tabRecordingDisabledToast"),
         4000
@@ -62,8 +63,7 @@ const RecordingTab = (props) => {
         ...prev,
         recordingType: "screen",
       }));
-      chrome.storage.local.set({ recordingType: "screen" });
-
+      // Same rationale as above; no storage write, just content-state.
       contentState.openToast?.(
         chrome.i18n.getMessage("tabRecordingDisabledToast"),
         4000
@@ -99,7 +99,11 @@ const RecordingTab = (props) => {
         className="TabsRoot"
         defaultValue="screen"
         onValueChange={onValueChange}
-        value={contentState.recordingType}
+        value={
+          contentState.recordingType === "tab"
+            ? "region"
+            : contentState.recordingType
+        }
       >
         {contentState.recordingToScene && (
           <div className="projectActiveBanner">

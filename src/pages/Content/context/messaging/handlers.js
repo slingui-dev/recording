@@ -1,4 +1,3 @@
-// src/content/handlers/recordingHandlers.js
 import {
   registerMessage,
   messageRouter,
@@ -8,8 +7,8 @@ import { updateFromStorage } from "../utils/updateFromStorage";
 
 import { checkAuthStatus } from "../utils/checkAuthStatus";
 import { traceStep, setStartFlowOutcome } from "../../../utils/startFlowTrace";
-import JSZip from "jszip";
-
+import { perfMark } from "../../../utils/perfMarks";
+import { triggerSupportDownload } from "../../../utils/triggerSupportDownload";
 const CLOUD_FEATURES_ENABLED =
   process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
 
@@ -60,7 +59,7 @@ export const setupHandlers = () => {
     }
 
     window.postMessage(payload, targetOrigin);
-    // Replay once shortly after first post to reduce race conditions with late listeners.
+    // Replay shortly after to reduce races with late listeners.
     setTimeout(() => {
       window.postMessage(
         {
@@ -109,9 +108,7 @@ export const setupHandlers = () => {
         sceneId: sceneId || null,
         reason: reason || "unknown",
       });
-    } catch {
-      // best effort
-    }
+    } catch {}
   };
 
   const fetchLocalPlaybackSourceFromExtension = async ({
@@ -219,9 +216,7 @@ export const setupHandlers = () => {
           sceneId: source.offer.sceneId || null,
           usedBy: "app-editor",
         });
-      } catch {
-        // best effort
-      }
+      } catch {}
 
       return activeLocalPlaybackSource;
     })();
@@ -264,6 +259,10 @@ export const setupHandlers = () => {
         fallbackReason: fallbackReason || null,
       },
     });
+
+  // Pending scene-create handoffs awaiting reply from the editor page.
+  // Keyed by requestId so concurrent multi-scene flows don't collide.
+  const pendingSceneCreates = new Map();
 
   const onWindowProjectMessage = (event) => {
     if (event.source !== window) return;
@@ -312,6 +311,21 @@ export const setupHandlers = () => {
             handoffAt: Date.now(),
           });
         });
+      return;
+    }
+
+    if (data?.source === "create-scene-from-recording-result") {
+      const pending = pendingSceneCreates.get(data.requestId);
+      if (pending) {
+        pendingSceneCreates.delete(data.requestId);
+        clearTimeout(pending.timeout);
+        pending.respond({
+          ok: !!data.ok,
+          status: data.status ?? 0,
+          body: data.body ?? null,
+          error: data.error || null,
+        });
+      }
       return;
     }
 
@@ -417,16 +431,54 @@ export const setupHandlers = () => {
     revokeActiveLocalPlaybackSource("content-beforeunload");
   });
 
-  // Initialize message router
   if (!window.__screenityHandlersInitialized) {
     messageRouter();
     window.__screenityHandlersInitialized = true;
   }
 
-  // Register content message handlers
-  registerMessage("time", () => {
-    // Timer is driven by ContentState's storage-based tick.
-    // Ignore external timer pushes to avoid jitter/skips.
+  // Bridge from BG to the editor page: BG forwards a scene-create payload
+  // here; we postMessage it into the page (same-origin) so the editor's own
+  // app code does the API call (cookie auth, no CORS, no SW lifecycle).
+  registerMessage("proxy-create-scene", (message, sender) => {
+    if (window.location.origin !== TRUSTED_APP_ORIGIN) {
+      return { ok: false, error: "untrusted-origin" };
+    }
+    const { projectId, requestId, payload } = message || {};
+    if (!projectId || !requestId || !payload) {
+      return { ok: false, error: "invalid-proxy-create-scene" };
+    }
+    return new Promise((resolve) => {
+      const post = () => {
+        window.postMessage(
+          {
+            source: "create-scene-from-recording",
+            projectId,
+            requestId,
+            payload,
+          },
+          TRUSTED_APP_ORIGIN,
+        );
+      };
+      // Repost on a 500ms cadence in case the editor app's listener
+      // isn't mounted yet (?load=true loading shell, async route swap).
+      // The pending entry gates against duplicate replies.
+      post();
+      const repost = setInterval(post, 500);
+      const timeout = setTimeout(() => {
+        if (pendingSceneCreates.has(requestId)) {
+          pendingSceneCreates.delete(requestId);
+          clearInterval(repost);
+          resolve({ ok: false, error: "editor-no-reply-timeout" });
+        }
+      }, 15_000);
+      pendingSceneCreates.set(requestId, {
+        respond: (val) => {
+          clearInterval(repost);
+          resolve(val);
+        },
+        timeout,
+      });
+    });
   });
 
   registerMessage("cloud-restore-available", (message) => {
@@ -439,18 +491,48 @@ export const setupHandlers = () => {
     });
   });
 
-  registerMessage("toggle-popup", () => {
+  registerMessage("time", () => {
+    // Timer is driven by ContentState's storage tick;
+    // ignore external pushes to avoid jitter/skips.
+  });
+
+  registerMessage("toggle-popup", async () => {
+    // Reconcile stale recording-flow state against storage before
+    // showing the popup. The tab may have been suspended during a
+    // recording handoff and missed the storage events that clear
+    // finalizingRecording / pendingRecording locally; without this,
+    // the post-stop loader briefly renders on reopen.
+    let storageReconcile = null;
+    try {
+      const snap = await chrome.storage.local.get([
+        "recording",
+        "restarting",
+      ]);
+      if (!snap.recording && !snap.restarting) {
+        storageReconcile = {
+          finalizingRecording: false,
+          preparingRecording: false,
+          pendingRecording: false,
+          restartingRecording: false,
+          recording: false,
+        };
+        chrome.storage.local.set({ pendingRecording: false }).catch(() => {});
+      }
+    } catch {}
+
     setContentState((prev) => ({
       ...prev,
       showExtension: !prev.showExtension,
       hasOpenedBefore: true,
       showPopup: true,
+      ...(storageReconcile || {}),
     }));
     setTimer(0);
     updateFromStorage();
   });
 
-  registerMessage("ready-to-record", () => {
+  registerMessage("ready-to-record", async () => {
+    perfMark("Content ready-to-record.received");
     traceStep("readyToRecordReceived");
 
     setContentState((prev) => ({
@@ -460,21 +542,32 @@ export const setupHandlers = () => {
       preparingRecording: false,
       pendingRecording: true,
     }));
+
+    // BG is source of truth; reading React default would race the user
+    // setting and produce double beeps.
+    const { countdown: storedCountdown } = await chrome.storage.local.get([
+      "countdown",
+    ]);
     const state = getState();
 
-    if (state.countdown) {
-      // Start countdown
+    if (storedCountdown) {
+      perfMark("Content countdown.start");
       traceStep("countdownStart");
       setContentState((prev) => ({
         ...prev,
         countdownActive: true,
         isCountdownVisible: true,
         countdownCancelled: false,
+        // Latching gate: once the countdown is up, the pre-countdown
+        // loader can never re-show in this session (even during the
+        // brief countdown-end → recording=true storage flip window).
+        // Otherwise the loader bleeds into the captured frame for
+        // region/desktop captures where the stream is already live.
+        countdownEverShown: true,
       }));
       chrome.runtime.sendMessage({ type: "diag-countdown-started" }).catch(() => {});
     } else {
-      // No countdown, start immediately. countdownCancelled is cleared
-      // in startStreaming so it can't be stale here.
+      // countdownCancelled is cleared in startStreaming, so not stale here.
       state.startRecordingAfterCountdown();
     }
   });
@@ -570,8 +663,7 @@ export const setupHandlers = () => {
   registerMessage("recording-ended", async () => {
     const state = getState();
 
-    // Double-check with storage before resetting UI
-    // This prevents false positives when service worker restarts with stale state
+    // SW restart can leave stale state; double-check storage before reset.
     const { recording, recorderSession, pendingRecording } =
       await chrome.storage.local.get([
         "recording",
@@ -582,9 +674,7 @@ export const setupHandlers = () => {
     const isActuallyRecording =
       recording || (recorderSession && recorderSession.status === "recording");
 
-    // Only reset if we're truly not recording
     if (isActuallyRecording || pendingRecording) {
-      // Recording is actually still active - ignore this stale message
       console.warn(
         "Ignoring stale recording-ended message - recording still active",
       );
@@ -610,8 +700,37 @@ export const setupHandlers = () => {
       ...prev,
       pendingRecording: false,
       preparingRecording: false,
+      recording: false,
+      paused: false,
+      time: 0,
+      timer: 0,
       pipEnded: false,
     }));
+    const state = getState();
+    if (state && typeof state.openModal === "function") {
+      state.openModal(
+        chrome.i18n.getMessage("recordingFailedModalTitle"),
+        chrome.i18n.getMessage("recordingFailedModalDescription"),
+        chrome.i18n.getMessage("permissionsModalDismiss"),
+        null,
+        () => {},
+        () => {},
+        null,
+        null,
+        null,
+        false,
+        chrome.i18n.getMessage("getHelpButton"),
+        () => {
+          triggerSupportDownload({ source: "recording-failed" });
+          chrome.runtime.sendMessage({
+            type: "report-error",
+            source: "recording-failed",
+            errorCode: "REC_START_FAILED",
+            zipBundled: true,
+          });
+        },
+      );
+    }
   });
 
   registerMessage("start-stream", () => {
@@ -675,7 +794,7 @@ export const setupHandlers = () => {
 
   registerMessage("cancel-recording", () => {
     const state = getState();
-    state.dismissRecording();
+    state.dismissRecording("cancel-recording-cmd");
   });
 
   registerMessage("pause-recording", () => {
@@ -741,22 +860,24 @@ export const setupHandlers = () => {
       chrome.i18n.getMessage("permissionsModalDismiss"),
       null,
       () => {
-        state.dismissRecording();
+        state.dismissRecording("stream-error");
       },
       () => {
-        state.dismissRecording();
+        state.dismissRecording("stream-error");
       },
-      null, // image
-      null, // learnMore
-      null, // learnMoreLink
-      false, // colorSafe
+      null,
+      null,
+      null,
+      false,
       chrome.i18n.getMessage("getHelpButton"),
       () => {
+        triggerSupportDownload({ source: "stream-error" });
         chrome.runtime.sendMessage({
           type: "report-error",
           errorCode,
           errorWhy,
           source: "stream-error",
+          zipBundled: true,
         });
       },
     );
@@ -764,14 +885,12 @@ export const setupHandlers = () => {
 
   registerMessage("stream-ended-warning", (message) => {
     const state = getState();
-    // Show a toast warning but don't stop the recording
-    // The user can decide whether to continue or stop manually
     if (state.openToast) {
       state.openToast(
         message.message ||
           chrome.i18n.getMessage("streamEndedWarningToast"),
         () => {},
-        10000, // Show for 10 seconds
+        10000,
       );
     }
   });
@@ -790,10 +909,24 @@ export const setupHandlers = () => {
       chrome.i18n.getMessage("permissionsModalDismiss"),
       null,
       () => {
-        state.dismissRecording();
+        state.dismissRecording("backup-error");
       },
       () => {
-        state.dismissRecording();
+        state.dismissRecording("backup-error");
+      },
+      null,
+      null,
+      null,
+      false,
+      chrome.i18n.getMessage("getHelpButton"),
+      () => {
+        triggerSupportDownload({ source: "backup-error" });
+        chrome.runtime.sendMessage({
+          type: "report-error",
+          source: "backup-error",
+          errorCode: "BACKUP_PERMISSION_FAILED",
+          zipBundled: true,
+        });
       },
     );
   });
@@ -858,16 +991,32 @@ export const setupHandlers = () => {
         fastRecorder: fastRecorderData,
       };
 
-      const zip = new JSZip();
-      zip.file("troubleshooting.json", JSON.stringify(data));
-      const blob = await zip.generateAsync({ type: "blob" });
+      // Hand the zip step off to BG (see Background `make-zip` handler).
+      // No JSZip in content; content collects fields, BG runs JSZip,
+      // content downloads the resulting ArrayBuffer.
+      const filename = "screenity-troubleshooting.zip";
+      const resp = await chrome.runtime.sendMessage({
+        type: "make-zip",
+        files: { "troubleshooting.json": JSON.stringify(data) },
+        filename,
+      });
+      if (!resp?.ok || typeof resp.base64 !== "string") {
+        console.warn("[Screenity] troubleshooting zip failed:", resp?.error);
+        return;
+      }
+      const bin = atob(resp.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "application/zip" });
       const url = window.URL.createObjectURL(blob);
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = "screenity-troubleshooting.zip";
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      a.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 
       chrome.runtime.sendMessage({ type: "indexed-db-download" });
     };
@@ -885,8 +1034,16 @@ export const setupHandlers = () => {
       null,
       null,
       true,
-      false,
-      () => {},
+      chrome.i18n.getMessage("getHelpButton"),
+      () => {
+        triggerSupportDownload({ source: "fast-recorder-hard-fail" });
+        chrome.runtime.sendMessage({
+          type: "report-error",
+          source: "fast-recorder-hard-fail",
+          errorCode: "FAST_RECORDER_HARD_FAIL",
+          zipBundled: true,
+        });
+      },
     );
   });
 
@@ -898,11 +1055,9 @@ export const setupHandlers = () => {
         updateFromStorage(true, sender.id);
       }
     } else {
-      // After navigation, PiP is always destroyed (the iframe that owned it
-      // was torn down with the old page).  Set pipEnded: true so the inline
-      // camera overlay is visible immediately.  If the camera iframe
-      // successfully re-enters PiP later, a "pip-started" message will flip
-      // this back to false.
+      // Post-navigation, PiP is destroyed with the old iframe. Set pipEnded
+      // so the inline camera overlay shows immediately; "pip-started" will
+      // flip it back if the new iframe re-enters PiP.
       setContentState((prev) => ({
         ...prev,
         showExtension: true,
@@ -923,21 +1078,76 @@ export const setupHandlers = () => {
     }));
   });
 
-  registerMessage("reopen-popup-multi", (message) => {
+  registerMessage("reopen-popup-multi", async (message) => {
+    // Read multi-state from storage before setContentState so the
+    // popup renders with multiMode/multiSceneCount correct on first
+    // paint. The old fire-and-forget updateFromStorage() ran AFTER
+    // setContentState, which raced and could leave the popup
+    // showing the "Multi recording" switch instead of "Done" (stale
+    // for hundreds of ms, or persistent across tabs).
+    let storedMulti = {};
+    try {
+      storedMulti = await chrome.storage.local.get([
+        "multiMode",
+        "multiSceneCount",
+        "multiProjectId",
+        "multiLastSceneId",
+        "projectId",
+      ]);
+    } catch {}
+    // Multi-scene stop choreography. Scene-create is already done
+    // server-side by now. Order: clear loader + recording state
+    // (including finalizingRecording, or the loader sticks until the
+    // 30s watchdog), toast immediately, popup ~700ms later so the
+    // toast settles first. Read multi state from storage; contentState
+    // can be stale on a tab that didn't run the recording.
+    const isMulti = Boolean(storedMulti.multiMode);
     setContentState((prev) => ({
       ...prev,
       showExtension: true,
       showPopup: true,
+      finalizingRecording: false,
       preparingRecording: false,
+      pendingRecording: false,
+      recording: false,
+      paused: false,
+      time: 0,
+      timer: 0,
+      timeWarning: false,
+      tabCaptureFrame: false,
+      pipEnded: false,
+      // Seed multi-mode + scene count + project id from storage. This
+      // is the field set that gates the popup's "Done" button (uses
+      // multiMode + multiSceneCount > 0); if either is stale, the
+      // user sees the "Multi recording" switch instead of "Done".
+      multiMode: isMulti,
+      multiSceneCount: storedMulti.multiSceneCount || 0,
+      multiProjectId: storedMulti.multiProjectId || null,
+      multiLastSceneId: storedMulti.multiLastSceneId || null,
+      projectId: storedMulti.projectId || prev.projectId,
+      drawingMode: isMulti ? prev.drawingMode : false,
+      blurMode: isMulti ? prev.blurMode : false,
+      toolbarMode: isMulti ? prev.toolbarMode : "",
+      cursorMode: isMulti ? prev.cursorMode : "none",
+      cursorEffects: isMulti ? prev.cursorEffects : [],
+      cameraActive: false,
     }));
+    setTimer(0);
+    try {
+      const elements = document.querySelectorAll(".screenity-blur");
+      elements.forEach((el) => el.classList.remove("screenity-blur"));
+    } catch {}
     updateFromStorage(false, message.senderId);
 
-    setTimeout(() => {
-      const state = getState();
-      if (state.openToast) {
-        state.openToast(chrome.i18n.getMessage("addedToMultiToast"), () => {});
-      }
-    }, 1000);
+    // Toast on top; auto-dismisses in 5s.
+    const state = getState();
+    if (state.openToast) {
+      state.openToast(
+        chrome.i18n.getMessage("addedToMultiToast"),
+        () => {},
+        5000,
+      );
+    }
   });
 
   registerMessage("open-popup-project", (message) => {
@@ -956,16 +1166,17 @@ export const setupHandlers = () => {
     setTimeout(() => {
       const state = getState();
       if (state.openToast) {
+        // Explicit 5s lifetime; see addedToMultiToast above.
         state.openToast(
           chrome.i18n.getMessage("readyRecordSceneToast"),
           () => {},
+          5000,
         );
       }
     }, 1000);
   });
 
   registerMessage("time-warning", () => {
-    // Only trigger when actively recording
     const state = getState();
 
     if (state.recording && !state.paused) {
@@ -985,7 +1196,6 @@ export const setupHandlers = () => {
   });
   registerMessage("time-stopped", () => {
     const state = getState();
-    // Only trigger when actively recording
     if (state.recording && !state.paused) {
       setContentState((prev) => ({
         ...prev,
@@ -1025,7 +1235,6 @@ export const setupHandlers = () => {
   });
   registerMessage("check-auth", async (message) => {
     if (!CLOUD_FEATURES_ENABLED) {
-      // Default to local user
       const { recording } = await chrome.storage.local.get("recording");
 
       setContentState((prev) => ({
@@ -1057,7 +1266,7 @@ export const setupHandlers = () => {
     }));
 
     if (result.authenticated) {
-      // Client-side zoom is not available for authenticated users.
+      // Client-side zoom is unavailable for authenticated users.
       setContentState((prev) => ({
         ...prev,
         onboarding: false,
@@ -1072,8 +1281,14 @@ export const setupHandlers = () => {
     }
   });
   registerMessage("update-project-loading", (message, sender) => {
+    // Editor listeners gate on projectId; drop it and the handoff
+    // loader never surfaces.
     window.postMessage(
-      { source: "update-project-loading", multiMode: message.multiMode },
+      {
+        source: "update-project-loading",
+        multiMode: message.multiMode,
+        projectId: message.projectId || null,
+      },
       "*",
     );
 

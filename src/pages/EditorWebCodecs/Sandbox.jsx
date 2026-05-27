@@ -1,18 +1,26 @@
 import React, { useEffect, useRef, useState } from "react";
 
-import addAudioToVideo from "./utils/addAudioToVideo";
-import addMeetingAudioChunksToVideo from "./utils/addMeetingAudioChunksToVideo";
-import convertWebmToMp4 from "./utils/convertWebmToMp4";
-import cropVideo from "./utils/cropVideo";
-import cutVideo from "./utils/cutVideo";
-import muteVideo from "./utils/muteVideo";
-import reencodeVideo from "./utils/reencodeVideo";
-import toGIF from "./utils/toGIF";
-import getFrame from "./utils/getFrame";
-import hasAudio from "./utils/hasAudio";
-import convertMp4ToWebm from "./utils/convertMp4ToWebm";
-import blobToArrayBuffer from "./utils/blobToArrayBuffer";
 import { getUser, login } from "../../utils/slingui-auth";
+
+// Lazy-load each video op so editorwebcodecs.html mounts without
+// pulling the ~630KB mediabunny chunk until the user invokes one.
+const lazyUtil = (importFn) =>
+  (...args) =>
+    importFn().then((m) => m.default(...args));
+const addAudioToVideo = lazyUtil(() => import("./utils/addAudioToVideo"));
+const addMeetingAudioChunksToVideo = lazyUtil(() =>
+  import("./utils/addMeetingAudioChunksToVideo"),
+);
+const convertWebmToMp4 = lazyUtil(() => import("./utils/convertWebmToMp4"));
+const cropVideo = lazyUtil(() => import("./utils/cropVideo"));
+const cutVideo = lazyUtil(() => import("./utils/cutVideo"));
+const muteVideo = lazyUtil(() => import("./utils/muteVideo"));
+const reencodeVideo = lazyUtil(() => import("./utils/reencodeVideo"));
+const toGIF = lazyUtil(() => import("./utils/toGIF"));
+const getFrame = lazyUtil(() => import("./utils/getFrame"));
+const hasAudio = lazyUtil(() => import("./utils/hasAudio"));
+const convertMp4ToWebm = lazyUtil(() => import("./utils/convertMp4ToWebm"));
+const blobToArrayBuffer = lazyUtil(() => import("./utils/blobToArrayBuffer"));
 
 const API_BASE = process.env.SCREENITY_API_BASE_URL || "https://api.slingui.com";
 
@@ -436,6 +444,7 @@ const Sandbox = () => {
             base64,
             topLevel: true,
             fromAudio: true,
+            skipReencode: true,
             _opId: message._opId,
           });
           break;
@@ -483,6 +492,9 @@ const Sandbox = () => {
         }
 
         case "compress-video": {
+          if (typeof message.base64 !== "string" || !message.base64.startsWith("data:")) {
+            throw new Error("compress-video: expected data: URL");
+          }
           const rawBlob = await fetch(message.base64).then((r) => r.blob());
 
           const compressed = await reencodeVideo(
@@ -506,6 +518,9 @@ const Sandbox = () => {
         }
 
         case "base64-to-blob": {
+          if (typeof message.base64 !== "string" || !message.base64.startsWith("data:")) {
+            throw new Error("base64-to-blob: expected data: URL");
+          }
           const rawBlob = await fetch(message.base64).then((r) => r.blob());
 
           const header = await rawBlob.slice(4, 8).text();
@@ -664,13 +679,33 @@ const Sandbox = () => {
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
+      const errStack = error instanceof Error ? error.stack : null;
+
       if (message.type === "apply-meeting-audio-chunks") {
         setIsPostStopProcessing(false);
       }
+
+      // Error props are non-enumerable; JSON.stringify drops them.
+      console.error("[Screenity][EditorWebCodecs] op failed", {
+        type: message.type,
+        message: errMsg,
+        stack: errStack,
+        opId: message._opId,
+      });
+
       if (errMsg.includes("too long")) {
         sendMessage({ type: "edit-too-long", _opId: message._opId });
+      } else if (errMsg.includes("background-audio-too-large")) {
+        sendMessage({ type: "audio-too-large", _opId: message._opId });
       } else {
-        sendMessage({ type: "ffmpeg-error", error: JSON.stringify(error), _opId: message._opId });
+        sendMessage({
+          type: "ffmpeg-error",
+          error: errMsg || "unknown",
+          errorStack: errStack,
+          errorMessage: errMsg,
+          opType: message.type,
+          _opId: message._opId,
+        });
       }
     }
   };
@@ -851,6 +886,70 @@ const Sandbox = () => {
   };
 
   const showBlockingSplash = isAuthLoading || isPostStopProcessing;
+
+  // Bridge editor-force-close from BG to the sandboxed iframe via
+  // postMessage; sandbox.html has no chrome.runtime access. Also
+  // clear the parent's beforeunload if set.
+  useEffect(() => {
+    const onRuntimeMessage = (message, _sender, sendResponse) => {
+      if (message?.type !== "editor-force-close") return;
+      try {
+        window.onbeforeunload = null;
+      } catch {}
+      try {
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: "editor-force-close" },
+          "*",
+        );
+      } catch {}
+      try {
+        sendResponse?.({ ok: true });
+      } catch {}
+    };
+    chrome.runtime.onMessage.addListener(onRuntimeMessage);
+    return () => chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+  }, []);
+
+  useEffect(() => {
+    const storageHandler = (changes, areaName) => {
+      if (areaName !== "local") return;
+      if (!changes.editorRecordingError) return;
+      const payload = changes.editorRecordingError.newValue;
+      if (!payload) return;
+      try {
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: "recording-error-from-parent", payload },
+          "*",
+        );
+      } catch {}
+    };
+    chrome.storage.onChanged.addListener(storageHandler);
+    const respondWithLatest = () => {
+      chrome.storage.local.get(["editorRecordingError"]).then((res) => {
+        if (!res?.editorRecordingError) return;
+        try {
+          iframeRef.current?.contentWindow?.postMessage(
+            {
+              type: "recording-error-from-parent",
+              payload: res.editorRecordingError,
+            },
+            "*",
+          );
+        } catch {}
+      });
+    };
+    const requestHandler = (event) => {
+      if (event?.data?.type === "request-recording-error-state") {
+        respondWithLatest();
+      }
+    };
+    window.addEventListener("message", requestHandler);
+    respondWithLatest();
+    return () => {
+      chrome.storage.onChanged.removeListener(storageHandler);
+      window.removeEventListener("message", requestHandler);
+    };
+  }, []);
 
   return (
     <div>

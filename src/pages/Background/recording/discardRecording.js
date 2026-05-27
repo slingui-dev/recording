@@ -3,11 +3,33 @@ import { removeTab } from "../tabManagement/removeTab";
 import { discardOffscreenDocuments } from "../offscreen/discardOffscreenDocuments";
 import { resetWatchdogState } from "./resetWatchdogState";
 
-export const discardRecording = async () => {
-  sendMessageRecord({ type: "dismiss-recording" });
+export const discardRecording = async ({
+  reason = "discard",
+  projectId = null,
+} = {}) => {
+  // Back-to-back cross-talk guard: a discard issued for a previous recording
+  // must not tear down the BG state of a newer one. If this discard provably
+  // targets a different project than the one currently recording, skip it.
+  // Unknown projectId (legacy callers / pre-project dismiss) is honored.
+  if (projectId) {
+    try {
+      const { projectId: currentProjectId } = await chrome.storage.local.get([
+        "projectId",
+      ]);
+      if (currentProjectId && currentProjectId !== projectId) {
+        console.warn(
+          "[Screenity][BG] discardRecording skipped: project mismatch",
+          { reason, target: projectId, current: currentProjectId },
+        );
+        return;
+      }
+    } catch {}
+  }
+
+  sendMessageRecord({ type: "dismiss-recording", reason, projectId });
   chrome.action.setIcon({ path: "assets/icon-34.png" });
 
-  // Await teardown before flipping recording:false - otherwise handleAlarm fires against a torn-down offscreen.
+  // await teardown before recording:false; otherwise handleAlarm fires against torn-down offscreen
   try {
     await discardOffscreenDocuments();
   } catch {}
@@ -20,7 +42,6 @@ export const discardRecording = async () => {
       "recordingTab",
     ]);
 
-  // Close the recorder tab if it's an extension page
   if (recordingTab) {
     try {
       const tab = await chrome.tabs.get(recordingTab);
@@ -30,7 +51,7 @@ export const discardRecording = async () => {
     } catch {}
   }
 
-  // Keep multiMode on but reset project state if no scenes were saved
+  // keep multiMode but reset project state when no scenes saved yet
   const multiState = multiMode
     ? {
         multiMode: true,
@@ -54,6 +75,12 @@ export const discardRecording = async () => {
     pendingRecording: false,
     offscreen: false,
     postStopEditorOpened: false,
+    region: false,
+    customRegion: false,
+    memoryError: false,
+    backup: false,
+    backupSetup: false,
+    backupTab: null,
     ...multiState,
   });
   chrome.storage.local.set({ pipForceClose: Date.now() });
@@ -64,7 +91,10 @@ export const discardRecording = async () => {
   chrome.runtime.sendMessage({ type: "turn-off-pip" });
 };
 
-export const handleDismissRecordingTab = async () => {
+export const handleDismissRecordingTab = async (message = {}) => {
   chrome.runtime.sendMessage({ type: "discard-backup" });
-  discardRecording();
+  discardRecording({
+    reason: message?.reason || "dismiss-recording-tab",
+    projectId: message?.projectId || null,
+  });
 };

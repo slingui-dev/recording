@@ -8,11 +8,28 @@ const TerserPlugin = require("terser-webpack-plugin");
 
 const isDev = env.NODE_ENV === "development";
 
+// SCREENITY_BS_BUILD=1: slim build for BrowserStack inline-CRX size limit.
+// drops post-recording UI + WASM. recording + camera paths preserved.
+const isBsBuild = process.env.SCREENITY_BS_BUILD === "1";
+const BS_DROPPED_ENTRIES = new Set([
+  "editorviewer",
+  "cloudrecorder",
+  "backup",
+  "download",
+  "waveform",
+  "setup",
+  "playground",
+]);
+
 const ASSET_PATH = process.env.ASSET_PATH || "/";
 
 if (process.env.SCREENITY_SKIP_ENV) {
   // open-source release build, no dotenv
-} else if (isDev) {
+} else if (isDev || process.env.SCREENITY_USE_LOCAL_ENV === "1") {
+  // SCREENITY_USE_LOCAL_ENV=1 lets you do a NODE_ENV=production
+  // (minified, fast) build that still points at localhost; useful
+  // for testing login/auth flows against a local dev server while
+  // keeping the small prod-style bundle.
   require("dotenv").config({ path: ".env.local" });
 } else {
   require("dotenv").config({ path: ".env.production" });
@@ -23,6 +40,13 @@ const entryPoints = {
   background: path.join(__dirname, "src", "pages", "Background", "index.js"),
   contentScript: path.join(__dirname, "src", "pages", "Content", "index.jsx"),
   recorder: path.join(__dirname, "src", "pages", "Recorder", "index.jsx"),
+  recorderkeepalive: path.join(
+    __dirname,
+    "src",
+    "pages",
+    "Recorder",
+    "recorderKeepalive.js"
+  ),
   cloudrecorder: path.join(
     __dirname,
     "src",
@@ -68,12 +92,50 @@ const entryPoints = {
     "index.jsx"
   ),
   backup: path.join(__dirname, "src", "pages", "Backup", "index.jsx"),
+  remuxoffscreen: path.join(
+    __dirname,
+    "src",
+    "pages",
+    "RemuxOffscreen",
+    "index.js"
+  ),
+  remuxworker: path.join(
+    __dirname,
+    "src",
+    "pages",
+    "RemuxOffscreen",
+    "worker.js"
+  ),
+  recorderopfsworker: path.join(
+    __dirname,
+    "src",
+    "pages",
+    "Recorder",
+    "recorderStorage",
+    "opfs",
+    "writerWorker.js"
+  ),
 };
+
+if (isBsBuild) {
+  for (const k of Object.keys(entryPoints)) {
+    if (BS_DROPPED_ENTRIES.has(k)) delete entryPoints[k];
+  }
+  console.log(
+    `[webpack] SCREENITY_BS_BUILD: dropped entries [${[...BS_DROPPED_ENTRIES].join(",")}]`,
+  );
+}
 
 const htmlPlugins = Object.keys(entryPoints)
   .map((entryName) => {
-    // Skip background script as it doesn't need an HTML file
-    if (entryName === "background" || entryName === "contentScript") {
+    // Skip background script and worker bundles; they have no HTML page.
+    if (
+      entryName === "background" ||
+      entryName === "contentScript" ||
+      entryName === "remuxworker" ||
+      entryName === "recorderopfsworker" ||
+      entryName === "recorderkeepalive"
+    ) {
       return null;
     }
 
@@ -84,6 +146,7 @@ const htmlPlugins = Object.keys(entryPoints)
       audiooffscreen: "AudioOffscreen",
       editorwebcodecs: "EditorWebCodecs",
       editorviewer: "EditorViewer",
+      remuxoffscreen: "RemuxOffscreen",
     };
 
     const folderName =
@@ -98,11 +161,22 @@ const htmlPlugins = Object.keys(entryPoints)
       "index.html"
     );
 
+    // Inject keepalive before the main bundle so audio/locks/mediaSession
+    // signals are live before heavy parse; otherwise hidden-tab throttling
+    // drops encoders to ~5fps for the first 15s. Manual sort because auto
+    // sort flips order based on the chunk graph.
+    const needsKeepalive =
+      entryName === "recorder" || entryName === "cloudrecorder";
+    const chunks = needsKeepalive
+      ? ["recorderkeepalive", entryName]
+      : [entryName];
+
     const options = {
       template: templatePath,
       filename: `${entryName}.html`,
-      chunks: [entryName],
+      chunks,
       cache: true,
+      ...(needsKeepalive ? { chunksSortMode: "manual" } : {}),
     };
 
     // Add favicon only for backup page
@@ -165,6 +239,9 @@ const config = {
 
   output: {
     filename: "[name].bundle.js",
+    // chrome rejects extension files starting with "_". force a "chunk."
+    // prefix so webpack's default _f608.bundle.js etc. don't trip it.
+    chunkFilename: "chunk.[name].[contenthash:8].bundle.js",
     path: path.resolve(__dirname, "build"),
     clean: !isDev, // Only wipe build dir in production; dev keeps it to avoid re-copying 40MB of assets
     publicPath: ASSET_PATH,
@@ -215,7 +292,7 @@ const config = {
       "react-dom": path.resolve("./node_modules/react-dom"),
       "react/jsx-runtime": path.resolve("./node_modules/react/jsx-runtime"),
     },
-    // Code extensions first — image/font extensions are only needed for explicit imports with extensions
+    // Code extensions first; image/font extensions are only needed for explicit imports with extensions
     extensions: [".js", ".jsx", ".ts", ".tsx", ".css"],
   },
   plugins: [
@@ -258,12 +335,14 @@ const config = {
               ...JSON.parse(content.toString()),
             };
 
-            if (extensionKey) {
-              manifest.key = extensionKey;
-            }
-
-            // Strip dev-only origins from production builds.
-            if (!isDev && manifest.externally_connectable?.matches) {
+            // Strip dev-only origins from prod builds. The
+            // SCREENITY_USE_LOCAL_ENV escape hatch keeps them in for
+            // build:local (prod-optimized bundle on localhost APIs).
+            if (
+              !isDev &&
+              process.env.SCREENITY_USE_LOCAL_ENV !== "1" &&
+              manifest.externally_connectable?.matches
+            ) {
               manifest.externally_connectable.matches =
                 manifest.externally_connectable.matches.filter(
                   (m) =>
@@ -283,6 +362,13 @@ const config = {
           from: "src/assets/",
           to: path.join(__dirname, "build/assets"),
           force: true,
+          filter: isBsBuild
+            ? (resourcePath) =>
+                !/ffmpeg-core\.wasm$/.test(resourcePath) &&
+                !/vision_wasm.*\.wasm$/.test(resourcePath) &&
+                !/\/videos\//.test(resourcePath) &&
+                !/pin\.gif$/.test(resourcePath)
+            : undefined,
         },
         {
           from: "src/_locales/",
@@ -303,6 +389,31 @@ if (isDev) {
     minimizer: [
       new TerserPlugin({
         extractComments: false,
+        // Parallelize across CPU cores. Default is os.cpus().length-1
+        // but being explicit makes the intent clear.
+        parallel: true,
+        terserOptions: {
+          ecma: 2020,
+          compress: {
+            ecma: 2020,
+            // Two compress passes catches more dead code than one
+            // (DCE during pass 1 enables further inlining in pass 2).
+            // Adds ~10-20% to build time, shaves 3-7% off bundle size.
+            passes: 2,
+            // strip log/debug/info in prod, keep warn/error for support.
+            // Array form catches calls inside callbacks too.
+            drop_console: ["log", "debug", "info"],
+            pure_funcs: ["console.log", "console.debug", "console.info"],
+          },
+          mangle: {
+            // Off; would mangle _-prefixed properties only. Measure
+            // before flipping.
+          },
+          format: {
+            // Drop all comments, including @preserve from deps.
+            comments: false,
+          },
+        },
       }),
     ],
   };

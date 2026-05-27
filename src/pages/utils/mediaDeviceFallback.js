@@ -2,8 +2,25 @@ const DEVICE_ID_ERRORS = new Set(["OverconstrainedError", "NotFoundError"]);
 
 const isDeviceIdError = (err) => err && DEVICE_ID_ERRORS.has(err.name);
 
-const cloneConstraints = (constraints) =>
-  JSON.parse(JSON.stringify(constraints || {}));
+// Bluetooth/USB audio devices commonly return NotReadableError for 1-2s
+// after wake/connect while the OS spins up the endpoint. A short retry
+// turns the "headphones didn't record" complaint into a one-second pause.
+const TRANSIENT_RETRY_DELAYS_MS = [350, 700];
+const isTransientReadError = (err) =>
+  err && (err.name === "NotReadableError" || err.name === "AbortError");
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Constraints can contain nested objects (deviceId.exact) so a deep clone is required.
+const cloneConstraints = (constraints) => {
+  const src = constraints || {};
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(src);
+    } catch {}
+  }
+  return JSON.parse(JSON.stringify(src));
+};
 
 const updateConstraintsDeviceId = (constraints, kind, deviceId) => {
   if (!constraints || !deviceId) return;
@@ -45,12 +62,29 @@ export const resolveDeviceIdByLabel = async (kind, desiredLabel) => {
   return matches[0].deviceId;
 };
 
+const attemptGetUserMediaWithTransientRetry = async (constraints) => {
+  let lastErr = null;
+  const attempts = [0, ...TRANSIENT_RETRY_DELAYS_MS];
+  for (let i = 0; i < attempts.length; i += 1) {
+    if (attempts[i] > 0) await sleep(attempts[i]);
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      lastErr = err;
+      // Permission/overconstrained errors must bail immediately so
+      // callers can run their label fallback or surface the prompt.
+      if (!isTransientReadError(err)) break;
+    }
+  }
+  throw lastErr;
+};
+
 export const getUserMediaWithFallback = async ({
   constraints,
   fallbacks = [],
 }) => {
   try {
-    return await navigator.mediaDevices.getUserMedia(constraints);
+    return await attemptGetUserMediaWithTransientRetry(constraints);
   } catch (err) {
     if (!isDeviceIdError(err) || fallbacks.length === 0) {
       throw err;
@@ -76,7 +110,9 @@ export const getUserMediaWithFallback = async ({
       "[Screenity] Retrying getUserMedia with label-matched device IDs"
     );
 
-    const stream = await navigator.mediaDevices.getUserMedia(nextConstraints);
+    const stream = await attemptGetUserMediaWithTransientRetry(
+      nextConstraints,
+    );
     resolved.forEach(({ resolvedId, onResolved }) => {
       if (typeof onResolved === "function") {
         onResolved(resolvedId);

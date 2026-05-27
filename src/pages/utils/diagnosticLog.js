@@ -5,10 +5,10 @@
 
 const MAX_SESSIONS = 5;
 const MAX_EVENTS = 100;
-const FLUSH_EVERY_N = 10; // flush to storage every N events
+const FLUSH_EVERY_N = 10;
 
-let _log = null; // in-memory mirror of diagnosticLog
-let _dirty = 0; // events written since last flush
+let _log = null;
+let _dirty = 0;
 
 const now = () => Date.now();
 
@@ -26,15 +26,13 @@ const flush = async () => {
   _dirty = 0;
   try {
     await chrome.storage.local.set({ diagnosticLog: _log });
-  } catch {
-    // SW may be shutting down — best-effort
-  }
+  } catch {}
 };
 
 const maybeFlush = () => {
   _dirty += 1;
   if (_dirty >= FLUSH_EVERY_N) {
-    flush(); // fire-and-forget
+    flush();
   }
 };
 
@@ -63,7 +61,6 @@ export const initDiagSession = async (config = {}) => {
 
   _log.sessions.push(session);
 
-  // Trim to MAX_SESSIONS
   while (_log.sessions.length > MAX_SESSIONS) {
     _log.sessions.shift();
   }
@@ -75,7 +72,7 @@ export const initDiagSession = async (config = {}) => {
 /** Append an event to the current open session. */
 export const diagEvent = (eventType, data) => {
   const s = currentSession();
-  if (!s) return; // no open session
+  if (!s) return;
 
   const entry = {
     t: now() - s.startedAt,
@@ -87,7 +84,6 @@ export const diagEvent = (eventType, data) => {
 
   s.events.push(entry);
 
-  // Ring-buffer trim
   while (s.events.length > MAX_EVENTS) {
     s.events.shift();
   }
@@ -122,6 +118,26 @@ export const diagEvent = (eventType, data) => {
     "drive-save-fail",
     "drive-auth-fail",
     "editor-load-ready",
+    // OPFS load + video element handoff: critical for diagnosing
+    // editor-stuck-at-90% reports. If any of these is the last event
+    // before a hang, that's the step that hung.
+    "sandbox-opfs-reader-open-done",
+    "sandbox-opfs-readblob-start",
+    "sandbox-opfs-readblob-done",
+    "sandbox-opfs-readblob-slow-finalize",
+    "sandbox-opfs-materialize-start",
+    "sandbox-opfs-materialize-done",
+    "sandbox-opfs-materialize-fail",
+    "sandbox-opfs-arraybuffer-done",
+    "sandbox-opfs-materialize-skipped",
+    "sandbox-video-src-set",
+    "sandbox-video-loadedmetadata",
+    "sandbox-video-load-error",
+    "sandbox-opfs-wait-finalize-timeout",
+    "sandbox-opfs-writer-dead-detected",
+    "sandbox-opfs-materialize-deferred",
+    "session-deferred-end",
+    "editor-route-decision",
   ];
   if (ALWAYS_FLUSH.includes(eventType)) {
     flush();
@@ -160,6 +176,20 @@ export const getErrorSnapshot = async () => {
     "fastRecorderDisabledAt",
     "memoryError",
     "recordingAttemptId",
+    // WebCodecs failure/retry telemetry; the rich payload that turns
+    // "my recording failed" into a precise diagnosis (zero-frame vs
+    // configure-failed vs flush-timeout vs HW-encoder-quota).
+    "lastWebCodecsFailureCode",
+    "lastWebCodecsFailureDetail",
+    "lastWebCodecsSwRetry",
+    "lastWebCodecsFailureAt",
+    // Recorder-level stop classification + mid-stream source-end
+    // diagnostic. Cover the non-WebCodecs and "encoder ran fine but
+    // source disappeared" failure shapes.
+    "lastRecorderStopReason",
+    "lastRecorderStopAt",
+    "lastTrackEndEvent",
+    "lastTrackEndedEvent",
   ];
   try {
     return await chrome.storage.local.get(keys);
@@ -190,6 +220,33 @@ export const getStorageFlags = async () => {
     "lowStorageAbortAt",
     "lowStorageAbortChunks",
     "editorLoadTimeoutAt",
+    "lastRestartFlow",
+    "restartFlowHistory",
+    "lastFirstChunkWatchdog",
+    // Cloud recorder lifecycle (Pro flow). Surfaces the recorder session
+    // state machine + the message-flow flags needed to debug double-prompt
+    // / silent-close scenarios.
+    "recorderSession",
+    "recorderPipelineState",
+    "lastStartRecordingTabMessage",
+    "lastRecordingBackendRef",
+    "screenTrackLog",
+    "cloudRestartPhase",
+    "cloudRestartHistory",
+    "tabPreferred",
+    "tabStreamIdCache",
+    "region",
+    "customRegion",
+    "multiMode",
+    "multiProjectId",
+    "multiSceneCount",
+    "multiLastSceneId",
+    "sceneId",
+    "sceneIdStatus",
+    "projectId",
+    "isLoggedIn",
+    "isSubscribed",
+    "proSubscription",
   ];
   try {
     return await chrome.storage.local.get(keys);

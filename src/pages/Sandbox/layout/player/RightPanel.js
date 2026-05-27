@@ -10,15 +10,13 @@ import { login, logout, getUser } from "../../../../utils/slingui-auth";
 const EXT_URL =
   "chrome-extension://" + chrome.i18n.getMessage("@@extension_id") + "/assets/";
 
-// Components
 import CropUI from "../editor/CropUI";
 import AudioUI from "../editor/AudioUI";
 
-// Context
-import { ContentStateContext } from "../../context/ContentState"; // Import the ContentState context
+import { ContentStateContext } from "../../context/ContentState";
 
 const RightPanel = () => {
-  const [contentState, setContentState] = useContext(ContentStateContext); // Access the ContentState context
+  const [contentState, setContentState] = useContext(ContentStateContext);
   const [slingUser, setSlingUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -63,7 +61,6 @@ const RightPanel = () => {
     contentStateRef.current = contentState;
   }, [contentState]);
 
-  // Returns a context-specific "not available" label for disabled buttons
   const getNotAvailableLabel = () => {
     if (contentState.fallback && contentState.noffmpeg && contentState.editLimit === 0) {
       return chrome.i18n.getMessage("notAvailableLongRecording");
@@ -326,7 +323,7 @@ const RightPanel = () => {
           saveDrive: false,
         }));
       }
-      // On success, saveDrive is reset by the "saved-to-drive" message from background
+      // On success, saveDrive is reset by the "saved-to-drive" message from background.
     };
 
     const handleDriveError = (err) => {
@@ -338,7 +335,7 @@ const RightPanel = () => {
     };
 
     if (contentState.noffmpeg || !contentState.mp4ready || !contentState.blob) {
-      // Prefer the duration-fixed webm blob over rebuilding from raw chunks
+      // Prefer duration-fixed webm over rebuilding from raw chunks.
       const fixedWebm = contentState.webm;
       if (fixedWebm && fixedWebm instanceof Blob && fixedWebm.size > 0) {
         const reader = new FileReader();
@@ -375,7 +372,6 @@ const RightPanel = () => {
           .catch(handleDriveError);
       }
     } else {
-      // Blob to base64
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result;
@@ -432,13 +428,6 @@ const RightPanel = () => {
       mode: "edit",
       dragInteracted: false,
     }));
-
-    if (!contentState.hasBeenEdited) {
-      setContentState((prevContentState) => ({
-        ...prevContentState,
-        hasBeenEdited: true,
-      }));
-    }
   };
 
   const handleCrop = () => {
@@ -452,21 +441,22 @@ const RightPanel = () => {
 
     contentState.createBackup();
 
-    if (!contentState.frame && !contentState.isFfmpegRunning) {
-      contentState.getFrame();
+    // If the frame isn't cached yet, request it and defer the mode switch
+    // until "new-frame" arrives, otherwise the cropper mounts over a blank
+    // stage and there's a black flash for the round-trip duration.
+    if (!contentState.frame) {
+      setContentState((prevContentState) => ({
+        ...prevContentState,
+        pendingCropEntry: true,
+      }));
+      if (!contentState.isFfmpegRunning) contentState.getFrame();
+      return;
     }
 
     setContentState((prevContentState) => ({
       ...prevContentState,
       mode: "crop",
     }));
-
-    if (!contentState.hasBeenEdited) {
-      setContentState((prevContentState) => ({
-        ...prevContentState,
-        hasBeenEdited: true,
-      }));
-    }
   };
 
   const handleAddAudio = async () => {
@@ -483,16 +473,9 @@ const RightPanel = () => {
       ...prevContentState,
       mode: "audio",
     }));
-
-    if (!contentState.hasBeenEdited) {
-      setContentState((prevContentState) => ({
-        ...prevContentState,
-        hasBeenEdited: true,
-      }));
-    }
   };
 
-  // Download best available blob: edited MP4 → fixed WebM → raw WebM.
+  // Best available blob: edited MP4 → fixed WebM → raw WebM.
   const handleDownloadOriginal = () => {
     const s = contentStateRef.current;
     const source = s.blob || s.webm || s.rawBlob;
@@ -536,10 +519,8 @@ const RightPanel = () => {
           const ext = blob.type.includes("mp4") ? "mp4" : "webm";
           const filename = `raw-recording.${ext}`;
 
-          // Base64-via-BG is the most reliable path from a sandboxed page —
-          // works in Brave, works when blob-URL downloads are restricted, and
-          // doesn't depend on chrome.downloads being accessible from here.
-          // This is the escape hatch, so prioritize reliability over speed.
+          // base64-via-BG fallback: works in Brave and when blob-URL downloads
+          // are restricted, doesn't depend on chrome.downloads from here.
           const fallbackViaBackground = async () => {
             const base64 = await new Promise((resolve, reject) => {
               const reader = new FileReader();
@@ -572,9 +553,8 @@ const RightPanel = () => {
                 reject(err);
               }
             });
-            // chrome.downloads.onChanged can tell us if the download was
-            // interrupted (not user-cancel). Same pattern as the main download
-            // flow in ContentState.jsx.
+            // Detect interrupted (non-user-cancel) downloads; matches the
+            // main download flow in ContentState.jsx.
             const interruptHandler = async (delta) => {
               if (delta.id !== downloadId || !delta.state) return;
               if (
@@ -963,7 +943,6 @@ const RightPanel = () => {
                 <div
                   className={styles.buttonRight}
                   onClick={() => {
-                    //chrome.runtime.sendMessage({ type: "upgrade-info" });
                     if (typeof contentState.openModal === "function") {
                       contentState.openModal(
                         chrome.i18n.getMessage("overLimitModalTitle"),
@@ -1344,10 +1323,9 @@ const RightPanel = () => {
                 </div>
               )}
               {(() => {
-                // WebCodecs / fast-recorder path produces a native MP4 blob.
-                // Downloading it is just a blob-URL anchor click — no ffmpeg,
-                // no re-encoding — so the editLimit and noffmpeg gates don't
-                // apply. Detect via blob MIME and unblock accordingly.
+                // WebCodecs path produces a native MP4 blob; download is a
+                // blob-URL anchor click, no ffmpeg/re-encode, so editLimit
+                // and noffmpeg gates don't apply.
                 const isNativeMp4 =
                   contentState.blob?.type === "video/mp4";
                 const mp4Disabled = isNativeMp4
@@ -1431,11 +1409,22 @@ const RightPanel = () => {
                 role="button"
                 className={styles.button}
                 onClick={() => {
-                  if (!contentState.mp4ready) return;
+                  // disabled on a div is meaningless; gate click manually.
+                  // Not gated on isFfmpegRunning: it leaks from background
+                  // poll handlers and would intermittently swallow the
+                  // click. downloadGIF self-locks via downloadingGIF.
+                  if (
+                    contentState.downloadingGIF ||
+                    contentState.duration > 30 ||
+                    !contentState.mp4ready ||
+                    contentState.noffmpeg
+                  ) {
+                    return;
+                  }
                   contentState.downloadGIF();
                 }}
                 disabled={
-                  contentState.isFfmpegRunning ||
+                  contentState.downloadingGIF ||
                   contentState.duration > 30 ||
                   !contentState.mp4ready ||
                   contentState.noffmpeg
@@ -1470,7 +1459,6 @@ const RightPanel = () => {
             </div>
           </div>
           <div className={styles.section}>
-            {/* Create an advanced section with a button to send logs and to download raw video file as a backup */}
             <div className={styles.sectionTitle}>
               {chrome.i18n.getMessage("sandboxAdvancedTitle")}
             </div>
