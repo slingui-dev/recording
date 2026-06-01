@@ -23,6 +23,7 @@ import {
   resetEncoderProbeCache,
   computeEncodedDimensions,
 } from "./encoder/chooseEncoder";
+import { getUser } from "../../utils/slingui-auth";
 
 localforage.config({
   driver: localforage.INDEXEDDB,
@@ -231,6 +232,8 @@ const CloudRecorder = () => {
     os: null,
   });
   const uploadTelemetryTokenRef = useRef(null);
+  const meetingAudioChunksTokenRef = useRef(null);
+  const missingMeetingAudioTokenAlertShownRef = useRef(false);
   const uploadTelemetryNetworkDisabledRef = useRef(false);
   const audioChunkStoreReadyRef = useRef(false);
   const audioChunkIndexRef = useRef(0);
@@ -537,6 +540,7 @@ const CloudRecorder = () => {
     if (uploadTelemetryTokenRef.current) {
       return uploadTelemetryTokenRef.current;
     }
+
     try {
       const { screenityToken } = await chrome.storage.local.get([
         "screenityToken",
@@ -547,21 +551,36 @@ const CloudRecorder = () => {
       }
     } catch {}
 
-    try {
-      const res = await fetch(`${API_BASE}/auth/get-extension-token`, {
-        method: "GET",
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        const token = data?.token || data?.extensionToken || null;
-        if (token) {
-          uploadTelemetryTokenRef.current = token;
-          return token;
-        }
-      }
-    } catch {}
     return null;
+  };
+
+  const resolveMeetingAudioChunksToken = async () => {
+    if (meetingAudioChunksTokenRef.current) {
+      return meetingAudioChunksTokenRef.current;
+    }
+
+    try {
+      const user = await getUser();
+      if (user && !user.expired && user.access_token) {
+        meetingAudioChunksTokenRef.current = user.access_token;
+        return user.access_token;
+      }
+    } catch (error) {
+      console.warn(
+        "[CloudRecorder][MeetingAudioChunks] Failed to read Slingui OIDC user",
+        error,
+      );
+    }
+
+    return null;
+  };
+
+  const notifyMissingMeetingAudioToken = () => {
+    if (missingMeetingAudioTokenAlertShownRef.current) return;
+    missingMeetingAudioTokenAlertShownRef.current = true;
+    window.alert(
+      "Não foi possível buscar os chunks de áudio da reunião porque não há uma sessão Slingui válida. Faça login novamente e tente abrir a gravação outra vez.",
+    );
   };
 
   const firstNonEmptyValue = (values) => {
@@ -573,6 +592,35 @@ const CloudRecorder = () => {
 
     return value == null ? null : String(value).trim();
   };
+
+  const toEpochMs = (value) => {
+    if (value == null || value === "") return null;
+
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric > 0 && numeric < 100000000000 ? numeric * 1000 : numeric;
+    }
+
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const resolveRecordingStartedAtMsForMeetingAudio = (recordingMeta) =>
+    // Must be the recording start, not meeting/call start. If the meeting starts
+    // after recording, this preserves the pre-call gap when chunks are remounted.
+    toEpochMs(recordingMeta?.recordingStartedAtMs) ??
+    toEpochMs(recordingMeta?.recordingStartedAt) ??
+    toEpochMs(recordingMeta?.startedAt);
+
+  const resolveMeetingStartedAtMsForMeetingAudio = (
+    recordingMeta,
+    meetingContext,
+  ) =>
+    toEpochMs(recordingMeta?.meetingStartedAt) ??
+    toEpochMs(recordingMeta?.meetingContext?.startedAt) ??
+    toEpochMs(recordingMeta?.meetingContext?.startTime) ??
+    toEpochMs(meetingContext?.startedAt) ??
+    toEpochMs(meetingContext?.startTime);
 
   const resolveMeetingIdFromContext = (meetingContext, fallbackRecordingId = null) => {
     if (!meetingContext || typeof meetingContext !== "object") {
@@ -622,13 +670,13 @@ const CloudRecorder = () => {
     }
 
     try {
-      const token = await resolveUploadTelemetryToken();
+      const token = await resolveMeetingAudioChunksToken();
       if (!token) {
+        notifyMissingMeetingAudioToken();
         throw new Error("Missing JWT token for audio chunks request");
       }
-
-    const res = await fetch(
-      `${API_BASE}/storage/audio/chunks?meetingId=${encodeURIComponent(
+      const res = await fetch(
+        `${API_BASE}/storage/audio/chunks?meetingId=${encodeURIComponent(
           meetingId,
         )}`,
         {
@@ -662,12 +710,6 @@ const CloudRecorder = () => {
         chunks,
       });
 
-      window.alert(
-        `Encontramos ${chunks.length} chunk${
-          chunks.length === 1 ? "" : "s"
-        } de áudio MP3 para adicionar nesta gravação.`,
-      );
-
       return {
         meetingId: data?.meetingId || meetingId,
         prefix: data?.prefix || null,
@@ -679,10 +721,6 @@ const CloudRecorder = () => {
         meetingId,
         error: err?.message || String(err),
       });
-
-      window.alert(
-        "Não foi possível verificar os chunks de áudio MP3 desta gravação.",
-      );
 
       return {
         meetingId,
@@ -4671,8 +4709,13 @@ const CloudRecorder = () => {
     const sceneId = uploadMeta.sceneId;
     const meetingContext =
       recordingMeta?.meetingContext || screenityMeetingState || null;
-      console.log(recordingMeta);
     const localParticipant = meetingContext?.localUser || null;
+    const recordingStartedAtMs =
+      resolveRecordingStartedAtMsForMeetingAudio(recordingMeta);
+    const meetingStartedAtMs = resolveMeetingStartedAtMsForMeetingAudio(
+      recordingMeta,
+      meetingContext,
+    );
 
     console.info("[CloudRecorder][SceneParticipants] Resolving meeting participants", {
       sceneId,
@@ -4829,10 +4872,47 @@ const CloudRecorder = () => {
       total: normalizedParticipants.length,
     });
 
-    const meetingAudioChunks = await listMeetingAudioChunks(
+    const rawMeetingAudioChunks = await listMeetingAudioChunks(
       meetingContext,
       sceneId,
     );
+    const meetingAudioChunks = rawMeetingAudioChunks
+      ? {
+          ...rawMeetingAudioChunks,
+          meetingContext,
+          alignment: {
+            recordingStartedAtMs,
+            recordingStartedAt: recordingStartedAtMs
+              ? new Date(recordingStartedAtMs).toISOString()
+              : recordingMeta?.startedAt || null,
+            meetingStartedAtMs,
+            meetingStartedAt: meetingStartedAtMs
+              ? new Date(meetingStartedAtMs).toISOString()
+              : null,
+            source: "cloud-recorder-scene-create",
+          },
+        }
+      : null;
+
+    console.info("[CloudRecorder][MeetingAudioChunks] Alignment resolved", {
+      sceneId,
+      meetingId: meetingAudioChunks?.meetingId || null,
+      recordingStartedAtMs,
+      recordingStartedAt: recordingStartedAtMs
+        ? new Date(recordingStartedAtMs).toISOString()
+        : null,
+      meetingStartedAtMs,
+      meetingStartedAt: meetingStartedAtMs
+        ? new Date(meetingStartedAtMs).toISOString()
+        : null,
+      firstChunkStartedAtEpochMs:
+        meetingAudioChunks?.chunks?.[0]?.startedAtEpochMs ??
+        meetingAudioChunks?.chunks?.[0]?.metadata?.startedAtEpochMs ??
+        null,
+      cannotPreservePreCallGap: Boolean(
+        meetingAudioChunks?.chunks?.length && recordingStartedAtMs == null,
+      ),
+    });
 
     const existingStatus = await getSceneCreateStatus(sceneId);
     let sceneOutcome = null;

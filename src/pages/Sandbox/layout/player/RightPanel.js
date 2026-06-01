@@ -42,10 +42,9 @@ const RightPanel = () => {
           return;
         }
 
-        const authenticatedUser = await login();
-        setSlingUser(authenticatedUser);
+        setSlingUser(null);
       } catch (error) {
-        console.error("Slingui authentication on load failed:", error);
+        console.error("Failed to read Slingui authentication on load:", error);
         setSlingUser(null);
       } finally {
         setIsAuthLoading(false);
@@ -53,7 +52,18 @@ const RightPanel = () => {
     };
     authenticateOnLoad();
 
+    const handleSlingUserChange = async (changes, areaName) => {
+      if (areaName !== "local" || !changes.user) return;
 
+      const storedUser = await getUser();
+      setSlingUser(storedUser && !storedUser.expired ? storedUser : null);
+    };
+
+    chrome.storage.onChanged.addListener(handleSlingUserChange);
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleSlingUserChange);
+    };
 
   }, []);
 
@@ -641,6 +651,118 @@ const RightPanel = () => {
         },
         () => { },
       );
+    }
+  };
+
+  const handleDebugMeetingState = async () => {
+    try {
+      const {
+        recordingMeta = null,
+        screenityMeetingState = null,
+        latestMeetingDocumentContext = null,
+        latestMeetingAudioChunks = null,
+        screenityToken = null,
+      } = await chrome.storage.local.get([
+        "recordingMeta",
+        "screenityMeetingState",
+        "latestMeetingDocumentContext",
+        "latestMeetingAudioChunks",
+        "screenityToken",
+      ]);
+      const storedUser = await getUser().catch(() => null);
+      const cs = contentStateRef.current || {};
+      const meetingAudioChunks = cs.meetingAudioChunks || latestMeetingAudioChunks || null;
+      const contentRecordingMeta = cs.recordingMeta || null;
+      const persistedRecordingMeta = latestMeetingDocumentContext?.recordingMeta || null;
+      const persistedScreenityMeetingState =
+        latestMeetingDocumentContext?.screenityMeetingState || null;
+      const contentMeetingContext = contentRecordingMeta?.meetingContext || null;
+      const persistedMeetingContext =
+        latestMeetingDocumentContext?.meetingContext || persistedRecordingMeta?.meetingContext || null;
+      const storedMeetingContext = recordingMeta?.meetingContext || null;
+      const currentScreenityMeetingState = screenityMeetingState || null;
+      const meetingContextCandidates = [
+        contentMeetingContext ||
+          persistedMeetingContext ||
+          storedMeetingContext ||
+          persistedScreenityMeetingState ||
+          null,
+        meetingAudioChunks?.lastMeetingState || null,
+        meetingAudioChunks?.meetingContext || null,
+        currentScreenityMeetingState,
+      ].filter(Boolean);
+      const meetingContext =
+        meetingContextCandidates.find((candidate) =>
+          Boolean(resolveMeetingIdFromContext(candidate)),
+        ) ||
+        meetingContextCandidates[0] ||
+        null;
+      const meetingId = resolveMeetingIdFromContext(
+        meetingContext,
+        meetingAudioChunks?.meetingId || latestMeetingDocumentContext?.meetingId || null,
+      );
+      const debugPayload = {
+        meetingId,
+        token: {
+          hasStoredSlingUser: Boolean(storedUser),
+          storedUserExpired: Boolean(storedUser?.expired),
+          hasStoredAccessToken: Boolean(storedUser?.access_token),
+          hasFallbackScreenityToken: Boolean(screenityToken),
+        },
+        sources: {
+          contentMeetingContextId: resolveMeetingIdFromContext(contentMeetingContext),
+          persistedMeetingContextId: resolveMeetingIdFromContext(persistedMeetingContext),
+          storedMeetingContextId: resolveMeetingIdFromContext(storedMeetingContext),
+          screenityMeetingStateId: resolveMeetingIdFromContext(currentScreenityMeetingState),
+          persistedDocumentMeetingId: latestMeetingDocumentContext?.meetingId || null,
+          meetingAudioChunksMeetingId: meetingAudioChunks?.meetingId || null,
+        },
+        state: {
+          ready: Boolean(cs.ready),
+          mp4ready: Boolean(cs.mp4ready),
+          hasBlob: Boolean(cs.blob),
+          hasWebm: Boolean(cs.webm),
+          hasRecordingMeta: Boolean(contentRecordingMeta),
+          hasMeetingAudioChunks: Boolean(meetingAudioChunks),
+          meetingAudioChunksApplied: Boolean(cs.meetingAudioChunksApplied),
+          meetingAudioChunksError: cs.meetingAudioChunksError || null,
+        },
+        storage: {
+          hasRecordingMeta: Boolean(recordingMeta),
+          hasScreenityMeetingState: Boolean(screenityMeetingState),
+          hasLatestMeetingDocumentContext: Boolean(latestMeetingDocumentContext),
+          hasLatestMeetingAudioChunks: Boolean(latestMeetingAudioChunks),
+        },
+        chunks: {
+          total: meetingAudioChunks?.chunks?.length || 0,
+          downloaded:
+            meetingAudioChunks?.chunks?.filter((chunk) => chunk.audioBlob instanceof Blob)
+              .length || 0,
+        },
+        raw: {
+          contentRecordingMeta,
+          recordingMeta,
+          screenityMeetingState,
+          latestMeetingDocumentContext,
+          meetingAudioChunks,
+          meetingContext,
+        },
+      };
+
+      console.info("[Slingui Debug] Sandbox meeting state", debugPayload);
+      window.alert(
+        [
+          "Debug Slingui / Meeting",
+          `meetingId: ${meetingId || "não encontrado"}`,
+          `chunks: ${debugPayload.chunks.downloaded}/${debugPayload.chunks.total}`,
+          `stored user: ${debugPayload.token.hasStoredSlingUser ? "sim" : "não"}`,
+          `access token: ${debugPayload.token.hasStoredAccessToken ? "sim" : "não"}`,
+          "Detalhes completos no console: [Slingui Debug] Sandbox meeting state",
+        ].join("\n"),
+      );
+    } catch (error) {
+      console.error("[Slingui Debug] Failed to inspect meeting state", error);
+      window.alert("Falha ao inspecionar estado Slingui/meeting. Veja o console.");
     }
   };
 
@@ -1501,6 +1623,24 @@ const RightPanel = () => {
                   </div>
                   <div className={styles.buttonDescription}>
                     {chrome.i18n.getMessage("troubleshootButtonDescription")}
+                  </div>
+                </div>
+                <div className={styles.buttonRight}>
+                  <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
+                </div>
+              </div>
+              <div
+                role="button"
+                className={styles.button}
+                onClick={handleDebugMeetingState}
+              >
+                <div className={styles.buttonLeft}>
+                  <ReactSVG src={EXT_URL + "editor/icons/flag.svg"} />
+                </div>
+                <div className={styles.buttonMiddle}>
+                  <div className={styles.buttonTitle}>Debug Slingui / Meeting</div>
+                  <div className={styles.buttonDescription}>
+                    Ver meetingId, tokens, chunks e fontes salvas no console
                   </div>
                 </div>
                 <div className={styles.buttonRight}>

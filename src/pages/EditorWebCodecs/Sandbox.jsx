@@ -98,17 +98,7 @@ const resolveAudioChunksToken = async (preferredUser = null) => {
     // ignore storage fallback failures
   }
 
-  try {
-    const res = await fetch(`${API_BASE}/auth/get-extension-token`, {
-      method: "GET",
-      credentials: "include",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null);
-    return data?.token || data?.extensionToken || null;
-  } catch {
-    return null;
-  }
+  return null;
 };
 
 const decodeBase64UrlJson = (value) => {

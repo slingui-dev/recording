@@ -220,6 +220,10 @@ const extensionKey = fileSystem.existsSync(publicKeyPath)
       .replace(/\s+/g, "")
   : undefined;
 
+if (extensionKey) {
+  console.log("[webpack] Using extension public key from public.pem");
+}
+
 if (fileSystem.existsSync(secretsPath)) {
   alias["secrets"] = secretsPath;
 }
@@ -334,6 +338,14 @@ const config = {
               version: process.env.npm_package_version,
               ...JSON.parse(content.toString()),
             };
+
+            // Keep the same Chrome extension ID when loading the unpacked
+            // build locally. Chrome derives the unpacked extension ID from
+            // manifest.key; without it, moving/rebuilding the folder can
+            // generate a different ID and break redirect URLs / OAuth config.
+            if (extensionKey) {
+              manifest.key = extensionKey;
+            }
 
             // Strip dev-only origins from prod builds. The
             // SCREENITY_USE_LOCAL_ENV escape hatch keeps them in for

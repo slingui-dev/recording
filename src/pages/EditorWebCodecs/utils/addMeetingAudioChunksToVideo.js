@@ -71,11 +71,22 @@ const resolveChunkDurationFromSamplesMs = (chunk) => {
   return null;
 };
 
-const resolveRecordingStartedAtMs = (recordingMeta) =>
+const resolveRecordingStartedAtMs = (recordingMeta, audioChunks = null) =>
+  // This anchor must represent when the screen recording started, not when the
+  // meeting/call started. Using meetingContext.startedAt here collapses any
+  // pre-call silence and places the first meeting audio chunk at 0ms.
+  toEpochMs(recordingMeta?.recordingStartedAtMs) ??
+  toEpochMs(recordingMeta?.recordingStartedAt) ??
   toEpochMs(recordingMeta?.startedAt) ??
+  toEpochMs(audioChunks?.alignment?.recordingStartedAtMs) ??
+  toEpochMs(audioChunks?.alignment?.recordingStartedAt);
+
+const resolveMeetingStartedAtMs = (recordingMeta, audioChunks = null) =>
   toEpochMs(recordingMeta?.meetingStartedAt) ??
   toEpochMs(recordingMeta?.meetingContext?.startedAt) ??
-  toEpochMs(recordingMeta?.meetingContext?.startTime);
+  toEpochMs(recordingMeta?.meetingContext?.startTime) ??
+  toEpochMs(audioChunks?.alignment?.meetingStartedAtMs) ??
+  toEpochMs(audioChunks?.alignment?.meetingStartedAt);
 
 const resolveRecordingDurationMs = (recordingDurationSeconds) => {
   const duration = toNumber(recordingDurationSeconds);
@@ -113,7 +124,8 @@ const normalizeMeetingAudioChunks = (
   recordingMeta = null,
   recordingDurationSeconds = null,
 ) => {
-  const recordingStartedAtMs = resolveRecordingStartedAtMs(recordingMeta);
+  const recordingStartedAtMs = resolveRecordingStartedAtMs(recordingMeta, audioChunks);
+  const meetingStartedAtMs = resolveMeetingStartedAtMs(recordingMeta, audioChunks);
   const recordingDurationMs = resolveRecordingDurationMs(recordingDurationSeconds);
 
   logInfo("input", {
@@ -127,6 +139,11 @@ const normalizeMeetingAudioChunks = (
     recordingStartedAt: recordingStartedAtMs
       ? new Date(recordingStartedAtMs).toISOString()
       : null,
+    meetingStartedAtMs,
+    meetingStartedAt: meetingStartedAtMs
+      ? new Date(meetingStartedAtMs).toISOString()
+      : null,
+    meetingStartIsNotRecordingAnchor: true,
     recordingDurationSeconds,
     recordingDurationMs,
     recordingMeta,
@@ -155,6 +172,13 @@ const normalizeMeetingAudioChunks = (
 
   const explicitOffsets = preparedChunks.map(({ explicitOffsetMs }) => explicitOffsetMs);
   const startedAts = preparedChunks.map(({ startedAtMs }) => startedAtMs);
+  const firstChunkStartedAtMs = startedAts
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b)[0] ?? null;
+  const computedPreCallGapMs =
+    recordingStartedAtMs != null && firstChunkStartedAtMs != null
+      ? firstChunkStartedAtMs - recordingStartedAtMs
+      : null;
   const hasExplicitOffset = explicitOffsets.some((value) => Number.isFinite(value));
   const hasStartedAt = startedAts.some((value) => Number.isFinite(value));
   const explicitOffsetsAreUseful =
@@ -252,6 +276,20 @@ const normalizeMeetingAudioChunks = (
     startedAtAnchor: startedAtAnchorMs
       ? new Date(startedAtAnchorMs).toISOString()
       : null,
+    recordingStartedAtMs,
+    recordingStartedAt: recordingStartedAtMs
+      ? new Date(recordingStartedAtMs).toISOString()
+      : null,
+    meetingStartedAtMs,
+    meetingStartedAt: meetingStartedAtMs
+      ? new Date(meetingStartedAtMs).toISOString()
+      : null,
+    firstChunkStartedAtMs,
+    firstChunkStartedAt: firstChunkStartedAtMs
+      ? new Date(firstChunkStartedAtMs).toISOString()
+      : null,
+    computedPreCallGapMs,
+    cannotPreservePreCallGap: hasStartedAt && recordingStartedAtMs == null,
     sampleTimelineCandidate,
     sampleTimelineOffsetsAreSafe,
     sampleTimelineAnchorOffsetMs,
@@ -400,7 +438,11 @@ const normalizeMeetingAudioChunks = (
     offsetPolicy:
       sampleTimelineOffsetsAreSafe
         ? "Use first reliable anchor plus cumulative totalSamples/sampleRate for every chunk to avoid wall-clock ms rounding gaps/overlaps."
-        : "Use startedAtEpochMs anchored to recording start when available; otherwise sequence timeline.",
+        : "Use startedAtEpochMs anchored to recording start when available; otherwise sequence timeline. Meeting start is diagnostics-only and must not be used as recording anchor.",
+    recordingStartedAtMs,
+    firstChunkStartedAtMs,
+    computedPreCallGapMs,
+    cannotPreservePreCallGap: hasStartedAt && recordingStartedAtMs == null,
     normalizedCount: normalizedChunks.length,
     chunks: normalizedChunks.map(summarizeChunkForLog),
     gaps: normalizedChunks.map((chunk, index) => ({

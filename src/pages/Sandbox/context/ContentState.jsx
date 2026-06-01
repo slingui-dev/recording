@@ -22,7 +22,7 @@ import {
   isRecordingDebugEnabled,
 } from "../../utils/recordingDebug";
 import { diagForward } from "../../utils/diagForward";
-import { getUser } from "../../../utils/slingui-auth";
+import { getUser, login } from "../../../utils/slingui-auth";
 import { perfMark } from "../../utils/perfMarks";
 import { triggerSupportDownload } from "../../utils/triggerSupportDownload";
 import { chooseReader } from "../recorderStorage/chooseReader";
@@ -132,8 +132,13 @@ const resolveAudioChunksToken = async () => {
     if (user && !user.expired && user.access_token) {
       return user.access_token;
     }
+
+    const authenticatedUser = await login();
+    if (authenticatedUser?.access_token) {
+      return authenticatedUser.access_token;
+    }
   } catch (error) {
-    console.warn("[Sandbox][MeetingAudioChunks] Failed to read Slingui user", error);
+    console.warn("[Sandbox][MeetingAudioChunks] Failed to resolve Slingui user", error);
   }
 
   try {
@@ -143,17 +148,7 @@ const resolveAudioChunksToken = async () => {
     // ignore storage fallback failures
   }
 
-  try {
-    const res = await fetch(`${API_BASE}/auth/get-extension-token`, {
-      method: "GET",
-      credentials: "include",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null);
-    return data?.token || data?.extensionToken || null;
-  } catch {
-    return null;
-  }
+  return null;
 };
 
 const decodeBase64UrlJson = (value) => {

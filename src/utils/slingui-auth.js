@@ -162,10 +162,27 @@ async function enrichUserProfile(user) {
 
 // --- Main Authentication Logic ---
 
+let loginPromise = null;
+
 export async function login() {
   if (typeof chrome === 'undefined' || !chrome.identity || !chrome.storage) {
     throw new Error('Chrome identity API is not available.');
   }
+
+  if (loginPromise) {
+    return loginPromise;
+  }
+
+  loginPromise = loginInternal();
+
+  try {
+    return await loginPromise;
+  } finally {
+    loginPromise = null;
+  }
+}
+
+async function loginInternal() {
 
   const redirectURL = getRedirectUrl();
   const tokenEndpoint = `${config.authority}/token`;
