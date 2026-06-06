@@ -2441,8 +2441,13 @@ const ContentState = (props) => {
     );
   };
 
+<<<<<<< HEAD:src/pages/EditorApp/context/ContentState.jsx
   // off-thread the WebM duration fix via editor.html (CSP allows blob workers);
   // same shape as fix-webm-duration, sync fallback
+=======
+  // Off-thread the WebM duration fix by relaying the Blob to editor.html, whose
+  // CSP allows blob workers. Same shape as fix-webm-duration; sync fallback.
+>>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix):src/pages/Sandbox/context/ContentState.jsx
   const requestParentFixWebmDuration = (blob, durationMs, callback) => {
     let done = false;
     let timer = null;
@@ -2480,7 +2485,10 @@ const ContentState = (props) => {
     }
   };
 
+<<<<<<< HEAD:src/pages/EditorApp/context/ContentState.jsx
 
+=======
+>>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix):src/pages/Sandbox/context/ContentState.jsx
   const getBlob = async () => {
     if (
       contentState.noffmpeg ||

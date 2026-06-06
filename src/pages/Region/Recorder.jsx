@@ -5,7 +5,10 @@ import { getUserMediaWithFallback } from "../utils/mediaDeviceFallback";
 import { startAudioStream as acquireMicStream } from "../utils/startAudioStream";
 import { shouldAcquireMicAtStart } from "../utils/micAcquisitionPolicy";
 import { attachAudioContextWatchdog } from "../utils/audioContextWatchdog";
+<<<<<<< HEAD
 import { beginFinalizeHeartbeat } from "../utils/finalizeHeartbeat";
+=======
+>>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
 import { acquireDisplayMediaWithFocusRetry } from "../utils/acquireDisplayMedia";
 import {
   startTabKeepalive,

@@ -1,6 +1,10 @@
 {
   "name": "screenity",
+<<<<<<< HEAD
   "version": "4.6.5",
+=======
+  "version": "4.4.14",
+>>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
   "description": "The free and privacy-friendly screen recorder with no sign in needed.",
   "scripts": {
     "build": "cross-env NODE_ENV=production node utils/build.js",
@@ -64,7 +68,11 @@
     "gif.js": "^0.2.0",
     "jszip": "^3.10.1",
     "localforage": "^1.10.0",
+<<<<<<< HEAD
     "mediabunny": "^1.51.0",
+=======
+    "mediabunny": "^1.46.0",
+>>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
     "patch-package": "^8.0.0",
     "plyr": "3.7.8",
     "plyr-react": "^5.3.0",
