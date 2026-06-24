@@ -4,6 +4,7 @@ const DEFAULT_API_BASE =
 export const MEETING_AUDIO_CHUNKS_ENDPOINT = "/storage/audio/chunks";
 
 const noop = () => {};
+const DEFAULT_CHUNK_DOWNLOAD_CONCURRENCY = 4;
 
 const firstNonEmptyValue = (values) => {
   const value = values.find(
@@ -116,6 +117,66 @@ export const decodeMeetingAudioChunkMetadata = (fileName, { warn = noop } = {}) 
 
   warn("failed to decode chunk metadata", { fileName });
   return null;
+};
+
+const toFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const getMeetingAudioChunkMetadata = (chunk, { warn = noop } = {}) =>
+  chunk?.metadata || decodeMeetingAudioChunkMetadata(chunk?.fileName, { warn });
+
+export const sortMeetingAudioChunks = (chunks, { warn = noop } = {}) =>
+  [...chunks]
+    .map((chunk) => ({
+      ...chunk,
+      metadata: getMeetingAudioChunkMetadata(chunk, { warn }),
+    }))
+    .sort((a, b) => {
+      const aStart = toFiniteNumber(
+        a?.startedAtEpochMs ?? a?.metadata?.startedAtEpochMs,
+      );
+      const bStart = toFiniteNumber(
+        b?.startedAtEpochMs ?? b?.metadata?.startedAtEpochMs,
+      );
+
+      if (aStart != null && bStart != null && aStart !== bStart) {
+        return aStart - bStart;
+      }
+      if (aStart != null && bStart == null) return -1;
+      if (aStart == null && bStart != null) return 1;
+
+      const aSequence = toFiniteNumber(a?.sequence ?? a?.metadata?.sequence);
+      const bSequence = toFiniteNumber(b?.sequence ?? b?.metadata?.sequence);
+
+      if (aSequence != null && bSequence != null && aSequence !== bSequence) {
+        return aSequence - bSequence;
+      }
+      if (aSequence != null && bSequence == null) return -1;
+      if (aSequence == null && bSequence != null) return 1;
+
+      return String(a?.fileName || "").localeCompare(String(b?.fileName || ""));
+    });
+
+const mapWithConcurrencyLimit = async (items, limit, mapper) => {
+  if (!items.length) return [];
+
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      }
+    }),
+  );
+
+  return results;
 };
 
 export const summarizeMeetingAudioChunk = (chunk) => ({
@@ -233,6 +294,7 @@ export const listMeetingAudioChunks = async ({
   resolveToken,
   apiBase = DEFAULT_API_BASE,
   downloadChunks = true,
+  downloadConcurrency = DEFAULT_CHUNK_DOWNLOAD_CONCURRENCY,
   returnEmptyOnMissingMeetingId = false,
   log = noop,
   warn = noop,
@@ -290,9 +352,7 @@ export const listMeetingAudioChunks = async ({
 
   const data = await res.json();
   const chunks = Array.isArray(data?.chunks)
-    ? [...data.chunks].sort((a, b) =>
-        String(a?.fileName || "").localeCompare(String(b?.fileName || "")),
-      )
+    ? sortMeetingAudioChunks(data.chunks, { warn })
     : [];
 
   log("list payload", {
@@ -305,8 +365,10 @@ export const listMeetingAudioChunks = async ({
   });
 
   const resolvedChunks = downloadChunks
-    ? await Promise.all(
-        chunks.map((chunk) => downloadMeetingAudioChunk(chunk, { log, warn })),
+    ? await mapWithConcurrencyLimit(
+        chunks,
+        downloadConcurrency,
+        (chunk) => downloadMeetingAudioChunk(chunk, { log, warn }),
       )
     : chunks;
 

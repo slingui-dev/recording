@@ -17,6 +17,9 @@ if (container) {
 }
 
 // Hot Module Replacement
-if (module.hot) {
-  module.hot.accept();
+const hotModule =
+  typeof module !== "undefined" && module ? module["hot"] : null;
+
+if (hotModule && typeof hotModule["accept"] === "function") {
+  hotModule["accept"]();
 }

@@ -80,6 +80,13 @@ export const updateFromStorage = (check = true, id = null) => {
       "hasSubscribedBefore",
     ],
     (result) => {
+      const enforcedRecordingPreferences = {
+        recordingType: "region",
+        customRegion: false,
+        pushToTalk: false,
+        cameraActive: false,
+        backgroundEffectsActive: false,
+      };
       const storedEffects = normalizeCursorEffects(result.cursorEffects);
       const hasStoredEffects = Array.isArray(result.cursorEffects);
       const legacyMode =
@@ -132,10 +139,7 @@ export const updateFromStorage = (check = true, id = null) => {
           result.cameraFlipped !== undefined && result.cameraFlipped !== null
             ? result.cameraFlipped
             : prevContentState.cameraFlipped,
-        cameraActive:
-          result.cameraActive !== undefined && result.cameraActive !== null
-            ? result.cameraActive
-            : prevContentState.cameraActive,
+        cameraActive: enforcedRecordingPreferences.cameraActive,
         micActive:
           result.micActive !== undefined && result.micActive !== null
             ? result.micActive
@@ -146,10 +150,7 @@ export const updateFromStorage = (check = true, id = null) => {
             ? result.backgroundEffect
             : prevContentState.backgroundEffect,
         backgroundEffectsActive:
-          result.backgroundEffectsActive !== undefined &&
-          result.backgroundEffectsActive !== null
-            ? result.backgroundEffectsActive
-            : prevContentState.backgroundEffectsActive,
+          enforcedRecordingPreferences.backgroundEffectsActive,
         toolbarPosition:
           result.toolbarPosition !== undefined &&
           result.toolbarPosition !== null
@@ -167,14 +168,8 @@ export const updateFromStorage = (check = true, id = null) => {
           result.paused !== undefined && result.paused !== null
             ? result.paused
             : prevContentState.paused,
-        recordingType:
-          result.recordingType !== undefined && result.recordingType !== null
-            ? result.recordingType
-            : prevContentState.recordingType,
-        customRegion:
-          result.customRegion !== undefined && result.customRegion !== null
-            ? result.customRegion
-            : prevContentState.customRegion,
+        recordingType: enforcedRecordingPreferences.recordingType,
+        customRegion: enforcedRecordingPreferences.customRegion,
         regionWidth:
           result.regionWidth !== undefined && result.regionWidth !== null
             ? result.regionWidth
@@ -218,10 +213,7 @@ export const updateFromStorage = (check = true, id = null) => {
           cursorEffects.length > 0 || hasStoredEffects
             ? cursorEffects
             : prevContentState.cursorEffects,
-        pushToTalk:
-          result.pushToTalk !== undefined && result.pushToTalk !== null
-            ? result.pushToTalk
-            : prevContentState.pushToTalk,
+        pushToTalk: enforcedRecordingPreferences.pushToTalk,
         zoomEnabled:
           result.zoomEnabled !== undefined && result.zoomEnabled !== null
             ? result.zoomEnabled
@@ -329,6 +321,8 @@ export const updateFromStorage = (check = true, id = null) => {
         showProSplash: result.showProSplash || false,
       }));
 
+      chrome.storage.local.set(enforcedRecordingPreferences);
+
       if (result.systemAudio === undefined || result.systemAudio === null) {
         chrome.storage.local.set({ systemAudio: true });
       }
@@ -357,10 +351,6 @@ export const updateFromStorage = (check = true, id = null) => {
           cursorEffects: cursorEffects,
           cursorMode: cursorMode,
         });
-      }
-
-      if (result.backgroundEffectsActive) {
-        chrome.runtime.sendMessage({ type: "backgroundEffectsActive" });
       }
 
       if (check) {

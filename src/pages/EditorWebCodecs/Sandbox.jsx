@@ -23,6 +23,7 @@ const convertMp4ToWebm = lazyUtil(() => import("./utils/convertMp4ToWebm"));
 const blobToArrayBuffer = lazyUtil(() => import("./utils/blobToArrayBuffer"));
 
 const API_BASE = process.env.SCREENITY_API_BASE_URL || "https://api.slingui.com";
+const MEETING_AUDIO_CHUNK_DOWNLOAD_CONCURRENCY = 4;
 
 const isPostStopMode = () => {
   try {
@@ -165,8 +166,176 @@ const decodeMeetingAudioChunkMetadata = (fileName) => {
   return null;
 };
 
+const toFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const toEpochMs = (value) => {
+  if (value == null || value === "") return null;
+
+  const numeric = toFiniteNumber(value);
+  if (numeric != null) {
+    return numeric > 0 && numeric < 100000000000 ? numeric * 1000 : numeric;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveRecordingStartFromId = (recordingId) => {
+  const match = String(recordingId || "").match(/^(\d{12,14})(?:-|$)/);
+  if (!match) return null;
+
+  const startedAtMs = Number(match[1]);
+  return Number.isFinite(startedAtMs) ? startedAtMs : null;
+};
+
+const normalizeRecordingMetaForPostStop = (recordingMeta, recordingId = null) => {
+  if (!recordingMeta || typeof recordingMeta !== "object") {
+    const recordingStartedAtMs = resolveRecordingStartFromId(recordingId);
+    if (recordingStartedAtMs == null) return null;
+
+    return {
+      recordingId: recordingId || null,
+      recordingStartedAtMs,
+      recordingStartedAt: new Date(recordingStartedAtMs).toISOString(),
+      startedAt: recordingStartedAtMs,
+      recordingStartedAtSource: "recordingId",
+      recoveredFromRecordingId: true,
+    };
+  }
+
+  const recordingStartedAtMsFromExplicitMs = toEpochMs(recordingMeta.recordingStartedAtMs);
+  const recordingStartedAtMsFromIso = toEpochMs(recordingMeta.recordingStartedAt);
+  const recordingStartedAtMsFromStartedAt = toEpochMs(recordingMeta.startedAt);
+  const recordingStartedAtMsFromId = resolveRecordingStartFromId(
+    recordingId || recordingMeta.recordingId,
+  );
+  const recordingStartedAtMs =
+    recordingStartedAtMsFromExplicitMs ??
+    recordingStartedAtMsFromIso ??
+    recordingStartedAtMsFromStartedAt ??
+    recordingStartedAtMsFromId;
+  const recordingStartedAtSource = recordingStartedAtMsFromExplicitMs != null
+    ? "recordingMeta.recordingStartedAtMs"
+    : recordingStartedAtMsFromIso != null
+      ? "recordingMeta.recordingStartedAt"
+      : recordingStartedAtMsFromStartedAt != null
+        ? "recordingMeta.startedAt"
+        : recordingStartedAtMsFromId != null
+          ? "recordingId"
+          : null;
+
+  return {
+    ...recordingMeta,
+    recordingId: recordingId || recordingMeta.recordingId || null,
+    recordingStartedAtMs,
+    recordingStartedAt:
+      recordingStartedAtMs != null
+        ? new Date(recordingStartedAtMs).toISOString()
+        : recordingMeta.recordingStartedAt || null,
+    startedAt: recordingMeta.startedAt || recordingStartedAtMs || null,
+    recordingStartedAtSource,
+    recoveredFromRecordingId:
+      Boolean(recordingStartedAtMs) && recordingStartedAtSource === "recordingId",
+  };
+};
+
+const buildMeetingAudioAlignment = (audioChunks, recordingMeta = null) => {
+  const recordingStartedAtMs =
+    toEpochMs(recordingMeta?.recordingStartedAtMs) ??
+    toEpochMs(recordingMeta?.recordingStartedAt) ??
+    toEpochMs(recordingMeta?.startedAt) ??
+    toEpochMs(audioChunks?.alignment?.recordingStartedAtMs) ??
+    toEpochMs(audioChunks?.alignment?.recordingStartedAt);
+
+  return {
+    ...(audioChunks?.alignment || {}),
+    recordingStartedAtMs,
+    recordingStartedAt:
+      recordingStartedAtMs != null
+        ? new Date(recordingStartedAtMs).toISOString()
+        : audioChunks?.alignment?.recordingStartedAt || null,
+    recordingStartedAtSource:
+      recordingMeta?.recordingStartedAtSource ||
+      audioChunks?.alignment?.recordingStartedAtSource ||
+      null,
+    recoveredFromRecordingId: Boolean(
+      recordingMeta?.recoveredFromRecordingId ||
+      audioChunks?.alignment?.recoveredFromRecordingId,
+    ),
+  };
+};
+
+const resolveStoredRecordingMetaForPostStop = ({
+  recordingId = null,
+  recordingMeta = null,
+  scopedRecordingMeta = null,
+  latestRecordingMeta = null,
+  latestRecordingMetaKey = null,
+} = {}) => {
+  const latestMatchesRecording =
+    recordingId && latestRecordingMetaKey && String(latestRecordingMetaKey) === String(recordingId);
+  const resolved =
+    scopedRecordingMeta || recordingMeta || (latestMatchesRecording ? latestRecordingMeta : null);
+
+  return normalizeRecordingMetaForPostStop(resolved, recordingId);
+};
+
+const getMeetingAudioChunkMetadata = (chunk) =>
+  chunk?.metadata || decodeMeetingAudioChunkMetadata(chunk?.fileName);
+
+const sortMeetingAudioChunks = (chunks) =>
+  [...chunks]
+    .map((chunk) => ({
+      ...chunk,
+      metadata: getMeetingAudioChunkMetadata(chunk),
+    }))
+    .sort((a, b) => {
+      const aStart = toFiniteNumber(a?.startedAtEpochMs ?? a?.metadata?.startedAtEpochMs);
+      const bStart = toFiniteNumber(b?.startedAtEpochMs ?? b?.metadata?.startedAtEpochMs);
+
+      if (aStart != null && bStart != null && aStart !== bStart) {
+        return aStart - bStart;
+      }
+      if (aStart != null && bStart == null) return -1;
+      if (aStart == null && bStart != null) return 1;
+
+      const aSequence = toFiniteNumber(a?.sequence ?? a?.metadata?.sequence);
+      const bSequence = toFiniteNumber(b?.sequence ?? b?.metadata?.sequence);
+
+      if (aSequence != null && bSequence != null && aSequence !== bSequence) {
+        return aSequence - bSequence;
+      }
+      if (aSequence != null && bSequence == null) return -1;
+      if (aSequence == null && bSequence != null) return 1;
+
+      return String(a?.fileName || "").localeCompare(String(b?.fileName || ""));
+    });
+
+const mapWithConcurrencyLimit = async (items, limit, mapper) => {
+  if (!items.length) return [];
+
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      }
+    }),
+  );
+
+  return results;
+};
+
 const downloadMeetingAudioChunk = async (chunk) => {
-  const metadata = decodeMeetingAudioChunkMetadata(chunk?.fileName);
+  const metadata = getMeetingAudioChunkMetadata(chunk);
 
   console.info("[EditorWebCodecs][MeetingAudioChunks] Download chunk start", {
     fileName: chunk?.fileName || null,
@@ -302,9 +471,7 @@ const listMeetingAudioChunks = async (
 
   const data = await res.json();
   const chunks = Array.isArray(data?.chunks)
-    ? [...data.chunks].sort((a, b) =>
-        String(a?.fileName || "").localeCompare(String(b?.fileName || "")),
-      )
+    ? sortMeetingAudioChunks(data.chunks)
     : [];
 
   console.info("[EditorWebCodecs][MeetingAudioChunks] List payload", {
@@ -316,8 +483,10 @@ const listMeetingAudioChunks = async (
     chunks,
   });
 
-  const enrichedChunks = await Promise.all(
-    chunks.map((chunk) => downloadMeetingAudioChunk(chunk)),
+  const enrichedChunks = await mapWithConcurrencyLimit(
+    chunks,
+    MEETING_AUDIO_CHUNK_DOWNLOAD_CONCURRENCY,
+    (chunk) => downloadMeetingAudioChunk(chunk),
   );
 
   console.info("[EditorWebCodecs][MeetingAudioChunks] List enriched", {
@@ -349,7 +518,10 @@ const Sandbox = () => {
   const authAttemptedRef = useRef(false);
   const meetingAudioChunksCheckedRef = useRef(false);
   const meetingAudioChunksRef = useRef(null);
+  const meetingAudioChunksRequestPromiseRef = useRef(null);
   const recordingMetaRef = useRef(null);
+  const isAuthLoadingRef = useRef(true);
+  const slingUserRef = useRef(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isPostStopProcessing, setIsPostStopProcessing] = useState(() => isPostStopMode());
   const [slingUser, setSlingUser] = useState(null);
@@ -406,9 +578,248 @@ const Sandbox = () => {
     return new Blob([bytes], { type: "video/webm" });
   };
 
+  const getPostStopLaunchParams = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        isPostStop: params.get("mode") === "postStop",
+        recordingId: params.get("recordingId") || null,
+      };
+    } catch {
+      return { isPostStop: false, recordingId: null };
+    }
+  };
+
+  const sendMeetingAudioChunksToIframe = (
+    audioChunks = meetingAudioChunksRef.current,
+    recordingMeta = recordingMetaRef.current,
+    reason = "unknown",
+  ) => {
+    if (!audioChunks) return false;
+
+    console.info("[EditorWebCodecs][MeetingAudioChunks] Sending chunks to iframe", {
+      reason,
+      meetingId: audioChunks.meetingId,
+      prefix: audioChunks.prefix,
+      total: audioChunks.chunks?.length || 0,
+      downloaded:
+        audioChunks.chunks?.filter((chunk) => chunk.audioBlob instanceof Blob)
+          .length || 0,
+      hasRecordingMeta: Boolean(recordingMeta),
+    });
+    sendMessage({
+      type: "meeting-audio-chunks",
+      audioChunks,
+      recordingMeta,
+    });
+    return true;
+  };
+
+  const sendMeetingAudioChunksErrorToIframe = (error, reason = "unknown") => {
+    sendMessage({
+      type: "meeting-audio-chunks-error",
+      reason,
+      error: error?.message || String(error || "unknown"),
+    });
+  };
+
+  const resolveAndSendMeetingAudioChunks = async ({
+    force = false,
+    reason = "postStop-effect",
+    requestedRecordingId = null,
+  } = {}) => {
+    const { isPostStop, recordingId: launchRecordingId } = getPostStopLaunchParams();
+    const recordingId = requestedRecordingId || launchRecordingId || null;
+
+    console.info("[EditorWebCodecs][MeetingAudioChunks] Resolve requested", {
+      reason,
+      recordingId,
+      isPostStop,
+      force,
+      hasCachedChunks: Boolean(meetingAudioChunksRef.current),
+      isAuthLoading: isAuthLoadingRef.current,
+      hasSlingUser: Boolean(slingUserRef.current && !slingUserRef.current.expired),
+    });
+
+    if (!isPostStop) return null;
+
+    if (meetingAudioChunksRef.current && !force) {
+      sendMeetingAudioChunksToIframe(
+        meetingAudioChunksRef.current,
+        recordingMetaRef.current,
+        `${reason}:cached`,
+      );
+      return meetingAudioChunksRef.current;
+    }
+
+    if (isAuthLoadingRef.current) {
+      console.info("[EditorWebCodecs][MeetingAudioChunks] Resolve postponed: auth loading", {
+        reason,
+        recordingId,
+      });
+      return null;
+    }
+
+    if (meetingAudioChunksRequestPromiseRef.current) {
+      console.info("[EditorWebCodecs][MeetingAudioChunks] Resolve joined in-flight request", {
+        reason,
+        recordingId,
+      });
+      const audioChunks = await meetingAudioChunksRequestPromiseRef.current;
+      if (audioChunks) {
+        sendMeetingAudioChunksToIframe(
+          audioChunks,
+          recordingMetaRef.current,
+          `${reason}:in-flight-complete`,
+        );
+      }
+      return audioChunks;
+    }
+
+    meetingAudioChunksCheckedRef.current = true;
+    setIsPostStopProcessing(true);
+
+    const requestPromise = (async () => {
+      try {
+        const scopedRecordingMetaKey = recordingId
+          ? `recordingMeta:${recordingId}`
+          : null;
+        const storageKeys = [
+          "recordingMeta",
+          "screenityMeetingState",
+          "latestRecordingMeta",
+          "latestRecordingMetaKey",
+        ];
+        if (scopedRecordingMetaKey) storageKeys.push(scopedRecordingMetaKey);
+
+        const storage = await chrome.storage.local.get(storageKeys);
+        const {
+          recordingMeta = null,
+          screenityMeetingState = null,
+          latestRecordingMeta = null,
+          latestRecordingMetaKey = null,
+        } = storage;
+        const scopedRecordingMeta = scopedRecordingMetaKey
+          ? storage[scopedRecordingMetaKey] || null
+          : null;
+        const resolvedRecordingMeta = resolveStoredRecordingMetaForPostStop({
+          recordingId,
+          recordingMeta,
+          scopedRecordingMeta,
+          latestRecordingMeta,
+          latestRecordingMetaKey,
+        });
+
+        const meetingContext =
+          resolvedRecordingMeta?.meetingContext || screenityMeetingState || null;
+
+        console.info("[EditorWebCodecs][MeetingAudioChunks] PostStop storage context", {
+          reason,
+          recordingId,
+          hasRecordingMeta: Boolean(recordingMeta),
+          hasScopedRecordingMeta: Boolean(scopedRecordingMeta),
+          hasLatestRecordingMeta: Boolean(latestRecordingMeta),
+          latestRecordingMetaKey,
+          hasResolvedRecordingMeta: Boolean(resolvedRecordingMeta),
+          hasScreenityMeetingState: Boolean(screenityMeetingState),
+          recordingMeta,
+          scopedRecordingMeta,
+          resolvedRecordingMeta,
+          screenityMeetingState,
+          meetingContext,
+        });
+
+        const audioChunks = await listMeetingAudioChunks(
+          meetingContext,
+          recordingId,
+          slingUserRef.current,
+        );
+
+        if (!audioChunks) {
+          setIsPostStopProcessing(false);
+          sendMeetingAudioChunksErrorToIframe(
+            new Error("Não foi possível resolver o meetingId dos chunks MP3."),
+            reason,
+          );
+          return null;
+        }
+
+        const alignedAudioChunks = {
+          ...audioChunks,
+          alignment: buildMeetingAudioAlignment(audioChunks, resolvedRecordingMeta),
+        };
+
+        console.info("[EditorWebCodecs][MeetingAudioChunks] Chunks resolved", {
+          reason,
+          recordingId,
+          meetingId: alignedAudioChunks.meetingId,
+          prefix: alignedAudioChunks.prefix,
+          total: alignedAudioChunks.chunks.length,
+          alignment: alignedAudioChunks.alignment,
+          chunks: alignedAudioChunks.chunks,
+          downloaded: alignedAudioChunks.chunks.filter((chunk) => chunk.audioBlob instanceof Blob).length,
+        });
+
+        meetingAudioChunksRef.current = alignedAudioChunks;
+        recordingMetaRef.current = resolvedRecordingMeta;
+        sendMeetingAudioChunksToIframe(alignedAudioChunks, resolvedRecordingMeta, reason);
+        setIsPostStopProcessing(false);
+
+        try {
+          await chrome.storage.local.set({
+            [`meetingAudioChunks:${recordingId || alignedAudioChunks.meetingId}`]:
+              toSerializableMeetingAudioChunks(alignedAudioChunks),
+            latestMeetingAudioChunks: toSerializableMeetingAudioChunks(alignedAudioChunks),
+            latestMeetingAudioChunksKey: recordingId || alignedAudioChunks.meetingId || null,
+            latestMeetingDocumentContext: {
+              recordingId,
+              meetingId: alignedAudioChunks.meetingId || null,
+              recordingMeta: resolvedRecordingMeta,
+              screenityMeetingState,
+              meetingContext,
+              capturedAt: Date.now(),
+            },
+          });
+        } catch {
+          // Persisting is best-effort; the in-memory postMessage is what matters.
+        }
+
+        return alignedAudioChunks;
+      } catch (error) {
+        console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to list chunks", {
+          reason,
+          recordingId,
+          error: error?.message || String(error),
+        });
+        setIsPostStopProcessing(false);
+        sendMeetingAudioChunksErrorToIframe(error, reason);
+        return null;
+      } finally {
+        meetingAudioChunksRequestPromiseRef.current = null;
+      }
+    })();
+
+    meetingAudioChunksRequestPromiseRef.current = requestPromise;
+    return requestPromise;
+  };
+
   const onMessage = async (message) => {
     try {
       switch (message.type) {
+        case "request-meeting-audio-chunks": {
+          console.info("[EditorWebCodecs][MeetingAudioChunks] Iframe requested chunks", {
+            recordingId: message.recordingId || null,
+            hasCachedChunks: Boolean(meetingAudioChunksRef.current),
+            isAuthLoading: isAuthLoadingRef.current,
+            hasSlingUser: Boolean(slingUserRef.current && !slingUserRef.current.expired),
+          });
+          await resolveAndSendMeetingAudioChunks({
+            reason: "iframe-request",
+            requestedRecordingId: message.recordingId || null,
+          });
+          break;
+        }
+
         case "load-ffmpeg":
           triggerLoad.current = true;
           await loadFfmpeg();
@@ -707,6 +1118,14 @@ const Sandbox = () => {
   }, []);
 
   useEffect(() => {
+    isAuthLoadingRef.current = isAuthLoading;
+  }, [isAuthLoading]);
+
+  useEffect(() => {
+    slingUserRef.current = slingUser;
+  }, [slingUser]);
+
+  useEffect(() => {
     const authenticateOnLoad = async () => {
       if (authAttemptedRef.current) return;
       authAttemptedRef.current = true;
@@ -737,141 +1156,21 @@ const Sandbox = () => {
 
   useEffect(() => {
     if (meetingAudioChunksCheckedRef.current) return;
-
-    let params = null;
-    try {
-      params = new URLSearchParams(window.location.search);
-    } catch {
-      return;
-    }
-
-    if (params.get("mode") !== "postStop") return;
+    const { isPostStop } = getPostStopLaunchParams();
+    if (!isPostStop) return;
     if (isAuthLoading) return;
 
-    meetingAudioChunksCheckedRef.current = true;
-    let cancelled = false;
-
-    const checkMeetingAudioChunks = async () => {
-      const recordingId = params.get("recordingId") || null;
-
-      console.info("[EditorWebCodecs][MeetingAudioChunks] PostStop check start", {
-        recordingId,
-        isAuthLoading,
-        hasSlingUser: Boolean(slingUser && !slingUser.expired),
-      });
-
-      try {
-        const { recordingMeta = null, screenityMeetingState = null } =
-          await chrome.storage.local.get([
-            "recordingMeta",
-            "screenityMeetingState",
-          ]);
-
-        if (cancelled) return;
-
-        const meetingContext =
-          recordingMeta?.meetingContext || screenityMeetingState || null;
-
-        console.info("[EditorWebCodecs][MeetingAudioChunks] PostStop storage context", {
-          recordingId,
-          hasRecordingMeta: Boolean(recordingMeta),
-          hasScreenityMeetingState: Boolean(screenityMeetingState),
-          recordingMeta,
-          screenityMeetingState,
-          meetingContext,
-        });
-
-        const audioChunks = await listMeetingAudioChunks(
-          meetingContext,
-          recordingId,
-          slingUser,
-        );
-
-        if (cancelled) return;
-
-        if (!audioChunks) {
-          setIsPostStopProcessing(false);
-          return;
-        }
-
-        console.info("[EditorWebCodecs][MeetingAudioChunks] Chunks resolved", {
-          recordingId,
-          meetingId: audioChunks.meetingId,
-          prefix: audioChunks.prefix,
-          total: audioChunks.chunks.length,
-          chunks: audioChunks.chunks,
-          downloaded: audioChunks.chunks.filter((chunk) => chunk.audioBlob).length,
-        });
-
-        meetingAudioChunksRef.current = audioChunks;
-        recordingMetaRef.current = recordingMeta;
-        console.info("[EditorWebCodecs][MeetingAudioChunks] Sending chunks to iframe", {
-          recordingId,
-          meetingId: audioChunks.meetingId,
-          total: audioChunks.chunks.length,
-          downloaded: audioChunks.chunks.filter((chunk) => chunk.audioBlob instanceof Blob).length,
-          hasRecordingMeta: Boolean(recordingMeta),
-        });
-        sendMessage({
-          type: "meeting-audio-chunks",
-          audioChunks,
-          recordingMeta,
-        });
-
-        try {
-          await chrome.storage.local.set({
-            [`meetingAudioChunks:${recordingId || audioChunks.meetingId}`]:
-              toSerializableMeetingAudioChunks(audioChunks),
-            latestMeetingAudioChunks: toSerializableMeetingAudioChunks(audioChunks),
-            latestMeetingAudioChunksKey: recordingId || audioChunks.meetingId || null,
-            latestMeetingDocumentContext: {
-              recordingId,
-              meetingId: audioChunks.meetingId || null,
-              recordingMeta,
-              screenityMeetingState,
-              meetingContext,
-              capturedAt: Date.now(),
-            },
-          });
-        } catch {
-          // Persisting is best-effort; the alert is the required behavior here.
-        }
-
-        if (!audioChunks.chunks.some((chunk) => chunk.audioBlob instanceof Blob)) {
-          setIsPostStopProcessing(false);
-        }
-      } catch (error) {
-        if (cancelled) return;
-        console.warn("[EditorWebCodecs][MeetingAudioChunks] Failed to list chunks", {
-          recordingId,
-          error: error?.message || String(error),
-        });
-        setIsPostStopProcessing(false);
-      }
-    };
-
-    checkMeetingAudioChunks();
-
-    return () => {
-      cancelled = true;
-    };
+    resolveAndSendMeetingAudioChunks({ reason: "postStop-effect" });
   }, [isAuthLoading, slingUser]);
 
   const handleIframeLoad = () => {
     sendAuthStateToIframe(slingUser, isAuthLoading);
     if (meetingAudioChunksRef.current) {
-      console.info("[EditorWebCodecs][MeetingAudioChunks] Iframe load: resending chunks", {
-        meetingId: meetingAudioChunksRef.current.meetingId,
-        total: meetingAudioChunksRef.current.chunks?.length || 0,
-        downloaded:
-          meetingAudioChunksRef.current.chunks?.filter((chunk) => chunk.audioBlob instanceof Blob).length || 0,
-        hasRecordingMeta: Boolean(recordingMetaRef.current),
-      });
-      sendMessage({
-        type: "meeting-audio-chunks",
-        audioChunks: meetingAudioChunksRef.current,
-        recordingMeta: recordingMetaRef.current,
-      });
+      sendMeetingAudioChunksToIframe(
+        meetingAudioChunksRef.current,
+        recordingMetaRef.current,
+        "iframe-load",
+      );
     }
   };
 

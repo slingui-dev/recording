@@ -39,6 +39,7 @@ const loadMb = () => {
 
 const API_BASE = process.env.SCREENITY_API_BASE_URL || "https://api.slingui.com";
 const MEETING_AUDIO_LOG_PREFIX = "[Sandbox][MeetingAudioChunks]";
+const MEETING_AUDIO_CHUNK_DOWNLOAD_CONCURRENCY = 4;
 
 const meetingAudioLog = (message, payload = null) => {
   if (payload == null) {
@@ -215,8 +216,308 @@ const decodeMeetingAudioChunkMetadata = (fileName) => {
   return null;
 };
 
+const toFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const toEpochMs = (value) => {
+  if (value == null || value === "") return null;
+
+  const numeric = toFiniteNumber(value);
+  if (numeric != null) {
+    return numeric > 0 && numeric < 100000000000 ? numeric * 1000 : numeric;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveRecordingStartFromId = (recordingId) => {
+  const match = String(recordingId || "").match(/^(\d{12,14})(?:-|$)/);
+  if (!match) return null;
+
+  const startedAtMs = Number(match[1]);
+  return Number.isFinite(startedAtMs) ? startedAtMs : null;
+};
+
+const toPositiveSeconds = (value) => {
+  const number = toFiniteNumber(value);
+  return number != null && number > 0 ? number : null;
+};
+
+const keepReliableDurationSeconds = (candidate, fallback = 0) => {
+  const candidateSeconds = toPositiveSeconds(candidate);
+  if (candidateSeconds != null) return candidateSeconds;
+
+  const fallbackSeconds = toPositiveSeconds(fallback);
+  return fallbackSeconds != null ? fallbackSeconds : 0;
+};
+
+const normalizeRecordingMetaForPostStop = (recordingMeta, recordingId = null) => {
+  if (!recordingMeta || typeof recordingMeta !== "object") {
+    const recordingStartedAtMs = resolveRecordingStartFromId(recordingId);
+    if (recordingStartedAtMs == null) return null;
+
+    return {
+      recordingId: recordingId || null,
+      recordingStartedAtMs,
+      recordingStartedAt: new Date(recordingStartedAtMs).toISOString(),
+      startedAt: recordingStartedAtMs,
+      recoveredFromRecordingId: true,
+    };
+  }
+
+  const recordingStartedAtMs =
+    toEpochMs(recordingMeta.recordingStartedAtMs) ??
+    toEpochMs(recordingMeta.recordingStartedAt) ??
+    toEpochMs(recordingMeta.startedAt) ??
+    resolveRecordingStartFromId(recordingId || recordingMeta.recordingId);
+
+  return {
+    ...recordingMeta,
+    recordingId: recordingId || recordingMeta.recordingId || null,
+    recordingStartedAtMs,
+    recordingStartedAt:
+      recordingStartedAtMs != null
+        ? new Date(recordingStartedAtMs).toISOString()
+        : recordingMeta.recordingStartedAt || null,
+    startedAt: recordingMeta.startedAt || recordingStartedAtMs || null,
+    recoveredFromRecordingId:
+      Boolean(recordingStartedAtMs) &&
+      !(
+        toEpochMs(recordingMeta.recordingStartedAtMs) ??
+        toEpochMs(recordingMeta.recordingStartedAt) ??
+        toEpochMs(recordingMeta.startedAt)
+      ),
+  };
+};
+
+const resolveStoredRecordingMetaForPostStop = ({
+  recordingId = null,
+  recordingMeta = null,
+  scopedRecordingMeta = null,
+  latestRecordingMeta = null,
+  latestRecordingMetaKey = null,
+} = {}) => {
+  const latestMatchesRecording =
+    recordingId &&
+    latestRecordingMetaKey &&
+    String(latestRecordingMetaKey) === String(recordingId);
+  const resolved =
+    scopedRecordingMeta ||
+    recordingMeta ||
+    (latestMatchesRecording ? latestRecordingMeta : null);
+
+  return normalizeRecordingMetaForPostStop(resolved, recordingId);
+};
+
+const probeBlobDurationSeconds = async (blob, timeoutMs = 5000) => {
+  if (!(blob instanceof Blob)) return null;
+
+  return new Promise((resolve) => {
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+
+    const cleanup = () => {
+      try {
+        if (probe.src) URL.revokeObjectURL(probe.src);
+      } catch {}
+      try {
+        probe.remove();
+      } catch {}
+    };
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, timeoutMs);
+
+    probe.onloadedmetadata = () => {
+      clearTimeout(timeout);
+      const durationSeconds = toPositiveSeconds(probe.duration);
+      cleanup();
+      resolve(durationSeconds);
+    };
+
+    probe.onerror = () => {
+      clearTimeout(timeout);
+      cleanup();
+      resolve(null);
+    };
+
+    probe.src = URL.createObjectURL(blob);
+  });
+};
+
+const resolveStoredRecordingDurationSeconds = async () => {
+  try {
+    const { recordingDuration } = await chrome.storage.local.get([
+      "recordingDuration",
+    ]);
+    const durationMs = toFiniteNumber(recordingDuration);
+    return durationMs != null && durationMs > 0 ? durationMs / 1000 : null;
+  } catch {
+    return null;
+  }
+};
+
+const resolveReliableRecordingDurationSeconds = async ({
+  blob,
+  currentDuration,
+} = {}) => {
+  const currentSeconds = toPositiveSeconds(currentDuration);
+  if (currentSeconds != null) return currentSeconds;
+
+  const storedSeconds = await resolveStoredRecordingDurationSeconds();
+  if (storedSeconds != null) return storedSeconds;
+
+  return probeBlobDurationSeconds(blob);
+};
+
+const resolveMeetingAudioRecordingStartedAtMs = (recordingMeta, audioChunks = null) =>
+  toEpochMs(recordingMeta?.recordingStartedAtMs) ??
+  toEpochMs(recordingMeta?.recordingStartedAt) ??
+  toEpochMs(recordingMeta?.startedAt) ??
+  toEpochMs(audioChunks?.alignment?.recordingStartedAtMs) ??
+  toEpochMs(audioChunks?.alignment?.recordingStartedAt);
+
+const resolveMeetingAudioChunkStartedAtMs = (chunk) =>
+  toEpochMs(chunk?.startedAtEpochMs) ??
+  toEpochMs(chunk?.startedAtMs) ??
+  toEpochMs(chunk?.startTimeMs) ??
+  toEpochMs(chunk?.startedAt) ??
+  toEpochMs(chunk?.metadata?.startedAtEpochMs) ??
+  toEpochMs(chunk?.metadata?.startedAtMs) ??
+  toEpochMs(chunk?.metadata?.startTimeMs) ??
+  toEpochMs(chunk?.metadata?.startedAt);
+
+const resolveMeetingAudioChunkDurationMs = (chunk) => {
+  const explicitDuration = toFiniteNumber(
+    chunk?.durationMs ??
+      chunk?.duration ??
+      chunk?.metadata?.durationMs ??
+      chunk?.metadata?.duration,
+  );
+
+  if (explicitDuration != null && explicitDuration > 0) {
+    return explicitDuration > 0 && explicitDuration < 1000
+      ? explicitDuration * 1000
+      : explicitDuration;
+  }
+
+  const totalSamples = toFiniteNumber(
+    chunk?.totalSamples ?? chunk?.metadata?.totalSamples,
+  );
+  const sampleRate = toFiniteNumber(
+    chunk?.sampleRate ?? chunk?.metadata?.sampleRate,
+  );
+
+  if (totalSamples != null && totalSamples > 0 && sampleRate != null && sampleRate > 0) {
+    return (totalSamples / sampleRate) * 1000;
+  }
+
+  return null;
+};
+
+const validateMeetingAudioTimelineReadiness = ({
+  audioChunks,
+  recordingMeta,
+  recordingDurationSeconds,
+} = {}) => {
+  const chunks = Array.isArray(audioChunks?.chunks) ? audioChunks.chunks : [];
+  const downloadedChunks = chunks.filter((chunk) => chunk?.audioBlob instanceof Blob);
+  const hasAbsoluteChunkTimestamps = downloadedChunks.some((chunk) =>
+    Number.isFinite(resolveMeetingAudioChunkStartedAtMs(chunk)),
+  );
+
+  if (!hasAbsoluteChunkTimestamps) {
+    return { ready: true, missing: [], message: null };
+  }
+
+  const missing = [];
+  const recordingStartedAtMs = resolveMeetingAudioRecordingStartedAtMs(
+    recordingMeta,
+    audioChunks,
+  );
+  const recordingDuration = toPositiveSeconds(recordingDurationSeconds);
+
+  if (!Number.isFinite(recordingStartedAtMs)) missing.push("início da gravação");
+  if (recordingDuration == null) missing.push("duração do vídeo");
+
+  const chunksMissingDuration = downloadedChunks.filter((chunk) => {
+    const startedAtMs = resolveMeetingAudioChunkStartedAtMs(chunk);
+    if (!Number.isFinite(startedAtMs)) return false;
+    const durationMs = resolveMeetingAudioChunkDurationMs(chunk);
+    return !(Number.isFinite(durationMs) && durationMs > 0);
+  }).length;
+
+  if (chunksMissingDuration > 0) {
+    missing.push(`duração de ${chunksMissingDuration} chunk(s) MP3`);
+  }
+
+  return {
+    ready: missing.length === 0,
+    missing,
+    message: missing.length
+      ? `Aguardando metadados para validar chunks MP3 após reload: faltam ${missing.join(", ")}.`
+      : null,
+  };
+};
+
+const getMeetingAudioChunkMetadata = (chunk) =>
+  chunk?.metadata || decodeMeetingAudioChunkMetadata(chunk?.fileName);
+
+const sortMeetingAudioChunks = (chunks) =>
+  [...chunks]
+    .map((chunk) => ({
+      ...chunk,
+      metadata: getMeetingAudioChunkMetadata(chunk),
+    }))
+    .sort((a, b) => {
+      const aStart = toFiniteNumber(a?.startedAtEpochMs ?? a?.metadata?.startedAtEpochMs);
+      const bStart = toFiniteNumber(b?.startedAtEpochMs ?? b?.metadata?.startedAtEpochMs);
+
+      if (aStart != null && bStart != null && aStart !== bStart) {
+        return aStart - bStart;
+      }
+      if (aStart != null && bStart == null) return -1;
+      if (aStart == null && bStart != null) return 1;
+
+      const aSequence = toFiniteNumber(a?.sequence ?? a?.metadata?.sequence);
+      const bSequence = toFiniteNumber(b?.sequence ?? b?.metadata?.sequence);
+
+      if (aSequence != null && bSequence != null && aSequence !== bSequence) {
+        return aSequence - bSequence;
+      }
+      if (aSequence != null && bSequence == null) return -1;
+      if (aSequence == null && bSequence != null) return 1;
+
+      return String(a?.fileName || "").localeCompare(String(b?.fileName || ""));
+    });
+
+const mapWithConcurrencyLimit = async (items, limit, mapper) => {
+  if (!items.length) return [];
+
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      }
+    }),
+  );
+
+  return results;
+};
+
 const downloadMeetingAudioChunk = async (chunk) => {
-  const metadata = chunk?.metadata || decodeMeetingAudioChunkMetadata(chunk?.fileName);
+  const metadata = getMeetingAudioChunkMetadata(chunk);
 
   meetingAudioLog("download chunk start", {
     chunk: summarizeMeetingAudioChunk({ ...chunk, metadata }),
@@ -348,9 +649,7 @@ const listMeetingAudioChunks = async (meetingContext, recordingId = null) => {
 
   const data = await res.json();
   const chunks = Array.isArray(data?.chunks)
-    ? [...data.chunks].sort((a, b) =>
-        String(a?.fileName || "").localeCompare(String(b?.fileName || "")),
-      )
+    ? sortMeetingAudioChunks(data.chunks)
     : [];
 
   meetingAudioLog("list payload", {
@@ -362,8 +661,10 @@ const listMeetingAudioChunks = async (meetingContext, recordingId = null) => {
     chunks: chunks.map(summarizeMeetingAudioChunk),
   });
 
-  const enrichedChunks = await Promise.all(
-    chunks.map((chunk) => downloadMeetingAudioChunk(chunk)),
+  const enrichedChunks = await mapWithConcurrencyLimit(
+    chunks,
+    MEETING_AUDIO_CHUNK_DOWNLOAD_CONCURRENCY,
+    (chunk) => downloadMeetingAudioChunk(chunk),
   );
 
   meetingAudioLog("list enriched", {
@@ -389,6 +690,7 @@ const ContentState = (props) => {
   const recdbgSessionRef = useRef(null);
   const tabIdRef = useRef(null);
   const meetingAudioChunksCheckedRef = useRef(false);
+  const meetingAudioChunksParentRequestAttemptRef = useRef(0);
   const meetingAudioChunksApplyStartedRef = useRef(false);
   // Stale-result guard + stuck-edit watchdog.
   const opIdRef = useRef(0);
@@ -557,6 +859,7 @@ const ContentState = (props) => {
     applyingMeetingAudioChunks: false,
     meetingAudioChunksApplied: false,
     meetingAudioChunksError: null,
+    meetingAudioChunksBlockedReason: null,
   };
 
   const [contentState, _setContentState] = useState(defaultState);
@@ -600,22 +903,51 @@ const ContentState = (props) => {
       const recordingId = launchRecordingIdRef.current;
 
       try {
-        const { recordingMeta = null, screenityMeetingState = null } =
-          await chrome.storage.local.get([
-            "recordingMeta",
-            "screenityMeetingState",
-          ]);
+        const scopedRecordingMetaKey = recordingId
+          ? `recordingMeta:${recordingId}`
+          : null;
+        const storageKeys = [
+          "recordingMeta",
+          "screenityMeetingState",
+          "latestRecordingMeta",
+          "latestRecordingMetaKey",
+        ];
+        if (scopedRecordingMetaKey) storageKeys.push(scopedRecordingMetaKey);
+
+        const storage = await chrome.storage.local.get(storageKeys);
+        const {
+          recordingMeta = null,
+          screenityMeetingState = null,
+          latestRecordingMeta = null,
+          latestRecordingMetaKey = null,
+        } = storage;
+        const scopedRecordingMeta = scopedRecordingMetaKey
+          ? storage[scopedRecordingMetaKey] || null
+          : null;
+        const resolvedRecordingMeta = resolveStoredRecordingMetaForPostStop({
+          recordingId,
+          recordingMeta,
+          scopedRecordingMeta,
+          latestRecordingMeta,
+          latestRecordingMetaKey,
+        });
 
         if (cancelled) return;
 
         const meetingContext =
-          recordingMeta?.meetingContext || screenityMeetingState || null;
+          resolvedRecordingMeta?.meetingContext || screenityMeetingState || null;
 
         meetingAudioLog("postStop storage context", {
           recordingId,
           hasRecordingMeta: Boolean(recordingMeta),
+          hasScopedRecordingMeta: Boolean(scopedRecordingMeta),
+          hasLatestRecordingMeta: Boolean(latestRecordingMeta),
+          latestRecordingMetaKey,
+          hasResolvedRecordingMeta: Boolean(resolvedRecordingMeta),
           hasScreenityMeetingState: Boolean(screenityMeetingState),
           recordingMeta,
+          scopedRecordingMeta,
+          resolvedRecordingMeta,
           screenityMeetingState,
           meetingContext,
         });
@@ -657,7 +989,8 @@ const ContentState = (props) => {
         setContentState((prevState) => ({
           ...prevState,
           meetingAudioChunks: audioChunks,
-          recordingMeta: recordingMeta || prevState.recordingMeta,
+          recordingMeta: resolvedRecordingMeta || prevState.recordingMeta,
+          meetingAudioChunksBlockedReason: null,
         }));
 
         meetingAudioLog("postStop state updated with chunks", {
@@ -690,6 +1023,69 @@ const ContentState = (props) => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (launchModeRef.current !== "postStop") return;
+    if (window.top === window.self) return;
+    if (contentState.meetingAudioChunks) return;
+    if (contentState.meetingAudioChunksError) return;
+
+    let cancelled = false;
+    let retryTimer = null;
+    const maxAttempts = 8;
+    const retryDelayMs = 1500;
+
+    const requestMeetingAudioChunksFromParent = () => {
+      const currentState = contentStateRef.current;
+      if (cancelled) return;
+      if (currentState?.meetingAudioChunks) return;
+      if (currentState?.meetingAudioChunksError) return;
+
+      const attempt = meetingAudioChunksParentRequestAttemptRef.current + 1;
+      meetingAudioChunksParentRequestAttemptRef.current = attempt;
+
+      if (attempt > maxAttempts) {
+        meetingAudioLog("parent chunk request attempts exhausted", {
+          recordingId: launchRecordingIdRef.current,
+          attempts: attempt - 1,
+          reason:
+            "No meeting-audio-chunks response received from parent; keeping this silent because this editor may not have MP3 chunks for the current meeting.",
+        });
+        return;
+      }
+
+      meetingAudioLog("Requesting chunks from parent", {
+        recordingId: launchRecordingIdRef.current,
+        attempt,
+      });
+
+      try {
+        window.parent?.postMessage(
+          {
+            type: "request-meeting-audio-chunks",
+            recordingId: launchRecordingIdRef.current,
+            attempt,
+          },
+          "*",
+        );
+      } catch (error) {
+        console.warn("[Sandbox][MeetingAudioChunks] Failed to request chunks from parent", {
+          recordingId: launchRecordingIdRef.current,
+          attempt,
+          error: error?.message || String(error),
+        });
+      }
+
+      retryTimer = setTimeout(requestMeetingAudioChunksFromParent, retryDelayMs);
+    };
+
+    requestMeetingAudioChunksFromParent();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [contentState.meetingAudioChunks, contentState.meetingAudioChunksError, setContentState]);
 
   useEffect(() => {
     // emit diag-editor-ready once; WebM has many "ready:true" branches
@@ -1103,7 +1499,7 @@ const ContentState = (props) => {
       }
       setContentState((prevState) => ({
         ...prevState,
-        duration: durationSec,
+        duration: keepReliableDurationSeconds(durationSec, prevState.duration),
         width: video.videoWidth,
         height: video.videoHeight,
         prevWidth: video.videoWidth,
@@ -1238,8 +1634,13 @@ const ContentState = (props) => {
       video.preload = "metadata";
       const videoLoadStart = Date.now();
       video.onloadedmetadata = () => {
+        const reliableDuration = keepReliableDurationSeconds(
+          video.duration,
+          contentStateRef.current?.duration,
+        );
         perfMark("Sandbox video-loadedmetadata", {
-          duration: video.duration,
+          duration: reliableDuration,
+          rawDuration: Number.isFinite(video.duration) ? video.duration : null,
           w: video.videoWidth,
           h: video.videoHeight,
         });
@@ -1252,7 +1653,7 @@ const ContentState = (props) => {
         });
         setContentState((prev) => ({
           ...prev,
-          duration: video.duration,
+          duration: keepReliableDurationSeconds(video.duration, prev.duration),
           width: video.videoWidth,
           height: video.videoHeight,
         }));
@@ -1348,7 +1749,10 @@ const ContentState = (props) => {
     setContentState((prevState) => ({
       ...prevState,
       rawBlob: blob,
-      duration: safeDuration / 1000,
+      duration: keepReliableDurationSeconds(
+        safeDuration / 1000,
+        prevState.duration,
+      ),
     }));
 
     const isWindows10 = navigator.userAgent.match(/Windows NT 10.0/);
@@ -2461,7 +2865,10 @@ const ContentState = (props) => {
         meetingAudioChunks: audioChunks,
         recordingMeta: event.data.recordingMeta || prevState.recordingMeta,
         meetingAudioChunksError: null,
+        meetingAudioChunksBlockedReason: null,
       }));
+
+      meetingAudioChunksParentRequestAttemptRef.current = 0;
 
       console.info("[Sandbox][MeetingAudioChunks] Received chunks in memory", {
         meetingId: audioChunks.meetingId,
@@ -2472,6 +2879,20 @@ const ContentState = (props) => {
             .length || 0,
         chunks: audioChunks.chunks,
       });
+    } else if (event.data.type === "meeting-audio-chunks-error") {
+      const errorMessage =
+        event.data.error ||
+        "Não foi possível listar os chunks MP3 da reunião no editor pai.";
+
+      console.warn("[Sandbox][MeetingAudioChunks] Parent returned chunk error", {
+        reason: event.data.reason || null,
+        error: errorMessage,
+      });
+
+      setContentState((prevState) => ({
+        ...prevState,
+        meetingAudioChunksError: errorMessage,
+      }));
     } else if (event.data.type === "updated-blob") {
       // Discard results from a timed-out or superseded operation.
       const msgOpId = event.data._opId;
@@ -2532,6 +2953,9 @@ const ContentState = (props) => {
           meetingAudioChunksError: meetingAudioChunksApplied
             ? null
             : prev.meetingAudioChunksError,
+          meetingAudioChunksBlockedReason: meetingAudioChunksApplied
+            ? null
+            : prev.meetingAudioChunksBlockedReason,
           processingProgress: 0,
           editErrorType: null,
           hasTempChanges: !isTopLevel,
@@ -2561,7 +2985,7 @@ const ContentState = (props) => {
         }
         setContentState((prev) => ({
           ...prev,
-          duration: video.duration,
+          duration: keepReliableDurationSeconds(video.duration, prev.duration),
           width: video.videoWidth,
           height: video.videoHeight,
           start: 0,
@@ -2645,6 +3069,12 @@ const ContentState = (props) => {
       console.log("[Screenity][Editor] recording-complete sent from ffmpeg-load-error fallback");
       chrome.runtime.sendMessage({ type: "recording-complete" });
     } else if (event.data.type === "ffmpeg-error") {
+      const meetingAudioErrorMessage =
+        event.data.errorMessage ||
+        (typeof event.data.error === "string"
+          ? event.data.error
+          : event.data.error?.message) ||
+        "failed";
       console.warn("FFmpeg error:", {
         error: event.data.error,
         errorMessage: event.data.errorMessage,
@@ -2668,7 +3098,7 @@ const ContentState = (props) => {
           cropping: false,
           applyingMeetingAudioChunks: false,
           meetingAudioChunksError: prev.applyingMeetingAudioChunks
-            ? "failed"
+            ? meetingAudioErrorMessage
             : prev.meetingAudioChunksError,
           processingProgress: 0,
           editErrorType: wasEditing ? "failed" : prev.editErrorType,
@@ -2969,6 +3399,40 @@ const ContentState = (props) => {
       setContentState((prev) => ({
         ...prev,
         meetingAudioChunksError: !current.blob ? "missing-video" : "missing-audio",
+        meetingAudioChunksBlockedReason: null,
+      }));
+      return false;
+    }
+
+    const recordingDuration = await resolveReliableRecordingDurationSeconds({
+      blob: current.blob,
+      currentDuration: current.duration,
+    });
+
+    if (recordingDuration != null && recordingDuration !== current.duration) {
+      setContentState((prev) => ({
+        ...prev,
+        duration: keepReliableDurationSeconds(recordingDuration, prev.duration),
+      }));
+    }
+
+    const timelineReadiness = validateMeetingAudioTimelineReadiness({
+      audioChunks,
+      recordingMeta: current.recordingMeta,
+      recordingDurationSeconds: recordingDuration,
+    });
+
+    if (!timelineReadiness.ready) {
+      meetingAudioLog("apply blocked: missing timeline metadata", {
+        missing: timelineReadiness.missing,
+        recordingDuration,
+        hasRecordingMeta: Boolean(current.recordingMeta),
+      });
+      setContentState((prev) => ({
+        ...prev,
+        applyingMeetingAudioChunks: false,
+        meetingAudioChunksError: null,
+        meetingAudioChunksBlockedReason: timelineReadiness.message,
       }));
       return false;
     }
@@ -2977,7 +3441,7 @@ const ContentState = (props) => {
 
     meetingAudioLog("apply sending to parent", {
       opId,
-      recordingDuration: current.duration,
+      recordingDuration,
       recordingMeta: current.recordingMeta,
       downloadedChunks: downloadedChunks.length,
       chunks: audioChunks.chunks.map(summarizeMeetingAudioChunk),
@@ -2988,6 +3452,7 @@ const ContentState = (props) => {
       isFfmpegRunning: true,
       applyingMeetingAudioChunks: true,
       meetingAudioChunksError: null,
+      meetingAudioChunksBlockedReason: null,
       processingProgress: 0,
       editErrorType: null,
     }));
@@ -2997,7 +3462,7 @@ const ContentState = (props) => {
       blob: current.blob,
       audioChunks,
       recordingMeta: current.recordingMeta,
-      recordingDuration: current.duration,
+      recordingDuration,
       topLevel: true,
       _opId: opId,
     });
@@ -3013,7 +3478,6 @@ const ContentState = (props) => {
     if (contentState.meetingAudioChunksApplied) return;
     if (contentState.isFfmpegRunning) return;
 
-    meetingAudioChunksApplyStartedRef.current = true;
     meetingAudioLog("auto-apply conditions met", {
       ready: contentState.ready,
       mp4ready: contentState.mp4ready,
@@ -3021,7 +3485,11 @@ const ContentState = (props) => {
       meetingAudioChunksApplied: contentState.meetingAudioChunksApplied,
       duration: contentState.duration,
     });
-    applyMeetingAudioChunks();
+    applyMeetingAudioChunks().then((started) => {
+      if (started) {
+        meetingAudioChunksApplyStartedRef.current = true;
+      }
+    });
   }, [
     contentState.ready,
     contentState.mp4ready,
@@ -3029,6 +3497,7 @@ const ContentState = (props) => {
     contentState.meetingAudioChunks,
     contentState.meetingAudioChunksApplied,
     contentState.isFfmpegRunning,
+    contentState.duration,
   ]);
 
   const handleTrim = async (cut) => {

@@ -7,13 +7,402 @@ import { ReactSVG } from "react-svg";
 
 import { login, logout, getUser } from "../../../../utils/slingui-auth";
 
-const EXT_URL =
-  "chrome-extension://" + chrome.i18n.getMessage("@@extension_id") + "/assets/";
-
 import CropUI from "../editor/CropUI";
 import AudioUI from "../editor/AudioUI";
 
 import { ContentStateContext } from "../../context/ContentState";
+
+const getExtensionAssetBaseUrl = () => {
+  try {
+    if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+      return chrome.runtime.getURL("assets/");
+    }
+  } catch {
+    // Sandbox pages may not expose chrome.runtime.
+  }
+
+  try {
+    return new URL("assets/", window.location.href).href;
+  } catch {
+    return "/assets/";
+  }
+};
+
+const EXT_URL = getExtensionAssetBaseUrl();
+
+const toMeetingAudioFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const toMeetingAudioEpochMs = (value) => {
+  if (value == null || value === "") return null;
+
+  const numericValue = toMeetingAudioFiniteNumber(value);
+  if (numericValue != null) {
+    return numericValue > 0 && numericValue < 1e12
+      ? numericValue * 1000
+      : numericValue;
+  }
+
+  const parsedDate = Date.parse(value);
+  return Number.isFinite(parsedDate) ? parsedDate : null;
+};
+
+const resolveMeetingAudioChunkStartedAtMs = (chunk) => {
+  const metadata = chunk?.metadata || {};
+
+  return toMeetingAudioEpochMs(
+    chunk?.startedAtEpochMs ??
+    chunk?.startedAtMs ??
+    chunk?.startTimeMs ??
+    chunk?.startedAt ??
+    metadata.startedAtEpochMs ??
+    metadata.startedAtMs ??
+    metadata.startTimeMs ??
+    metadata.startedAt,
+  );
+};
+
+const resolveMeetingAudioChunkDurationMs = (chunk) => {
+  const metadata = chunk?.metadata || {};
+  const explicitDuration = toMeetingAudioFiniteNumber(
+    chunk?.durationMs ??
+    chunk?.duration ??
+    metadata.durationMs ??
+    metadata.duration,
+  );
+
+  if (explicitDuration != null && explicitDuration > 0) {
+    return explicitDuration > 0 && explicitDuration < 1000
+      ? explicitDuration * 1000
+      : explicitDuration;
+  }
+
+  const totalSamples = toMeetingAudioFiniteNumber(
+    chunk?.totalSamples ?? metadata.totalSamples,
+  );
+  const sampleRate = toMeetingAudioFiniteNumber(
+    chunk?.sampleRate ?? metadata.sampleRate,
+  );
+
+  if (totalSamples != null && totalSamples > 0 && sampleRate != null && sampleRate > 0) {
+    return (totalSamples / sampleRate) * 1000;
+  }
+
+  return null;
+};
+
+const resolveMeetingAudioChunkExplicitOffsetMs = (chunk) =>
+  toMeetingAudioFiniteNumber(chunk?.offsetMs ?? chunk?.metadata?.offsetMs);
+
+const resolveMeetingAudioRecordingStartedAtInfo = (contentState, meetingAudioChunks = null) => {
+  const recordingMeta = contentState?.recordingMeta || {};
+  const candidates = [
+    {
+      value: toMeetingAudioEpochMs(recordingMeta?.recordingStartedAtMs),
+      source: recordingMeta?.recordingStartedAtSource || "recordingMeta.recordingStartedAtMs",
+    },
+    {
+      value: toMeetingAudioEpochMs(recordingMeta?.recordingStartedAt),
+      source: recordingMeta?.recordingStartedAtSource || "recordingMeta.recordingStartedAt",
+    },
+    {
+      value: toMeetingAudioEpochMs(recordingMeta?.startedAt),
+      source: recordingMeta?.recordingStartedAtSource || "recordingMeta.startedAt",
+    },
+    {
+      value: toMeetingAudioEpochMs(meetingAudioChunks?.alignment?.recordingStartedAtMs),
+      source: meetingAudioChunks?.alignment?.recordingStartedAtSource || "audioChunks.alignment.recordingStartedAtMs",
+    },
+    {
+      value: toMeetingAudioEpochMs(meetingAudioChunks?.alignment?.recordingStartedAt),
+      source: meetingAudioChunks?.alignment?.recordingStartedAtSource || "audioChunks.alignment.recordingStartedAt",
+    },
+  ];
+
+  const resolved = candidates.find((candidate) => candidate.value != null) || null;
+  return {
+    value: resolved?.value ?? null,
+    source: resolved?.source ?? null,
+    recoveredFromRecordingId: Boolean(
+      recordingMeta?.recoveredFromRecordingId ||
+      meetingAudioChunks?.alignment?.recoveredFromRecordingId ||
+      resolved?.source === "recordingId",
+    ),
+  };
+};
+
+const resolveMeetingAudioRecordingStartedAtMs = (contentState, meetingAudioChunks = null) =>
+  resolveMeetingAudioRecordingStartedAtInfo(contentState, meetingAudioChunks).value;
+
+const getMeetingAudioChunksArray = (meetingAudioChunks) => {
+  if (Array.isArray(meetingAudioChunks)) return meetingAudioChunks;
+  if (Array.isArray(meetingAudioChunks?.chunks)) return meetingAudioChunks.chunks;
+  return [];
+};
+
+const getMeetingAudioDownloadedCount = (chunks) =>
+  chunks.filter((chunk) => chunk?.audioBlob instanceof Blob || chunk?.blob instanceof Blob).length;
+
+const formatMeetingAudioDuration = (durationMs) => {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return "--";
+  if (durationMs < 1000) return `${Math.round(durationMs)}ms`;
+  return `${(durationMs / 1000).toFixed(durationMs < 10000 ? 1 : 0)}s`;
+};
+
+const formatMeetingAudioSignedDuration = (durationMs) => {
+  if (!Number.isFinite(durationMs)) return "--";
+  const sign = durationMs > 0 ? "+" : durationMs < 0 ? "-" : "";
+  return `${sign}${formatMeetingAudioDuration(Math.abs(durationMs))}`;
+};
+
+const formatMeetingAudioTimestamp = (timestampMs) => {
+  if (!Number.isFinite(timestampMs)) return "--";
+
+  try {
+    return new Date(timestampMs).toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return new Date(timestampMs).toISOString();
+  }
+};
+
+const formatMeetingAudioWindow = (startMs, endMs) =>
+  `${formatMeetingAudioTimestamp(startMs)} → ${formatMeetingAudioTimestamp(endMs)}`;
+
+const getMeetingAudioTimelineSourceLabel = (diagnostic) => {
+  const source = diagnostic?.recordingStartedAtSource;
+  if (!source) return "fonte desconhecida";
+  if (diagnostic?.recordingStartedAtRecoveredFromRecordingId || source === "recordingId") {
+    return "fallback pelo recordingId";
+  }
+  if (source.includes("recordingStartTime")) return "recordingStartTime";
+  if (source.includes("recordingStartedAtMs")) return "recordingMeta.recordingStartedAtMs";
+  if (source.includes("recordingStartedAt")) return "recordingMeta.recordingStartedAt";
+  if (source.includes("startedAt")) return "recordingMeta.startedAt";
+  if (source.includes("alignment")) return "alignment dos chunks";
+  return source;
+};
+
+const buildRecordingChunksDiagnostic = (contentState) => {
+  const expected = toMeetingAudioFiniteNumber(contentState?.chunkCount) || 0;
+  const received = toMeetingAudioFiniteNumber(contentState?.chunkIndex) || 0;
+  const hasBlob = contentState?.blob instanceof Blob || contentState?.rawBlob instanceof Blob;
+  const ready = Boolean(contentState?.ready || contentState?.mp4ready || hasBlob);
+  const complete = expected > 0 && received >= expected;
+
+  return {
+    visible: expected > 0 || received > 0 || ready,
+    expected,
+    received,
+    missing: Math.max(0, expected - received),
+    complete,
+    ready,
+    hasBlob,
+  };
+};
+
+const buildMeetingAudioTimelineDiagnostic = (contentState) => {
+  const meetingAudioChunks = contentState?.meetingAudioChunks;
+  const chunks = getMeetingAudioChunksArray(meetingAudioChunks);
+  const applying = Boolean(contentState?.applyingMeetingAudioChunks);
+  const applied = Boolean(contentState?.meetingAudioChunksApplied);
+  const error = contentState?.meetingAudioChunksError || null;
+  const blockedReason = contentState?.meetingAudioChunksBlockedReason || null;
+  const recordingChunks = buildRecordingChunksDiagnostic(contentState);
+  const hasMeetingAudioChunks = chunks.length > 0;
+  const visible = Boolean(
+    hasMeetingAudioChunks ||
+    applying ||
+    applied ||
+    (hasMeetingAudioChunks && (error || blockedReason))
+  );
+
+  const videoDurationSeconds = toMeetingAudioFiniteNumber(contentState?.duration);
+  const videoDurationMs = videoDurationSeconds != null && videoDurationSeconds > 0
+    ? videoDurationSeconds * 1000
+    : null;
+  const recordingStartedAtInfo = resolveMeetingAudioRecordingStartedAtInfo(
+    contentState,
+    meetingAudioChunks,
+  );
+  const recordingStartedAtMs = recordingStartedAtInfo.value;
+  const recordingEndedAtMs = recordingStartedAtMs != null && videoDurationMs != null
+    ? recordingStartedAtMs + videoDurationMs
+    : null;
+  const downloaded = getMeetingAudioDownloadedCount(chunks);
+  const failed = chunks.filter((chunk) => chunk?.error || chunk?.downloadError).length;
+  const preparedChunks = chunks.map((chunk, index) => ({
+    chunk,
+    index,
+    startedAtMs: resolveMeetingAudioChunkStartedAtMs(chunk),
+    durationMs: resolveMeetingAudioChunkDurationMs(chunk),
+    explicitOffsetMs: resolveMeetingAudioChunkExplicitOffsetMs(chunk),
+  }));
+  const hasAbsoluteChunkTimestamps = preparedChunks.some((preparedChunk) =>
+    preparedChunk.startedAtMs != null,
+  );
+  const chunksWithAbsoluteTimestampMissingDuration = preparedChunks.filter(
+    (preparedChunk) =>
+      preparedChunk.startedAtMs != null &&
+      !(preparedChunk.durationMs != null && preparedChunk.durationMs > 0),
+  ).length;
+  const chunksMissingAbsoluteTimestamp = hasAbsoluteChunkTimestamps
+    ? preparedChunks.filter((preparedChunk) => preparedChunk.startedAtMs == null).length
+    : 0;
+  const missingTimelineMetadata = [];
+
+  if (chunks.length > 0 && videoDurationMs == null) {
+    missingTimelineMetadata.push("duração do vídeo");
+  }
+
+  if (chunks.length > 0 && hasAbsoluteChunkTimestamps && recordingStartedAtMs == null) {
+    missingTimelineMetadata.push("início absoluto da gravação");
+  }
+
+  if (chunksWithAbsoluteTimestampMissingDuration > 0) {
+    missingTimelineMetadata.push(
+      `duração de ${chunksWithAbsoluteTimestampMissingDuration} chunk(s) MP3`,
+    );
+  }
+
+  if (chunksMissingAbsoluteTimestamp > 0) {
+    missingTimelineMetadata.push(
+      `início absoluto de ${chunksMissingAbsoluteTimestamp} chunk(s) MP3`,
+    );
+  }
+
+  let overlapKnown = videoDurationMs != null &&
+    recordingStartedAtMs != null &&
+    preparedChunks.length > 0;
+  let overlapping = 0;
+  let totalWritableDurationMs = 0;
+
+  const rows = preparedChunks.map((preparedChunk) => {
+    const durationMs = preparedChunk.durationMs;
+    const hasAbsoluteWindow = recordingStartedAtMs != null && recordingEndedAtMs != null;
+    const hasAbsoluteChunkTime = preparedChunk.startedAtMs != null && durationMs != null && durationMs > 0;
+
+    if (!hasAbsoluteWindow || !hasAbsoluteChunkTime) {
+      overlapKnown = false;
+    }
+
+    const rawOffsetMs = hasAbsoluteWindow && preparedChunk.startedAtMs != null
+      ? preparedChunk.startedAtMs - recordingStartedAtMs
+      : null;
+
+    const absoluteOverlapStartMs = hasAbsoluteChunkTime && hasAbsoluteWindow
+      ? Math.max(preparedChunk.startedAtMs, recordingStartedAtMs)
+      : null;
+    const absoluteOverlapEndMs = hasAbsoluteChunkTime && hasAbsoluteWindow
+      ? Math.min(preparedChunk.startedAtMs + durationMs, recordingEndedAtMs)
+      : null;
+    const writableDurationMs = absoluteOverlapStartMs != null && absoluteOverlapEndMs != null
+      ? Math.min(
+        Math.max(0, absoluteOverlapEndMs - absoluteOverlapStartMs),
+        Math.max(0, videoDurationMs || 0),
+      )
+      : null;
+    const sourceStartMs = rawOffsetMs != null
+      ? Math.min(
+        Math.max(0, -rawOffsetMs),
+        Math.max(0, durationMs || 0),
+      )
+      : null;
+    const effectiveOffsetMs = rawOffsetMs != null ? Math.max(0, rawOffsetMs) : null;
+    const overlaps = writableDurationMs != null && writableDurationMs > 0;
+
+    if (overlaps) {
+      overlapping += 1;
+      totalWritableDurationMs += writableDurationMs;
+    }
+
+    return {
+      ...preparedChunk,
+      rawOffsetMs,
+      effectiveOffsetMs,
+      sourceStartMs,
+      writableDurationMs,
+      overlaps,
+    };
+  });
+
+  const chunksWithAbsoluteWindows = rows
+    .filter((row) => Number.isFinite(row.startedAtMs) && Number.isFinite(row.durationMs) && row.durationMs > 0)
+    .map((row) => ({
+      startedAtMs: row.startedAtMs,
+      endedAtMs: row.startedAtMs + row.durationMs,
+    }))
+    .sort((a, b) => a.startedAtMs - b.startedAtMs);
+  const firstChunkWindow = chunksWithAbsoluteWindows[0] || null;
+  const lastChunkWindow = chunksWithAbsoluteWindows[chunksWithAbsoluteWindows.length - 1] || null;
+  const chunkWindowStartedAtMs = firstChunkWindow?.startedAtMs ?? null;
+  const chunkWindowEndedAtMs = chunksWithAbsoluteWindows.length
+    ? Math.max(...chunksWithAbsoluteWindows.map((window) => window.endedAtMs))
+    : null;
+  const firstChunkOffsetMs = recordingStartedAtMs != null && chunkWindowStartedAtMs != null
+    ? chunkWindowStartedAtMs - recordingStartedAtMs
+    : null;
+
+  return {
+    visible,
+    total: chunks.length,
+    downloaded,
+    failed,
+    videoDurationMs,
+    recordingStartedAtMs,
+    recordingEndedAtMs,
+    recordingStartedAtSource: recordingStartedAtInfo.source,
+    recordingStartedAtRecoveredFromRecordingId: recordingStartedAtInfo.recoveredFromRecordingId,
+    chunkWindowStartedAtMs,
+    chunkWindowEndedAtMs,
+    firstChunkStartedAtMs: firstChunkWindow?.startedAtMs ?? null,
+    firstChunkEndedAtMs: firstChunkWindow?.endedAtMs ?? null,
+    lastChunkStartedAtMs: lastChunkWindow?.startedAtMs ?? null,
+    lastChunkEndedAtMs: lastChunkWindow?.endedAtMs ?? null,
+    firstChunkOffsetMs,
+    overlapKnown,
+    overlapping,
+    totalWritableDurationMs,
+    applying,
+    applied,
+    error,
+    blockedReason,
+    missingTimelineMetadata,
+    recordingChunks,
+    rows,
+  };
+};
+
+const getMeetingAudioStatusColor = (status) => {
+  if (status === "success") return "#13a10e";
+  if (status === "warning") return "#b7791f";
+  if (status === "error") return "#d13438";
+  return "#6b7280";
+};
+
+const MeetingAudioDiagnosticRow = ({ status, label, description }) => (
+  <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 8 }}>
+    <span
+      style={{
+        width: 10,
+        height: 10,
+        borderRadius: "50%",
+        marginTop: 5,
+        flex: "0 0 auto",
+        background: getMeetingAudioStatusColor(status),
+      }}
+    />
+    <div>
+      <div style={{ fontWeight: 600 }}>{label}</div>
+      <div style={{ opacity: 0.75 }}>{description}</div>
+    </div>
+  </div>
+);
 
 const RightPanel = () => {
   const [contentState, setContentState] = useContext(ContentStateContext);
@@ -21,6 +410,7 @@ const RightPanel = () => {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isMeetingAudioDiagnosticOpen, setIsMeetingAudioDiagnosticOpen] = useState(false);
   const contentStateRef = useRef(contentState);
   const consoleErrorRef = useRef([]);
   const authAttemptedRef = useRef(false);
@@ -143,25 +533,68 @@ const RightPanel = () => {
     ]);
   };
 
+  const normalizeAccessId = (value) => {
+    if (value == null) return null;
+
+    const accessId = String(value).trim();
+    if (!accessId || accessId.includes("@")) return null;
+
+    return accessId;
+  };
+
+  const isTeacherLikeParticipant = (participant) => {
+    const role = String(participant?.role || participant?.type || "")
+      .trim()
+      .toLowerCase();
+
+    return ["teacher", "host", "owner", "instructor"].includes(role);
+  };
+
   const getParticipantAccessId = (participant) => {
     if (!participant) return null;
     if (typeof participant === "string" || typeof participant === "number") {
-      return String(participant).trim() || null;
+      return normalizeAccessId(participant);
     }
     if (typeof participant !== "object") return null;
 
-    return firstNonEmptyValue([
-      participant._id,
+    if (isTeacherLikeParticipant(participant)) return null;
+
+    return normalizeAccessId(firstNonEmptyValue([
       participant.userId,
-      participant.externalUserId,
+      participant._id,
       participant.id,
-      participant.sub,
-      participant.customerId,
-      participant.attendeeId,
-      participant.email,
-      participant.mail,
-      participant.userEmail,
-    ]);
+    ]));
+  };
+
+  const getParticipantDetails = (participant) => {
+    const accessId = getParticipantAccessId(participant);
+    if (!accessId) return null;
+
+    if (!participant || typeof participant !== "object") {
+      return {
+        id: accessId,
+        userId: accessId,
+        name: null,
+        email: null,
+        role: "participant",
+        avatarUrl: `https://public.slingui.com/avatars/${encodeURIComponent(accessId)}.png?d=124x124&cacheKey=10`,
+      };
+    }
+
+    return {
+      id: accessId,
+      userId: accessId,
+      name: participant.name || participant.displayName || participant.fullName || null,
+      email: participant.email || participant.mail || participant.userEmail || null,
+      role: "participant",
+      origin: participant.origin || null,
+      inviteId: participant.inviteId || null,
+      avatarUrl:
+        participant.avatarUrl ||
+        participant.photoUrl ||
+        participant.picture ||
+        `https://public.slingui.com/avatars/${encodeURIComponent(accessId)}.png?d=124x124&cacheKey=10`,
+    };
   };
 
   const extractParticipantsFromValue = (participants) => {
@@ -172,6 +605,17 @@ const RightPanel = () => {
     if (Array.isArray(participants)) {
       rawParticipants.push(...participants);
     } else if (typeof participants === "object") {
+      if (
+        getParticipantAccessId(participants) &&
+        !Array.isArray(participants.ids) &&
+        !Array.isArray(participants.items) &&
+        !Array.isArray(participants.attendees) &&
+        !Array.isArray(participants.finalAttendees)
+      ) {
+        rawParticipants.push(participants);
+      }
+
+      if (Array.isArray(participants.finalAttendees)) rawParticipants.push(...participants.finalAttendees);
       if (Array.isArray(participants.ids)) rawParticipants.push(...participants.ids);
       if (Array.isArray(participants.items)) rawParticipants.push(...participants.items);
       if (Array.isArray(participants.attendees)) rawParticipants.push(...participants.attendees);
@@ -179,32 +623,6 @@ const RightPanel = () => {
       if (Array.isArray(participants.list)) rawParticipants.push(...participants.list);
       if (Array.isArray(participants.values)) rawParticipants.push(...participants.values);
       if (Array.isArray(participants.userIds)) rawParticipants.push(...participants.userIds);
-      if (Array.isArray(participants.emails)) rawParticipants.push(...participants.emails);
-
-      Object.entries(participants).forEach(([key, value]) => {
-        if (
-          [
-            "ids",
-            "items",
-            "attendees",
-            "users",
-            "list",
-            "values",
-            "userIds",
-            "emails",
-            "total",
-          ].includes(key)
-        ) {
-          return;
-        }
-        if (
-          typeof value === "string" ||
-          typeof value === "number" ||
-          (value && typeof value === "object" && !Array.isArray(value))
-        ) {
-          rawParticipants.push(value);
-        }
-      });
     }
 
     return rawParticipants;
@@ -217,23 +635,27 @@ const RightPanel = () => {
       ...extractParticipantsFromValue(meetingContext.participants),
       ...extractParticipantsFromValue(meetingContext.usersCanAccess),
       ...extractParticipantsFromValue(meetingContext.users),
+      ...extractParticipantsFromValue(meetingContext.finalAttendees),
       ...extractParticipantsFromValue(meetingContext.attendees),
       ...extractParticipantsFromValue(meetingContext.meeting?.participants),
       ...extractParticipantsFromValue(meetingContext.meeting?.usersCanAccess),
       ...extractParticipantsFromValue(meetingContext.meeting?.users),
+      ...extractParticipantsFromValue(meetingContext.meeting?.finalAttendees),
       ...extractParticipantsFromValue(meetingContext.meeting?.attendees),
+      ...extractParticipantsFromValue(meetingContext.classroom?.finalAttendees),
+      ...extractParticipantsFromValue(meetingContext.classroom?.attendees),
       ...extractParticipantsFromValue(meetingContext.classroom?.participants),
       ...extractParticipantsFromValue(meetingContext.classroom?.usersCanAccess),
       ...extractParticipantsFromValue(meetingContext.classroom?.users),
-      ...extractParticipantsFromValue(meetingContext.classroom?.attendees),
       ...extractParticipantsFromContext(meetingContext.meetingContext),
       ...extractParticipantsFromContext(meetingContext.lastMeetingState),
     ];
   };
 
-  const buildUsersCanAccess = (...meetingContexts) => {
+  const buildParticipantAccess = (...meetingContexts) => {
     const seen = new Set();
     const usersCanAccess = [];
+    const participantDetails = [];
     const localAccessIds = new Set();
 
     meetingContexts.forEach((meetingContext) => {
@@ -258,9 +680,11 @@ const RightPanel = () => {
         if (!accessId || localAccessIds.has(accessId) || seen.has(accessId)) return;
         seen.add(accessId);
         usersCanAccess.push(accessId);
+        const details = getParticipantDetails(participant);
+        if (details) participantDetails.push(details);
       });
 
-    return usersCanAccess;
+    return { usersCanAccess, participantDetails };
   };
 
   const buildDocumentMeetingState = ({
@@ -268,6 +692,7 @@ const RightPanel = () => {
     screenityMeetingState,
     meetingId,
     participants,
+    participantDetails = [],
   }) => {
     const baseState =
       meetingContext && typeof meetingContext === "object"
@@ -288,6 +713,7 @@ const RightPanel = () => {
             classroom: screenityMeetingState?.classroom || null,
             participants: {
               ids: participantIds,
+              items: participantDetails,
               total: participantIds.length,
             },
           }
@@ -309,6 +735,12 @@ const RightPanel = () => {
             ? participantIds
             : Array.isArray(currentParticipants.ids)
               ? currentParticipants.ids
+              : [],
+        items:
+          participantDetails.length > 0
+            ? participantDetails
+            : Array.isArray(currentParticipants.items)
+              ? currentParticipants.items
               : [],
         total:
           participantIds.length > 0
@@ -880,7 +1312,7 @@ const RightPanel = () => {
         meetingContext,
         meetingAudioChunks?.meetingId || persistedDocumentContext?.meetingId || null,
       );
-      const usersCanAccess = buildUsersCanAccess(
+      const { usersCanAccess, participantDetails } = buildParticipantAccess(
         contentMeetingContext,
         persistedMeetingContext,
         storedMeetingContext,
@@ -896,6 +1328,7 @@ const RightPanel = () => {
         screenityMeetingState: documentScreenityMeetingState,
         meetingId,
         participants: usersCanAccess,
+        participantDetails,
       });
 
       const documentPayload = {
@@ -905,12 +1338,14 @@ const RightPanel = () => {
         meetingId,
         lastMeetingState,
         usersCanAccess,
+        participantDetails,
         storageUrl: data.urlFile,
       };
 
       console.info("[Slingui Upload] Document payload resolved", {
         meetingId,
         usersCanAccess,
+        participantDetails,
         contextSources: {
           hasContentMeetingContext: Boolean(contentMeetingContext),
           hasPersistedMeetingContext: Boolean(persistedMeetingContext),
@@ -948,6 +1383,91 @@ const RightPanel = () => {
       setUploadProgress(0);
     }
   };
+
+  const meetingAudioDiagnostic = buildMeetingAudioTimelineDiagnostic(contentState);
+  const recordingChunks = meetingAudioDiagnostic.recordingChunks;
+  const recordingChunksStatus = recordingChunks.complete || recordingChunks.ready
+    ? "success"
+    : recordingChunks.expected > 0 || recordingChunks.received > 0
+      ? "warning"
+      : "idle";
+  const recordingChunksDescription = recordingChunks.expected > 0
+    ? `${recordingChunks.received}/${recordingChunks.expected} chunk(s) da gravação recebidos do background${recordingChunks.missing ? ` (${recordingChunks.missing} pendente(s))` : ""}.`
+    : recordingChunks.ready
+      ? "Vídeo já foi reconstruído; não há contagem de chunks pendente."
+      : "Aguardando o background informar/enviar os chunks da gravação.";
+  const chunksFoundStatus = meetingAudioDiagnostic.total > 0
+    ? meetingAudioDiagnostic.failed > 0 || meetingAudioDiagnostic.downloaded < meetingAudioDiagnostic.total
+      ? "warning"
+      : "success"
+    : recordingChunks.visible
+      ? "idle"
+      : "error";
+  const chunksFoundDescription = meetingAudioDiagnostic.total > 0
+    ? `${meetingAudioDiagnostic.total} chunk(s) encontrado(s), ${meetingAudioDiagnostic.downloaded} com áudio baixado${meetingAudioDiagnostic.failed ? `, ${meetingAudioDiagnostic.failed} com falha` : ""}.`
+    : recordingChunks.visible
+      ? "Nenhum chunk MP3 de áudio da reunião foi listado ainda. Os chunks acima são da gravação/vídeo reconstruído pelo background."
+      : "Nenhum chunk de áudio da reunião foi encontrado para esta gravação.";
+  const missingTimelineMetadataDescription = meetingAudioDiagnostic.missingTimelineMetadata.length
+    ? `Faltam: ${meetingAudioDiagnostic.missingTimelineMetadata.join(", ")}.`
+    : "Faltam metadados suficientes para validar a janela temporal.";
+  const timelineStatus = !meetingAudioDiagnostic.total
+    ? "idle"
+    : !meetingAudioDiagnostic.overlapKnown
+      ? "warning"
+      : meetingAudioDiagnostic.overlapping > 0
+        ? "success"
+        : "error";
+  const timelineDescription = !meetingAudioDiagnostic.total
+    ? "Aguardando listagem dos chunks para estimar a timeline."
+    : !meetingAudioDiagnostic.overlapKnown
+      ? `Não foi possível estimar todo o overlap após o reload. ${missingTimelineMetadataDescription}`
+      : `${meetingAudioDiagnostic.overlapping}/${meetingAudioDiagnostic.total} chunk(s) dentro do tempo do vídeo (${formatMeetingAudioDuration(meetingAudioDiagnostic.totalWritableDurationMs)} aproveitável de ${formatMeetingAudioDuration(meetingAudioDiagnostic.videoDurationMs)}).`;
+  const timelineDebugDescription = meetingAudioDiagnostic.total > 0
+    ? [
+        meetingAudioDiagnostic.recordingStartedAtMs != null && meetingAudioDiagnostic.recordingEndedAtMs != null
+          ? `Gravação: ${formatMeetingAudioWindow(meetingAudioDiagnostic.recordingStartedAtMs, meetingAudioDiagnostic.recordingEndedAtMs)} (${getMeetingAudioTimelineSourceLabel(meetingAudioDiagnostic)}).`
+          : null,
+        meetingAudioDiagnostic.chunkWindowStartedAtMs != null && meetingAudioDiagnostic.chunkWindowEndedAtMs != null
+          ? `MP3: ${formatMeetingAudioWindow(meetingAudioDiagnostic.chunkWindowStartedAtMs, meetingAudioDiagnostic.chunkWindowEndedAtMs)}.`
+          : null,
+        meetingAudioDiagnostic.firstChunkOffsetMs != null
+          ? `Primeiro MP3 começa ${formatMeetingAudioSignedDuration(meetingAudioDiagnostic.firstChunkOffsetMs)} em relação ao início da gravação.`
+          : null,
+      ].filter(Boolean).join(" ")
+    : "";
+  const timelineDescriptionWithDebug = timelineDebugDescription
+    ? `${timelineDescription} ${timelineDebugDescription}`
+    : timelineDescription;
+  const meetingAudioErrorDescription = meetingAudioDiagnostic.error === "failed"
+    ? "Falha ao adicionar: o mixer retornou erro genérico. Verifique se a duração/início da gravação foram recuperados após o reload."
+    : `Falha ao adicionar: ${meetingAudioDiagnostic.error}`;
+  const addedStatus = meetingAudioDiagnostic.error
+    ? "error"
+    : meetingAudioDiagnostic.blockedReason
+      ? "warning"
+    : meetingAudioDiagnostic.applied
+      ? "success"
+      : meetingAudioDiagnostic.applying
+        ? "warning"
+        : "idle";
+  const addedDescription = meetingAudioDiagnostic.error
+    ? meetingAudioErrorDescription
+    : meetingAudioDiagnostic.blockedReason
+      ? `Adição pausada por segurança: ${meetingAudioDiagnostic.blockedReason}`
+    : meetingAudioDiagnostic.applied
+      ? "Os chunks foram mixados/adicionados ao vídeo."
+      : meetingAudioDiagnostic.applying
+        ? "Os chunks estão sendo adicionados ao vídeo agora."
+        : "Ainda não há confirmação de adição/mixagem dos chunks ao vídeo.";
+  const hasMeetingAudioDiagnosticDetails = meetingAudioDiagnostic.visible;
+  const meetingAudioDiagnosticSummary = meetingAudioDiagnostic.applied
+    ? "Chunks MP3 encontrados e adicionados ao vídeo."
+    : meetingAudioDiagnostic.error
+      ? "Ver falha ao listar, validar ou adicionar chunks MP3."
+      : meetingAudioDiagnostic.total > 0
+        ? "Ver chunks MP3 encontrados, overlap com a gravação e status de adição."
+        : "Ver status de busca, timeline e adição dos chunks MP3.";
 
   return (
     <div className={styles.panel}>
@@ -1647,6 +2167,62 @@ const RightPanel = () => {
                   <ReactSVG src={EXT_URL + "editor/icons/right-arrow.svg"} />
                 </div>
               </div>
+              {hasMeetingAudioDiagnosticDetails && (
+                <>
+                  <div
+                    role="button"
+                    className={styles.button}
+                    onClick={() => {
+                      setIsMeetingAudioDiagnosticOpen((isOpen) => !isOpen);
+                    }}
+                  >
+                    <div className={styles.buttonLeft}>
+                      <ReactSVG src={EXT_URL + "editor/icons/flag.svg"} />
+                    </div>
+                    <div className={styles.buttonMiddle}>
+                      <div className={styles.buttonTitle}>Diagnóstico dos chunks</div>
+                      <div className={styles.buttonDescription}>
+                        {meetingAudioDiagnosticSummary}
+                      </div>
+                    </div>
+                    <div className={styles.buttonRight}>
+                      {isMeetingAudioDiagnosticOpen ? "Fechar" : "Abrir"}
+                    </div>
+                  </div>
+                  {isMeetingAudioDiagnosticOpen && (
+                    <div className={styles.alert}>
+                      <div className={styles.buttonLeft}>
+                        <ReactSVG src={EXT_URL + "editor/icons/flag.svg"} />
+                      </div>
+                      <div className={styles.buttonMiddle}>
+                        <div className={styles.buttonTitle}>Diagnóstico dos chunks</div>
+                        <div className={styles.buttonDescription}>
+                          <MeetingAudioDiagnosticRow
+                            status={recordingChunksStatus}
+                            label="Chunks da gravação recebidos"
+                            description={recordingChunksDescription}
+                          />
+                          <MeetingAudioDiagnosticRow
+                            status={chunksFoundStatus}
+                            label="Chunks MP3 da reunião encontrados"
+                            description={chunksFoundDescription}
+                          />
+                          <MeetingAudioDiagnosticRow
+                            status={timelineStatus}
+                            label="Dentro do tempo da gravação"
+                            description={timelineDescriptionWithDebug}
+                          />
+                          <MeetingAudioDiagnosticRow
+                            status={addedStatus}
+                            label="Adicionados ao vídeo"
+                            description={addedDescription}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

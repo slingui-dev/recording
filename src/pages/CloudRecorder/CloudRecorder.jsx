@@ -605,6 +605,115 @@ const CloudRecorder = () => {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
+  const decodeBase64UrlJson = (value) => {
+    const normalized = String(value || "")
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "=",
+    );
+    const binary = window.atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  };
+
+  const decodeMeetingAudioChunkMetadata = (fileName) => {
+    const fileNameWithoutExtension = String(fileName || "").replace(
+      /\.(mp3|webm|opus|ogg|m4a|aac)$/i,
+      "",
+    );
+    const parts = fileNameWithoutExtension.split("-");
+    const metadataCandidates = [fileNameWithoutExtension];
+
+    for (let index = 1; index < parts.length; index += 1) {
+      metadataCandidates.push(parts.slice(index).join("-"));
+    }
+
+    for (const metadataToken of metadataCandidates) {
+      if (!metadataToken) continue;
+
+      try {
+        const compactMetadata = decodeBase64UrlJson(metadataToken);
+        if (!Array.isArray(compactMetadata)) continue;
+
+        const [
+          version,
+          sequence,
+          startedAtEpochMs,
+          durationMs,
+          sampleRate,
+          totalSamples,
+          isFinalChunk,
+        ] = compactMetadata;
+
+        return {
+          version,
+          sequence,
+          startedAtEpochMs,
+          startedAt: startedAtEpochMs
+            ? new Date(startedAtEpochMs).toISOString()
+            : null,
+          durationMs,
+          sampleRate,
+          totalSamples,
+          isFinalChunk: Boolean(isFinalChunk),
+        };
+      } catch {
+        // Try the next suffix. This supports meetingId/prefix values containing
+        // hyphens while preserving base64url tokens that may also contain hyphens.
+      }
+    }
+
+    console.warn("[CloudRecorder][MeetingAudioChunks] Failed to decode chunk metadata", {
+      fileName,
+    });
+    return null;
+  };
+
+  const toFiniteNumber = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  };
+
+  const getMeetingAudioChunkMetadata = (chunk) =>
+    chunk?.metadata || decodeMeetingAudioChunkMetadata(chunk?.fileName);
+
+  const sortMeetingAudioChunks = (chunks) =>
+    [...chunks]
+      .map((chunk) => ({
+        ...chunk,
+        metadata: getMeetingAudioChunkMetadata(chunk),
+      }))
+      .sort((a, b) => {
+        const aStart = toFiniteNumber(
+          a?.startedAtEpochMs ?? a?.metadata?.startedAtEpochMs,
+        );
+        const bStart = toFiniteNumber(
+          b?.startedAtEpochMs ?? b?.metadata?.startedAtEpochMs,
+        );
+
+        if (aStart != null && bStart != null && aStart !== bStart) {
+          return aStart - bStart;
+        }
+        if (aStart != null && bStart == null) return -1;
+        if (aStart == null && bStart != null) return 1;
+
+        const aSequence = toFiniteNumber(a?.sequence ?? a?.metadata?.sequence);
+        const bSequence = toFiniteNumber(b?.sequence ?? b?.metadata?.sequence);
+
+        if (aSequence != null && bSequence != null && aSequence !== bSequence) {
+          return aSequence - bSequence;
+        }
+        if (aSequence != null && bSequence == null) return -1;
+        if (aSequence == null && bSequence != null) return 1;
+
+        return String(a?.fileName || "").localeCompare(String(b?.fileName || ""));
+      });
+
   const resolveRecordingStartedAtMsForMeetingAudio = (recordingMeta) =>
     // Must be the recording start, not meeting/call start. If the meeting starts
     // after recording, this preserves the pre-call gap when chunks are remounted.
@@ -697,9 +806,7 @@ const CloudRecorder = () => {
 
       const data = await res.json();
       const chunks = Array.isArray(data?.chunks)
-        ? [...data.chunks].sort((a, b) =>
-            String(a?.fileName || "").localeCompare(String(b?.fileName || "")),
-          )
+        ? sortMeetingAudioChunks(data.chunks)
         : [];
 
       console.info("[CloudRecorder][MeetingAudioChunks] Chunks resolved", {

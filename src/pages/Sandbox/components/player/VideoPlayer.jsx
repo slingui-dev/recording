@@ -6,6 +6,22 @@ import { ContentStateContext } from "../../context/ContentState";
 
 import Title from "./Title";
 
+const getExtensionAssetUrl = (path = "") => {
+  try {
+    if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+      return chrome.runtime.getURL(`assets/${path}`);
+    }
+  } catch {
+    // Sandbox pages may not expose chrome.runtime after a hard reload.
+  }
+
+  try {
+    return new URL(`assets/${path}`, window.location.href).href;
+  } catch {
+    return `/assets/${path}`;
+  }
+};
+
 const VideoPlayer = (props) => {
   const [contentState, setContentState] = useContext(ContentStateContext);
 
@@ -87,10 +103,7 @@ const VideoPlayer = (props) => {
       ],
       urls: null,
       ratio: "16:9",
-      blankVideo:
-        "chrome-extension://" +
-        chrome.i18n.getMessage("@@extension_id") +
-        "/assets/blank.mp4",
+      blankVideo: getExtensionAssetUrl("blank.mp4"),
       keyboard: {
         global: true,
       },

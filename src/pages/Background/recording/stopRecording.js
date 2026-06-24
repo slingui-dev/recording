@@ -130,11 +130,90 @@ const handleEditorOpenFailed = async (editorUrl, lastError) => {
   } catch (_) {}
 };
 
+const toEpochMs = (value) => {
+  if (value == null || value === "") return null;
+
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return numeric > 0 && numeric < 100000000000 ? numeric * 1000 : numeric;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveRecordingStartFromId = (recordingId) => {
+  const match = String(recordingId || "").match(/^(\d{12,14})(?:-|$)/);
+  if (!match) return null;
+
+  const startedAtMs = Number(match[1]);
+  return Number.isFinite(startedAtMs) ? startedAtMs : null;
+};
+
+const buildPostStopRecordingMetaSnapshot = (
+  recordingMeta,
+  {
+    recordingId = null,
+    duration = null,
+    stoppedAt = Date.now(),
+    recordingStartTime = null,
+  } = {},
+) => {
+  const baseMeta =
+    recordingMeta && typeof recordingMeta === "object" ? recordingMeta : {};
+
+  const startedAtMs =
+    toEpochMs(baseMeta.recordingStartedAtMs) ??
+    toEpochMs(baseMeta.recordingStartedAt) ??
+    toEpochMs(baseMeta.startedAt) ??
+    toEpochMs(recordingStartTime) ??
+    resolveRecordingStartFromId(recordingId || baseMeta.recordingId);
+  const durationMs = Number(duration);
+
+  return {
+    ...baseMeta,
+    recordingId: recordingId || baseMeta.recordingId || null,
+    recordingStartedAtMs: startedAtMs,
+    recordingStartedAt:
+      startedAtMs != null ? new Date(startedAtMs).toISOString() : baseMeta.recordingStartedAt || null,
+    startedAt: baseMeta.startedAt || startedAtMs || null,
+    recordingDurationMs:
+      Number.isFinite(durationMs) && durationMs > 0
+        ? durationMs
+        : baseMeta.recordingDurationMs || null,
+    recordingStoppedAtMs: stoppedAt,
+    postStopSnapshotAt: Date.now(),
+  };
+};
+
+const persistPostStopRecordingMetaSnapshot = async (
+  recordingId,
+  recordingMeta,
+  options = {},
+) => {
+  if (!recordingId) return null;
+
+  const snapshot = buildPostStopRecordingMetaSnapshot(recordingMeta, {
+    ...options,
+    recordingId,
+  });
+
+  if (!snapshot) return null;
+
+  await chrome.storage.local.set({
+    [`recordingMeta:${recordingId}`]: snapshot,
+    latestRecordingMeta: snapshot,
+    latestRecordingMetaKey: recordingId,
+  });
+
+  return snapshot;
+};
+
 export const stopRecording = async () => {
   chrome.action.setIcon({ path: "assets/icon-34.png" });
   // await the clear so a quick subsequent restart can't race startRecording's gate
   await chrome.storage.local.set({ restarting: false });
-  const { recordingStartTime, isSubscribed, paused, pausedAt, totalPausedMs, recordingDuration: storedDuration } =
+  const { recordingStartTime, isSubscribed, paused, pausedAt, totalPausedMs, recordingDuration: storedDuration, recordingMeta } =
     await chrome.storage.local.get([
       "recordingStartTime",
       "isSubscribed",
@@ -142,6 +221,7 @@ export const stopRecording = async () => {
       "pausedAt",
       "totalPausedMs",
       "recordingDuration",
+      "recordingMeta",
     ]);
 
   const startTime = Number(recordingStartTime);
@@ -232,6 +312,27 @@ export const stopRecording = async () => {
     chrome.storage.local.set({ completingRecordingTab: recordingTab });
   }
 
+  const resolvedPostStopRecordingId =
+    postStopRecordingId || fastRecorderActiveRecordingId || null;
+  await persistPostStopRecordingMetaSnapshot(resolvedPostStopRecordingId, recordingMeta, {
+    duration,
+    stoppedAt: now,
+    recordingStartTime,
+  }).catch((error) => {
+    console.warn("[Screenity][BG] Failed to persist post-stop recordingMeta snapshot", error);
+  });
+
+  if (resolvedPostStopRecordingId && !postStopRecordingId) {
+    await chrome.storage.local
+      .set({ postStopRecordingId: resolvedPostStopRecordingId })
+      .catch((error) => {
+        console.warn(
+          "[Screenity][BG] Failed to persist resolved post-stop recordingId",
+          error,
+        );
+      });
+  }
+
   if (isSubscribed) {
     chrome.alarms.clear("recording-alarm");
     discardOffscreenDocuments();
@@ -239,9 +340,12 @@ export const stopRecording = async () => {
   } else if (postStopEditorOpening || postStopEditorOpened) {
     // editor already opened by stop-recording-tab flow; avoid duplicate
   } else if (hasWebCodecs) {
-    diagEvent("editor-open", { type: "editorwebcodecs" });
-    const query = postStopRecordingId
-      ? `?mode=postStop&recordingId=${encodeURIComponent(postStopRecordingId)}`
+    diagEvent("editor-open", {
+      type: "editorwebcodecs",
+      recordingId: resolvedPostStopRecordingId,
+    });
+    const query = resolvedPostStopRecordingId
+      ? `?mode=postStop&recordingId=${encodeURIComponent(resolvedPostStopRecordingId)}`
       : "?mode=postStop";
     const wcUrl = `editorwebcodecs.html${query}`;
     chrome.tabs.create(
@@ -289,11 +393,15 @@ export const stopRecording = async () => {
 
     chrome.runtime.sendMessage({ type: "turn-off-pip" });
   } else if (duration > maxDuration) {
-    diagEvent("editor-open", { type: "editorviewer", duration });
+    diagEvent("editor-open", {
+      type: "editorviewer",
+      duration,
+      recordingId: resolvedPostStopRecordingId,
+    });
     // Fallback for large recordings without WebCodecs - use viewer mode
 
-    const query = postStopRecordingId
-      ? `?mode=postStop&recordingId=${encodeURIComponent(postStopRecordingId)}`
+    const query = resolvedPostStopRecordingId
+      ? `?mode=postStop&recordingId=${encodeURIComponent(resolvedPostStopRecordingId)}`
       : "?mode=postStop";
     const viewerUrl = `editorviewer.html${query}`;
     chrome.tabs.create(
@@ -341,9 +449,12 @@ export const stopRecording = async () => {
 
     chrome.runtime.sendMessage({ type: "turn-off-pip" });
   } else {
-    diagEvent("editor-open", { type: "editor-ffmpeg" });
-    const query = postStopRecordingId
-      ? `?mode=postStop&recordingId=${encodeURIComponent(postStopRecordingId)}`
+    diagEvent("editor-open", {
+      type: "editor-ffmpeg",
+      recordingId: resolvedPostStopRecordingId,
+    });
+    const query = resolvedPostStopRecordingId
+      ? `?mode=postStop&recordingId=${encodeURIComponent(resolvedPostStopRecordingId)}`
       : "?mode=postStop";
     const ffmpegUrl = `editor.html${query}`;
     chrome.tabs.create({ url: ffmpegUrl, active: true }, (tab) => {
@@ -480,6 +591,7 @@ export const handleStopRecordingTab = async (request) => {
     fastRecorderInUse,
     fastRecorderActiveRecordingId,
     lastRecordingBackendRef,
+    recordingMeta,
   } = await chrome.storage.local.get([
     "isSubscribed",
     "recordingStartTime",
@@ -489,6 +601,7 @@ export const handleStopRecordingTab = async (request) => {
     "fastRecorderInUse",
     "fastRecorderActiveRecordingId",
     "lastRecordingBackendRef",
+    "recordingMeta",
   ]);
   endStorageGet1();
   // Same rule as handleRecordingComplete: route by backend, not by the
@@ -537,6 +650,13 @@ export const handleStopRecordingTab = async (request) => {
         ? Math.max(0, now - startTime - basePaused - extraPaused)
         : 0;
     const maxDuration = 7 * 60 * 1000;
+    await persistPostStopRecordingMetaSnapshot(recordingId, recordingMeta, {
+      duration,
+      stoppedAt: now,
+      recordingStartTime,
+    }).catch((error) => {
+      console.warn("[Screenity][BG] Failed to persist post-stop recordingMeta snapshot", error);
+    });
     const endLock = perfSpan("BG.stopRecording acquireLock");
     const lockAcquired = await acquirePostStopEditorLock(recordingId);
     endLock({ lockAcquired });
@@ -614,16 +734,28 @@ export const handleStopRecordingTab = async (request) => {
     } else {
       const editorUrl =
         duration > maxDuration ? "editorviewer.html" : "editor.html";
-      diagEvent("editor-open", { type: editorUrl.replace(".html", ""), via: "stop-tab", duration });
-      perfMark("BG.stopRecording editor-tab-create.start", { editorUrl });
+      const postStopEditorUrl = `${editorUrl}?mode=postStop&recordingId=${encodeURIComponent(
+        recordingId,
+      )}`;
+      diagEvent("editor-open", {
+        type: editorUrl.replace(".html", ""),
+        via: "stop-tab",
+        duration,
+        postStop: true,
+        recordingId,
+      });
+      perfMark("BG.stopRecording editor-tab-create.start", {
+        editorUrl,
+        postStopEditorUrl,
+      });
       const endTabLoad = perfSpan("BG.stopRecording editor-tab-load");
-      chrome.tabs.create({ url: editorUrl, active: true }, (tab) => {
+      chrome.tabs.create({ url: postStopEditorUrl, active: true }, (tab) => {
         if (chrome.runtime.lastError || !tab?.id) {
           const errMsg = chrome.runtime.lastError?.message || "tab-create-failed";
           console.error("❌ Failed to open post-stop editor:", errMsg);
           endTabLoad({ result: "create-failed" });
           releasePostStopEditorLock({ postStopRecordingId: null });
-          handleEditorOpenFailed(editorUrl, errMsg);
+          handleEditorOpenFailed(postStopEditorUrl, errMsg);
           return;
         }
         perfMark("BG.stopRecording editor-tab-create.done", { tabId: tab.id });

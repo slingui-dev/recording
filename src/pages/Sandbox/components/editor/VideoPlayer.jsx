@@ -3,6 +3,22 @@ import { default as Plyr } from "plyr-react";
 import "plyr-react/plyr.css";
 import { ContentStateContext } from "../../context/ContentState"; // Import the ContentState context
 
+const getExtensionAssetUrl = (path = "") => {
+  try {
+    if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+      return chrome.runtime.getURL(`assets/${path}`);
+    }
+  } catch {
+    // Sandbox pages may not expose chrome.runtime after a hard reload.
+  }
+
+  try {
+    return new URL(`assets/${path}`, window.location.href).href;
+  } catch {
+    return `/assets/${path}`;
+  }
+};
+
 const VideoPlayer = (props) => {
   const [contentState, setContentState] = useContext(ContentStateContext); // Access the ContentState context
   const playerRef = useRef(null);
@@ -27,10 +43,7 @@ const VideoPlayer = (props) => {
     () => ({
       controls: ["play", "mute", "captions", "settings", "pip", "fullscreen"],
       ratio: videoRatio,
-      blankVideo:
-        "chrome-extension://" +
-        chrome.i18n.getMessage("@@extension_id") +
-        "/assets/blank.mp4",
+      blankVideo: getExtensionAssetUrl("blank.mp4"),
       keyboard: {
         global: true,
       },

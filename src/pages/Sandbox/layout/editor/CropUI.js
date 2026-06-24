@@ -6,8 +6,23 @@ import Dropdown from "../../components/editor/Dropdown";
 
 import { ReactSVG } from "react-svg";
 
-const URL =
-  "chrome-extension://" + chrome.i18n.getMessage("@@extension_id") + "/assets/";
+const getExtensionAssetBaseUrl = () => {
+  try {
+    if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+      return chrome.runtime.getURL("assets/");
+    }
+  } catch {
+    // Sandbox pages may not expose chrome.runtime after a hard reload.
+  }
+
+  try {
+    return new URL("assets/", window.location.href).href;
+  } catch {
+    return "/assets/";
+  }
+};
+
+const URL = getExtensionAssetBaseUrl();
 
 // Context
 import { ContentStateContext } from "../../context/ContentState"; // Import the ContentState context

@@ -3,19 +3,12 @@ import * as Tabs from "@radix-ui/react-tabs";
 
 import RecordingType from "./RecordingType";
 import {
-  ScreenTabOn,
-  ScreenTabOff,
   RegionTabOn,
   RegionTabOff,
-  MockupTabOn,
-  MockupTabOff,
-  CameraTabIconOn,
-  CameraTabIconOff,
   CheckWhiteIcon,
   CloseWhiteIcon,
 } from "../../images/popup/images";
 
-import { BaseSwitch } from "../components/Switch";
 import TooltipWrap from "../components/TooltipWrap";
 
 // Context
@@ -36,53 +29,48 @@ const RecordingTab = (props) => {
   const [tabRecordingDisabled, setTabRecordingDisabled] = useState(false);
   const [showModalSoon, setShowModalSoon] = useState(false); // 👈 NEW
 
-  // On pages that can't do tab/region capture (chrome://, app pages),
-  // swap the visible selection to "screen" but don't persist; the
-  // user's stored preference rehydrates on the next mount elsewhere.
   useEffect(() => {
-    if (tabRecordingDisabled && contentState.recordingType === "region") {
-      setContentState((prev) => ({
-        ...prev,
-        recordingType: "screen",
-      }));
-      contentState.openToast?.(
-        chrome.i18n.getMessage("tabRecordingDisabledToast"),
-        4000
-      );
-    }
-  }, [tabRecordingDisabled]);
+    setContentState((prev) => ({
+      ...prev,
+      recordingType: "region",
+      cameraActive: false,
+      customRegion: false,
+      pushToTalk: false,
+    }));
+    chrome.storage.local.set({
+      recordingType: "region",
+      cameraActive: false,
+      customRegion: false,
+      pushToTalk: false,
+    });
+    chrome.runtime.sendMessage({ type: "screen-update" });
+  }, []);
 
   useEffect(() => {
     const currentUrl = window.location.href;
     const isBlocked = currentUrl.includes(process.env.SCREENITY_APP_BASE);
 
     setTabRecordingDisabled(isBlocked);
-
-    if (isBlocked && contentState.recordingType === "region") {
-      setContentState((prev) => ({
-        ...prev,
-        recordingType: "screen",
-      }));
-      // Same rationale as above; no storage write, just content-state.
-      contentState.openToast?.(
-        chrome.i18n.getMessage("tabRecordingDisabledToast"),
-        4000
-      );
-    }
-  }, [contentState.recordingType]);
+  }, []);
 
   const onValueChange = (tab) => {
+    if (tab !== "region") return;
+
     setContentState((prevContentState) => ({
       ...prevContentState,
-      recordingType: tab,
+      recordingType: "region",
+      cameraActive: false,
+      customRegion: false,
+      pushToTalk: false,
     }));
-    chrome.storage.local.set({ recordingType: tab });
+    chrome.storage.local.set({
+      recordingType: "region",
+      cameraActive: false,
+      customRegion: false,
+      pushToTalk: false,
+    });
 
-    if (tab === "camera") {
-      chrome.runtime.sendMessage({ type: "camera-only-update" });
-    } else {
-      chrome.runtime.sendMessage({ type: "screen-update" });
-    }
+    chrome.runtime.sendMessage({ type: "screen-update" });
   };
 
   useEffect(() => {
@@ -97,13 +85,9 @@ const RecordingTab = (props) => {
     <div className="recording-ui">
       <Tabs.Root
         className="TabsRoot"
-        defaultValue="screen"
+        defaultValue="region"
         onValueChange={onValueChange}
-        value={
-          contentState.recordingType === "tab"
-            ? "region"
-            : contentState.recordingType
-        }
+        value="region"
       >
         {contentState.recordingToScene && (
           <div className="projectActiveBanner">
@@ -154,20 +138,6 @@ const RecordingTab = (props) => {
           aria-label="Manage your account"
           tabIndex={0}
         >
-          <Tabs.Trigger className="TabsTrigger" value="screen" tabIndex={0}>
-            <div className="TabsTriggerLabel">
-              <div className="TabsTriggerIcon">
-                <img
-                  src={
-                    contentState.recordingType === "screen"
-                      ? ScreenTabOn
-                      : ScreenTabOff
-                  }
-                />
-              </div>
-              <span>{chrome.i18n.getMessage("screenType")}</span>
-            </div>
-          </Tabs.Trigger>
           <TooltipWrap
             content={
               tabRecordingDisabled
@@ -196,32 +166,12 @@ const RecordingTab = (props) => {
             >
               <div className="TabsTriggerLabel">
                 <div className="TabsTriggerIcon">
-                  <img
-                    src={
-                      contentState.recordingType === "region"
-                        ? RegionTabOn
-                        : RegionTabOff
-                    }
-                  />
+                  <img src={RegionTabOn || RegionTabOff} />
                 </div>
                 <span>{chrome.i18n.getMessage("tabType")}</span>
               </div>
             </Tabs.Trigger>
           </TooltipWrap>
-          <Tabs.Trigger className="TabsTrigger" value="camera" tabIndex={0}>
-            <div className="TabsTriggerLabel">
-              <div className="TabsTriggerIcon">
-                <img
-                  src={
-                    contentState.recordingType === "camera"
-                      ? CameraTabIconOn
-                      : CameraTabIconOff
-                  }
-                />
-              </div>
-              <span>{chrome.i18n.getMessage("cameraType")}</span>
-            </div>
-          </Tabs.Trigger>
           <div className="TabsTriggerSpacer"></div>
           <div className="TabsTrigger">
             <TooltipWrap
@@ -454,14 +404,11 @@ const RecordingTab = (props) => {
             </button>
           </div>
         )}
-        <Tabs.Content className="TabsContent" value="screen">
-          <RecordingType shadowRef={props.shadowRef} />
-        </Tabs.Content>
         <Tabs.Content className="TabsContent" value="region">
-          <RecordingType shadowRef={props.shadowRef} />
-        </Tabs.Content>
-        <Tabs.Content className="TabsContent" value="camera">
-          <RecordingType shadowRef={props.shadowRef} />
+          <RecordingType
+            shadowRef={props.shadowRef}
+            tabRecordingDisabled={tabRecordingDisabled}
+          />
         </Tabs.Content>
       </Tabs.Root>
     </div>

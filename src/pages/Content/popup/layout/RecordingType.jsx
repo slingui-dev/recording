@@ -2,22 +2,18 @@ import React, { useEffect, useContext, useState, useRef } from "react";
 
 import Dropdown from "../components/Dropdown";
 import Switch from "../components/Switch";
-import RegionDimensions from "../components/RegionDimensions";
 import Settings from "./Settings";
 import { contentStateContext } from "../../context/ContentState";
-import { CameraOffBlue, MicOffBlue } from "../../images/popup/images";
+import { MicOffBlue } from "../../images/popup/images";
 import TooltipWrap from "../components/TooltipWrap";
 
-import BackgroundEffects from "../components/BackgroundEffects";
-
-import { AlertIcon, TimeIcon, NoInternet } from "../../toolbar/components/SVG";
+import { AlertIcon, TimeIcon } from "../../toolbar/components/SVG";
 
 const CLOUD_FEATURES_ENABLED =
   process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
 
 const RecordingType = (props) => {
   const [contentState, setContentState] = useContext(contentStateContext);
-  const [cropActive, setCropActive] = useState(false);
   const [time, setTime] = useState(0);
   const [URL, setURL] = useState(
     "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9"
@@ -27,7 +23,21 @@ const RecordingType = (props) => {
   );
 
   const buttonRef = useRef(null);
-  const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+
+  const selectedAudioInput = Array.isArray(contentState.audioInput)
+    ? contentState.audioInput.find(
+        (device) => device.deviceId === contentState.defaultAudioInput
+      )
+    : null;
+  const hasConfiguredMicrophone = Boolean(
+    contentState.microphonePermission &&
+      contentState.micActive &&
+      contentState.defaultAudioInput !== "none" &&
+      selectedAudioInput
+  );
+  const tabRecordingUnavailableLabel =
+    chrome.i18n.getMessage("tabRecordingDisabledToast") ||
+    "Tab recording is unavailable on this page.";
 
   // Opens the right permissions modal based on why access is blocked.
   // When the hosting page's Permissions-Policy header disallows camera or
@@ -105,21 +115,36 @@ const RecordingType = (props) => {
 
   // Start recording
   const startStreaming = () => {
+    if (props.tabRecordingDisabled) {
+      contentState.openToast?.(tabRecordingUnavailableLabel, 4000);
+      return;
+    }
+
+    if (!hasConfiguredMicrophone) {
+      contentState.openToast?.(
+        chrome.i18n.getMessage("micMutedModalDescription") ||
+          chrome.i18n.getMessage("noMicrophoneDropdownLabel") ||
+          "Recording will start without microphone audio.",
+        4000
+      );
+    }
+
+    setContentState((prevContentState) => ({
+      ...prevContentState,
+      recordingType: "region",
+      cameraActive: false,
+      customRegion: false,
+      pushToTalk: false,
+    }));
+    chrome.storage.local.set({
+      recordingType: "region",
+      cameraActive: false,
+      customRegion: false,
+      pushToTalk: false,
+    });
+
     contentState.startStreaming();
   };
-
-  useEffect(() => {
-    // Check if CropTarget is null
-    if (typeof CropTarget === "undefined") {
-      setCropActive(false);
-      setContentState((prevContentState) => ({
-        ...prevContentState,
-        customRegion: false,
-      }));
-    } else {
-      setCropActive(true);
-    }
-  }, []);
 
   useEffect(() => {
     if (contentState.recording) {
@@ -168,70 +193,23 @@ const RecordingType = (props) => {
           </div>
         </div>
 			)*/}
-      {!cropActive &&
-        contentState.recordingType === "region" &&
-        !contentState.offline && (
-          <div className="popup-warning">
-            <div className="popup-warning-left">
-              <AlertIcon />
+      {props.tabRecordingDisabled && !contentState.offline && (
+        <div className="popup-warning">
+          <div className="popup-warning-left">
+            <AlertIcon />
+          </div>
+          <div className="popup-warning-middle">
+            <div className="popup-warning-title">
+              {chrome.i18n.getMessage("tabRecordingDisabledTooltip") ||
+                tabRecordingUnavailableLabel}
             </div>
-            <div className="popup-warning-middle">
-              <div className="popup-warning-title">
-                {chrome.i18n.getMessage("customAreaRecordingDisabledTitle")}
-              </div>
-              <div className="popup-warning-description">
-                {chrome.i18n.getMessage(
-                  "customAreaRecordingDisabledDescription"
-                )}
-              </div>
-            </div>
-            <div className="popup-warning-right">
-              <a
-                href="https://support.google.com/chrome/answer/95414?hl=en-GB&co=GENIE.Platform%3DDesktop"
-                target="_blank"
-              >
-                {chrome.i18n.getMessage("customAreaRecordingDisabledAction")}
-              </a>
+            <div className="popup-warning-description">
+              {chrome.i18n.getMessage("tabRecordingDisabledToast") ||
+                "Tab area recording cannot be started from this page."}
             </div>
           </div>
-        )}
-      {!contentState.cameraPermission && (
-        <button
-          className="permission-button"
-          onClick={openPermissionsModal}
-        >
-          <img src={CameraOffBlue} />
-          <span>{chrome.i18n.getMessage("allowCameraAccessButton")}</span>
-        </button>
+        </div>
       )}
-      {contentState.cameraPermission && (
-        <Dropdown type="camera" shadowRef={props.shadowRef} />
-      )}
-      {contentState.cameraPermission &&
-        contentState.defaultVideoInput != "none" &&
-        contentState.cameraActive && (
-          <div>
-            <Switch
-              label={chrome.i18n.getMessage("flipCameraLabel")}
-              name="flip-camera"
-              value="cameraFlipped"
-            />
-            {(!contentState.isLoggedIn || contentState.instantMode) && (
-              <div style={{ pointerEvents: "auto" }}>
-                <Switch
-                  label={chrome.i18n.getMessage("backgroundEffectsLabel")}
-                  name="background-effects-active"
-                  value="backgroundEffectsActive"
-                />
-              </div>
-            )}
-
-            {contentState.backgroundEffectsActive &&
-              (!contentState.isLoggedIn || contentState.instantMode) && (
-                <BackgroundEffects />
-              )}
-          </div>
-        )}
 
       {!contentState.microphonePermission && (
         <button
@@ -245,11 +223,9 @@ const RecordingType = (props) => {
       {contentState.microphonePermission && (
         <Dropdown type="mic" shadowRef={props.shadowRef} />
       )}
-      {((!contentState.isLoggedIn &&
-        contentState.microphonePermission &&
+      {contentState.microphonePermission &&
         contentState.defaultAudioInput != "none" &&
-        contentState.micActive) ||
-        (contentState.microphonePermission && contentState.pushToTalk)) && (
+        contentState.micActive && (
         <div>
           <iframe
             className="screenity-iframe"
@@ -262,26 +238,6 @@ const RecordingType = (props) => {
             allow="camera; microphone"
             src={chrome.runtime.getURL("waveform.html")}
           ></iframe>
-          <Switch
-            label={
-              isMac
-                ? chrome.i18n.getMessage("pushToTalkLabel") + " (⌥⇧U)"
-                : chrome.i18n.getMessage("pushToTalkLabel") + " (Alt⇧U)"
-            }
-            name="pushToTalk"
-            value="pushToTalk"
-          />
-        </div>
-      )}
-      {contentState.recordingType === "region" && cropActive && (
-        <div>
-          <div className="popup-content-divider"></div>
-          <Switch
-            label={chrome.i18n.getMessage("customAreaLabel")}
-            name="customRegion"
-            value="customRegion"
-          />
-          {contentState.customRegion && <RegionDimensions />}
         </div>
       )}
       {contentState.isLoggedIn &&
@@ -359,8 +315,7 @@ const RecordingType = (props) => {
         onClick={startStreaming}
         disabled={
           contentState.pendingRecording ||
-          ((!contentState.cameraPermission || !contentState.cameraActive) &&
-            contentState.recordingType === "camera")
+          props.tabRecordingDisabled
         }
       >
         {contentState.alarm && contentState.alarmTime > 0 && (
@@ -372,9 +327,9 @@ const RecordingType = (props) => {
         <span className="main-button-label">
           {contentState.pendingRecording
             ? chrome.i18n.getMessage("recordButtonInProgressLabel")
-            : (!contentState.cameraPermission || !contentState.cameraActive) &&
-              contentState.recordingType === "camera"
-            ? chrome.i18n.getMessage("recordButtonNoCameraLabel")
+            : props.tabRecordingDisabled
+            ? chrome.i18n.getMessage("tabRecordingDisabledTooltip") ||
+              tabRecordingUnavailableLabel
             : contentState.multiMode && contentState.multiSceneCount > 0
             ? chrome.i18n.getMessage("recordButtonMultiLabel")
             : chrome.i18n.getMessage("recordButtonLabel")}

@@ -2,6 +2,13 @@ import { VideoAudioMixer } from "../mediabunny/lib/videoAudioMixer.ts";
 
 const LOG_PREFIX = "[EditorWebCodecs][MeetingAudioChunks][Normalize]";
 
+const MISSING_RECORDING_WINDOW_ERROR =
+  "Não foi possível adicionar chunks MP3: faltam início ou duração da gravação para validar a janela temporal após reload.";
+const MISSING_CHUNK_DURATION_ERROR =
+  "Não foi possível adicionar chunks MP3: faltam metadados de duração dos chunks para validar a janela temporal.";
+const NO_CHUNKS_IN_RECORDING_WINDOW_ERROR =
+  "Nenhum chunk MP3 está dentro do tempo desta gravação.";
+
 const logInfo = (message, payload = null) => {
   if (payload == null) {
     console.info(`${LOG_PREFIX} ${message}`);
@@ -53,13 +60,19 @@ const toEpochMs = (value) => {
 
 const resolveChunkStartedAtMs = (chunk) =>
   toEpochMs(chunk?.startedAtEpochMs) ??
+  toEpochMs(chunk?.startedAtMs) ??
+  toEpochMs(chunk?.startTimeMs) ??
   toEpochMs(chunk?.startedAt) ??
   toEpochMs(chunk?.metadata?.startedAtEpochMs) ??
+  toEpochMs(chunk?.metadata?.startedAtMs) ??
+  toEpochMs(chunk?.metadata?.startTimeMs) ??
   toEpochMs(chunk?.metadata?.startedAt);
 
 const resolveChunkDurationMs = (chunk) =>
   resolveChunkDurationFromSamplesMs(chunk) ??
   toNumber(chunk?.durationMs) ??
+  toNumber(chunk?.duration) ??
+  toNumber(chunk?.metadata?.duration) ??
   toNumber(chunk?.metadata?.durationMs);
 
 const resolveChunkDurationFromSamplesMs = (chunk) => {
@@ -91,6 +104,26 @@ const resolveMeetingStartedAtMs = (recordingMeta, audioChunks = null) =>
 const resolveRecordingDurationMs = (recordingDurationSeconds) => {
   const duration = toNumber(recordingDurationSeconds);
   return duration != null && duration > 0 ? duration * 1000 : null;
+};
+
+const getAbsoluteChunkOverlapMs = (startedAtMs, durationMs, recordingStartedAtMs, recordingDurationMs) => {
+  if (
+    !Number.isFinite(startedAtMs) ||
+    !Number.isFinite(durationMs) ||
+    durationMs <= 0 ||
+    !Number.isFinite(recordingStartedAtMs) ||
+    !Number.isFinite(recordingDurationMs) ||
+    recordingDurationMs <= 0
+  ) {
+    return 0;
+  }
+
+  const chunkEndedAtMs = startedAtMs + durationMs;
+  const recordingEndedAtMs = recordingStartedAtMs + recordingDurationMs;
+  return Math.max(
+    0,
+    Math.min(chunkEndedAtMs, recordingEndedAtMs) - Math.max(startedAtMs, recordingStartedAtMs),
+  );
 };
 
 const resolveSequence = (chunk, fallbackIndex = 0) =>
@@ -152,7 +185,7 @@ const normalizeMeetingAudioChunks = (
       : [],
   });
 
-  const preparedChunks = (Array.isArray(audioChunks?.chunks) ? audioChunks.chunks : [])
+  let preparedChunks = (Array.isArray(audioChunks?.chunks) ? audioChunks.chunks : [])
     .filter((chunk) => chunk?.audioBlob instanceof Blob)
     .map((chunk, index) => ({
       chunk,
@@ -165,10 +198,94 @@ const normalizeMeetingAudioChunks = (
       sequence: resolveSequence(chunk, index),
     }))
     .sort((a, b) => {
+      if (a.startedAtMs != null && b.startedAtMs != null && a.startedAtMs !== b.startedAtMs) {
+        return a.startedAtMs - b.startedAtMs;
+      }
+      if (a.startedAtMs != null && b.startedAtMs == null) return -1;
+      if (a.startedAtMs == null && b.startedAtMs != null) return 1;
+
       const sequenceDiff = (a.sequence ?? a.index) - (b.sequence ?? b.index);
       if (sequenceDiff) return sequenceDiff;
       return a.index - b.index;
     });
+
+  const initialStartedAts = preparedChunks.map(({ startedAtMs }) => startedAtMs);
+  const hasAbsoluteChunkTimestamps = initialStartedAts.some((value) => Number.isFinite(value));
+  const absoluteRecordingWindowKnown =
+    Number.isFinite(recordingStartedAtMs) &&
+    Number.isFinite(recordingDurationMs) &&
+    recordingDurationMs > 0;
+
+  if (hasAbsoluteChunkTimestamps) {
+    if (!absoluteRecordingWindowKnown) {
+      logInfo("dropping all chunks: absolute recording window unavailable", {
+        reason:
+          "MP3 chunks have absolute timestamps, but the current recording start/duration is unavailable. Refusing to remount them on a relative sequence timeline to avoid reusing audio from another recording.",
+        recordingStartedAtMs,
+        recordingDurationMs,
+        chunks: preparedChunks.map(({ chunk }) => summarizeChunkForLog(chunk)),
+      });
+      throw new Error(MISSING_RECORDING_WINDOW_ERROR);
+    } else {
+      const chunksMissingDuration = preparedChunks.filter(
+        ({ startedAtMs, durationMs }) =>
+          Number.isFinite(startedAtMs) &&
+          !(Number.isFinite(durationMs) && durationMs > 0),
+      );
+
+      if (chunksMissingDuration.length) {
+        logInfo("dropping all chunks: chunk duration metadata unavailable", {
+          reason:
+            "MP3 chunks have absolute timestamps, but one or more chunks do not have duration metadata. Refusing to guess overlap after reload.",
+          recordingStartedAtMs,
+          recordingDurationMs,
+          missingDurationCount: chunksMissingDuration.length,
+          chunks: chunksMissingDuration.map(({ chunk }) => summarizeChunkForLog(chunk)),
+        });
+        throw new Error(MISSING_CHUNK_DURATION_ERROR);
+      }
+
+      const preparedCountBeforeWindowFilter = preparedChunks.length;
+      preparedChunks = preparedChunks.filter(({ chunk, startedAtMs, durationMs }) => {
+        const overlapMs = getAbsoluteChunkOverlapMs(
+          startedAtMs,
+          durationMs,
+          recordingStartedAtMs,
+          recordingDurationMs,
+        );
+
+        if (overlapMs <= 0) {
+          logInfo("dropping chunk outside absolute recording window", {
+            chunk: summarizeChunkForLog(chunk),
+            chunkStartedAtMs: startedAtMs,
+            chunkStartedAt: startedAtMs ? new Date(startedAtMs).toISOString() : null,
+            durationMs,
+            recordingStartedAtMs,
+            recordingStartedAt: new Date(recordingStartedAtMs).toISOString(),
+            recordingEndedAtMs: recordingStartedAtMs + recordingDurationMs,
+            recordingEndedAt: new Date(recordingStartedAtMs + recordingDurationMs).toISOString(),
+            recordingDurationMs,
+          });
+          return false;
+        }
+
+        return true;
+      });
+
+      if (preparedCountBeforeWindowFilter > 0 && !preparedChunks.length) {
+        logInfo("dropping all chunks: no overlap with absolute recording window", {
+          reason:
+            "All downloaded MP3 chunks are outside the absolute start/end window of the current recording.",
+          recordingStartedAtMs,
+          recordingStartedAt: new Date(recordingStartedAtMs).toISOString(),
+          recordingEndedAtMs: recordingStartedAtMs + recordingDurationMs,
+          recordingEndedAt: new Date(recordingStartedAtMs + recordingDurationMs).toISOString(),
+          recordingDurationMs,
+        });
+        throw new Error(NO_CHUNKS_IN_RECORDING_WINDOW_ERROR);
+      }
+    }
+  }
 
   const explicitOffsets = preparedChunks.map(({ explicitOffsetMs }) => explicitOffsetMs);
   const startedAts = preparedChunks.map(({ startedAtMs }) => startedAtMs);

@@ -32,6 +32,14 @@ export let setTimer = () => { };
 const SCREENITY_MEETING_STATE_MESSAGE = "screenity-meeting-state";
 const SCREENITY_MEETING_ENDED_MESSAGE = "screenity-meeting-ended";
 
+const ENFORCED_RECORDING_PREFERENCES = {
+  recordingType: "region",
+  customRegion: false,
+  pushToTalk: false,
+  cameraActive: false,
+  backgroundEffectsActive: false,
+};
+
 const CURSOR_EFFECTS = ["target", "highlight", "spotlight"];
 
 const normalizeCursorEffects = (effects) => {
@@ -44,6 +52,44 @@ const deriveCursorMode = (effects, fallbackMode) => {
   if (effects.length === 1) return effects[0];
   if (fallbackMode && effects.includes(fallbackMode)) return fallbackMode;
   return effects[0] || "none";
+};
+
+const normalizeMicrophoneLabel = (label) => {
+  if (typeof label !== "string") return "";
+  return label.trim().toLowerCase();
+};
+
+const resolveMeetingMicrophoneDevice = (meetingMicrophone, audioInputDevices) => {
+  if (!meetingMicrophone || !Array.isArray(audioInputDevices)) return null;
+
+  const availableDevices = audioInputDevices.filter(
+    (device) => device && device.deviceId && device.deviceId !== "none",
+  );
+
+  if (availableDevices.length === 0) return null;
+
+  const meetingDeviceId =
+    typeof meetingMicrophone.deviceId === "string"
+      ? meetingMicrophone.deviceId.trim()
+      : "";
+
+  if (meetingDeviceId) {
+    const deviceById = availableDevices.find(
+      (device) => device.deviceId === meetingDeviceId,
+    );
+
+    if (deviceById) return deviceById;
+  }
+
+  const meetingLabel = normalizeMicrophoneLabel(meetingMicrophone.label);
+
+  if (!meetingLabel) return null;
+
+  const labelMatches = availableDevices.filter(
+    (device) => normalizeMicrophoneLabel(device.label) === meetingLabel,
+  );
+
+  return labelMatches.length === 1 ? labelMatches[0] : null;
 };
 
 const ContentState = (props) => {
@@ -547,6 +593,39 @@ const ContentState = (props) => {
       return;
     }
 
+    const currentState = contentStateRef.current || {};
+    const selectedAudioInput = Array.isArray(currentState.audioInput)
+      ? currentState.audioInput.find(
+          (device) => device.deviceId === currentState.defaultAudioInput,
+        )
+      : null;
+    const hasConfiguredMicrophone = Boolean(
+      currentState.microphonePermission &&
+        currentState.micActive &&
+        currentState.defaultAudioInput !== "none" &&
+        selectedAudioInput,
+    );
+
+    if (!hasConfiguredMicrophone) {
+      currentState.openToast?.(
+        chrome.i18n.getMessage("noMicrophoneDropdownLabel") ||
+          "Select and enable a microphone before recording.",
+        4000,
+      );
+      return;
+    }
+
+    const enforcedStartState = {
+      ...currentState,
+      ...ENFORCED_RECORDING_PREFERENCES,
+    };
+    contentStateRef.current = enforcedStartState;
+    chrome.storage.local.set(ENFORCED_RECORDING_PREFERENCES);
+    setContentState((prev) => ({
+      ...prev,
+      ...ENFORCED_RECORDING_PREFERENCES,
+    }));
+
     // Kick off synchronously: later awaits (initStartFlowTrace, Pro storage
     // quota) would consume the click's user-gesture before it reaches
     // chrome.permissions.request in the SW.
@@ -557,7 +636,7 @@ const ContentState = (props) => {
 
     const attemptId = `ra-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     await initStartFlowTrace(attemptId, {
-      recordingType: contentStateRef.current.recordingType,
+      recordingType: ENFORCED_RECORDING_PREFERENCES.recordingType,
       isPro: Boolean(
         contentStateRef.current.isLoggedIn &&
         contentStateRef.current.isSubscribed &&
@@ -568,7 +647,7 @@ const ContentState = (props) => {
     traceStep("startStreaming");
     perfReset();
     perfMark("Content startStreaming.click", {
-      recordingType: contentStateRef.current.recordingType,
+      recordingType: ENFORCED_RECORDING_PREFERENCES.recordingType,
     });
 
     // Overlay non-blocking while pending; popup stays open until recorder tab
@@ -791,12 +870,10 @@ const ContentState = (props) => {
         () => {
           chrome.runtime.sendMessage({
             type: "desktop-capture",
-            region:
-              contentStateRef.current.recordingType === "region" ? true : false,
-            customRegion: contentStateRef.current.customRegion,
+            region: true,
+            customRegion: false,
             offscreenRecording: contentStateRef.current.offscreenRecording,
-            camera:
-              contentStateRef.current.recordingType === "camera" ? true : false,
+            camera: false,
           });
           setContentState((prevContentState) => ({
             ...prevContentState,
@@ -834,16 +911,14 @@ const ContentState = (props) => {
       // Mismatch causes the CR dispatch to land in the null-tabID
       // branch and crash with REC_START_CANCEL.
       chrome.storage.local.set({
-        recordingType: contentStateRef.current.recordingType || "screen",
+        ...ENFORCED_RECORDING_PREFERENCES,
       });
       chrome.runtime.sendMessage({
         type: "desktop-capture",
-        region:
-          contentStateRef.current.recordingType === "region" ? true : false,
-        customRegion: contentStateRef.current.customRegion,
+        region: true,
+        customRegion: false,
         offscreenRecording: contentStateRef.current.offscreenRecording,
-        camera:
-          contentStateRef.current.recordingType === "camera" ? true : false,
+        camera: false,
       });
       traceStep("desktopCaptureSent");
       setContentState((prevContentState) => ({
@@ -967,12 +1042,12 @@ const ContentState = (props) => {
             ...prevContentState,
             defaultVideoInput: videoInput[0].deviceId,
             defaultVideoInputLabel: videoInput[0].label || "",
-            cameraActive: true,
+            cameraActive: false,
           }));
           chrome.storage.local.set({
             defaultVideoInput: videoInput[0].deviceId,
             defaultVideoInputLabel: videoInput[0].label || "",
-            cameraActive: true,
+            cameraActive: false,
           });
         }
         if (audioInput.length > 0 || videoInput.length > 0) {
@@ -1273,12 +1348,16 @@ const ContentState = (props) => {
       } else if (event.data.type === "open-screenity-popup") {
         setContentState((prevContentState) => ({
           ...prevContentState,
+          ...ENFORCED_RECORDING_PREFERENCES,
           showExtension: !prevContentState.showExtension,
           hasOpenedBefore: true,
           micActive: true,
-          cameraActive: false,
           showPopup: true,
         }));
+        chrome.storage.local.set({
+          ...ENFORCED_RECORDING_PREFERENCES,
+          micActive: true,
+        });
       } else if (event.data.type === "mute-microphone") {
         setContentState((prevContentState) => ({
           ...prevContentState,
@@ -1307,6 +1386,42 @@ const ContentState = (props) => {
           capturedAt: Date.now(),
           pageUrl: window.location.href,
         };
+        const meetingMicrophone = event.data?.microphone || null;
+        const availableAudioInputs = Array.isArray(
+          contentStateRef.current?.audioInput,
+        )
+          ? contentStateRef.current.audioInput
+          : Array.isArray(contentState.audioInput)
+            ? contentState.audioInput
+            : [];
+        const matchedMicrophone = resolveMeetingMicrophoneDevice(
+          meetingMicrophone,
+          availableAudioInputs,
+        );
+        const syncedMicrophoneState = matchedMicrophone
+          ? {
+              defaultAudioInput: matchedMicrophone.deviceId,
+              defaultAudioInputLabel:
+                matchedMicrophone.label || meetingMicrophone?.label || "",
+              micActive: true,
+            }
+          : null;
+
+        if (syncedMicrophoneState) {
+          contentStateRef.current = {
+            ...(contentStateRef.current || {}),
+            ...syncedMicrophoneState,
+          };
+          setContentState((prevContentState) => ({
+            ...prevContentState,
+            ...syncedMicrophoneState,
+          }));
+          chrome.runtime.sendMessage({
+            type: "set-mic-active-tab",
+            active: true,
+            defaultAudioInput: syncedMicrophoneState.defaultAudioInput,
+          });
+        }
 
         console.groupCollapsed("[Screenity Meeting State][Content] received postMessage");
         console.info("event.origin", event.origin);
@@ -1316,6 +1431,8 @@ const ContentState = (props) => {
         console.info("classroom", event.data?.classroom || null);
         console.info("participants", event.data?.participants || null);
         console.info("localUser", event.data?.localUser || null);
+        console.info("microphone", meetingMicrophone);
+        console.info("matchedMicrophone", matchedMicrophone || null);
         console.info("state being saved to chrome.storage.local", nextMeetingState);
         console.groupEnd();
 
@@ -1323,6 +1440,7 @@ const ContentState = (props) => {
           {
             screenityMeetingState: nextMeetingState,
             screenityMeetingEndedAt: null,
+            ...(syncedMicrophoneState || {}),
           },
           () => {
             if (chrome.runtime.lastError) {
@@ -1338,6 +1456,10 @@ const ContentState = (props) => {
               participantsIds: nextMeetingState?.participants?.ids || [],
               participantsTotal: nextMeetingState?.participants?.total || 0,
               capturedAt: nextMeetingState?.capturedAt,
+              syncedMicrophone: syncedMicrophoneState
+                ? syncedMicrophoneState.defaultAudioInputLabel ||
+                  syncedMicrophoneState.defaultAudioInput
+                : null,
             });
           },
         );
@@ -1788,7 +1910,21 @@ const ContentState = (props) => {
       // synchronously each tick. Keeps the visual tick correct even
       // when chrome.storage.local.get blocks on a contended IPC layer.
       if (changes.recording) {
+        const didStartRecording =
+          changes.recording.oldValue !== true &&
+          changes.recording.newValue === true;
+        const didStopRecording =
+          changes.recording.oldValue === true &&
+          changes.recording.newValue === false;
+
         recordingFlagRef.current = Boolean(changes.recording.newValue);
+        if (isTargetTab()) {
+          if (didStartRecording) {
+            window.postMessage({ type: "recording-started" }, "*");
+          } else if (didStopRecording) {
+            window.postMessage({ type: "recording-stopped" }, "*");
+          }
+        }
         // Clear the restart-wait loader as soon as the next
         // recording starts. Storage flip true → false would also
         // qualify but that's handled by the cleanup paths that fire
@@ -1889,11 +2025,12 @@ const ContentState = (props) => {
         shouldUpdateTimer = true;
       }
       if (changes.cameraActive && isTargetTab()) {
-        // CameraWrap renders off contentState.cameraActive; without this listener
-        // a storage toggle (from another tab's popup, automation seed) never reaches React.
+        if (changes.cameraActive.newValue) {
+          chrome.storage.local.set({ cameraActive: false });
+        }
         setContentState((prev) => ({
           ...prev,
-          cameraActive: Boolean(changes.cameraActive.newValue),
+          cameraActive: false,
         }));
       }
       // sandboxTab appearing means BG opened the editor tab and the
@@ -2116,27 +2253,24 @@ const ContentState = (props) => {
     if (contentState.pushToTalk) {
       setContentState((prevContentState) => ({
         ...prevContentState,
-        micActive: false,
+        pushToTalk: false,
       }));
 
       chrome.storage.local.set({
-        micActive: false,
-      });
-
-      chrome.runtime.sendMessage({
-        type: "set-mic-active-tab",
-        active: false,
-        defaultAudioInput: contentState.defaultAudioInput,
+        pushToTalk: false,
       });
     }
   }, [contentState.pushToTalk]);
 
   useEffect(() => {
     if (contentState.backgroundEffectsActive) {
-      chrome.runtime.sendMessage({ type: "background-effects-active" });
-    } else {
-      chrome.runtime.sendMessage({ type: "background-effects-inactive" });
+      setContentState((prevContentState) => ({
+        ...prevContentState,
+        backgroundEffectsActive: false,
+      }));
+      chrome.storage.local.set({ backgroundEffectsActive: false });
     }
+    chrome.runtime.sendMessage({ type: "background-effects-inactive" });
   }, [contentState.backgroundEffectsActive]);
 
   useEffect(() => {
