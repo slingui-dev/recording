@@ -1,6 +1,6 @@
 {
   "description": "Slingui Recording",
-  "version": "4.3.8",
+  "version": "4.5.1",
   "manifest_version": 3,
   "name": "Slingui Recording",
   "default_locale": "pt_BR",
@@ -130,7 +130,7 @@
     "managed_schema": "schema.json"
   },
   "externally_connectable": {
-    "matches": ["https://meeting.slingui.com/*", "http://localhost:3000/*"]
+    "matches": ["https://meeting.slingui.com/*", "https://meeting-canary.slingui.com/*", "http://localhost:3000/*"]
   },
   "optional_permissions": ["offscreen", "desktopCapture", "alarms", "clipboardWrite"]
 }

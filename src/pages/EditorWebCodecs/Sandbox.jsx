@@ -24,6 +24,7 @@ const blobToArrayBuffer = lazyUtil(() => import("./utils/blobToArrayBuffer"));
 
 const API_BASE = process.env.SCREENITY_API_BASE_URL || "https://api.slingui.com";
 const MEETING_AUDIO_CHUNK_DOWNLOAD_CONCURRENCY = 4;
+const MEETING_AUDIO_CHUNK_STALE_RETRY_DELAYS_MS = [1000, 1500, 2000, 2500, 3000];
 
 const isPostStopMode = () => {
   try {
@@ -181,6 +182,91 @@ const toEpochMs = (value) => {
 
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const resolveMeetingAudioChunkStartedAtMs = (chunk) =>
+  toEpochMs(chunk?.startedAtEpochMs) ??
+  toEpochMs(chunk?.startedAtMs) ??
+  toEpochMs(chunk?.startTimeMs) ??
+  toEpochMs(chunk?.startedAt) ??
+  toEpochMs(chunk?.metadata?.startedAtEpochMs) ??
+  toEpochMs(chunk?.metadata?.startedAtMs) ??
+  toEpochMs(chunk?.metadata?.startTimeMs) ??
+  toEpochMs(chunk?.metadata?.startedAt);
+
+const resolveMeetingAudioChunkDurationFromSamplesMs = (chunk) => {
+  const sampleRate = toFiniteNumber(chunk?.sampleRate ?? chunk?.metadata?.sampleRate);
+  const totalSamples = toFiniteNumber(chunk?.totalSamples ?? chunk?.metadata?.totalSamples);
+
+  if (!(sampleRate > 0) || !(totalSamples > 0)) return null;
+  return (totalSamples / sampleRate) * 1000;
+};
+
+const resolveMeetingAudioChunkDurationMs = (chunk) =>
+  resolveMeetingAudioChunkDurationFromSamplesMs(chunk) ??
+  toFiniteNumber(chunk?.durationMs) ??
+  toFiniteNumber(chunk?.duration) ??
+  toFiniteNumber(chunk?.metadata?.durationMs) ??
+  toFiniteNumber(chunk?.metadata?.duration);
+
+const summarizeMeetingAudioChunkTiming = (audioChunks, recordingStartedAtMs = null) => {
+  const chunks = Array.isArray(audioChunks?.chunks) ? audioChunks.chunks : [];
+  const timedChunks = chunks
+    .map((chunk) => {
+      const startedAtMs = resolveMeetingAudioChunkStartedAtMs(chunk);
+      const durationMs = resolveMeetingAudioChunkDurationMs(chunk);
+      const endedAtMs =
+        Number.isFinite(startedAtMs) && Number.isFinite(durationMs) && durationMs > 0
+          ? startedAtMs + durationMs
+          : null;
+
+      return {
+        chunk,
+        fileName: chunk?.fileName || null,
+        startedAtMs,
+        durationMs,
+        endedAtMs,
+      };
+    })
+    .filter(({ startedAtMs }) => Number.isFinite(startedAtMs));
+
+  const chunksWithDuration = timedChunks.filter(({ endedAtMs }) => Number.isFinite(endedAtMs));
+  const chunkWindowStartedAtMs = timedChunks.length
+    ? Math.min(...timedChunks.map(({ startedAtMs }) => startedAtMs))
+    : null;
+  const chunkWindowEndedAtMs = chunksWithDuration.length
+    ? Math.max(...chunksWithDuration.map(({ endedAtMs }) => endedAtMs))
+    : null;
+
+  const appearsStaleForRecordingStart = Boolean(
+    chunks.length > 0 &&
+      Number.isFinite(recordingStartedAtMs) &&
+      timedChunks.length === chunks.length &&
+      chunksWithDuration.length === timedChunks.length &&
+      Number.isFinite(chunkWindowEndedAtMs) &&
+      chunkWindowEndedAtMs < recordingStartedAtMs,
+  );
+
+  return {
+    total: chunks.length,
+    timed: timedChunks.length,
+    withDuration: chunksWithDuration.length,
+    chunkWindowStartedAtMs,
+    chunkWindowEndedAtMs,
+    latestChunkOffsetFromRecordingStartMs:
+      Number.isFinite(recordingStartedAtMs) && Number.isFinite(chunkWindowEndedAtMs)
+        ? chunkWindowEndedAtMs - recordingStartedAtMs
+        : null,
+    appearsStaleForRecordingStart,
+    chunks: timedChunks.map(({ fileName, startedAtMs, durationMs, endedAtMs }) => ({
+      fileName,
+      startedAtMs,
+      durationMs,
+      endedAtMs,
+    })),
+  };
 };
 
 const resolveRecordingStartFromId = (recordingId) => {
@@ -416,6 +502,12 @@ const listMeetingAudioChunks = async (
   meetingContext,
   recordingId = null,
   preferredUser = null,
+  {
+    recordingStartedAtMs = null,
+    attempt = 1,
+    cacheBust = false,
+    reason = "unknown",
+  } = {},
 ) => {
   const meetingId = resolveMeetingIdFromContext(meetingContext, recordingId);
 
@@ -424,6 +516,10 @@ const listMeetingAudioChunks = async (
     meetingId,
     meetingContext,
     hasPreferredUser: Boolean(preferredUser),
+    recordingStartedAtMs,
+    attempt,
+    cacheBust,
+    reason,
   });
 
   if (!meetingId) {
@@ -444,22 +540,37 @@ const listMeetingAudioChunks = async (
     throw new Error("Missing JWT token for audio chunks request");
   }
 
+  const params = new URLSearchParams({ meetingId });
+  if (recordingId) params.set("recordingId", String(recordingId));
+  if (Number.isFinite(recordingStartedAtMs)) {
+    params.set("recordingStartedAtMs", String(Math.round(recordingStartedAtMs)));
+  }
+  if (Number.isFinite(attempt)) params.set("attempt", String(attempt));
+  if (cacheBust) params.set("_", String(Date.now()));
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+  };
+  if (cacheBust) {
+    headers["Cache-Control"] = "no-cache";
+    headers.Pragma = "no-cache";
+  }
+
   const res = await fetch(
-    `${API_BASE}/storage/audio/chunks?meetingId=${encodeURIComponent(
-      meetingId,
-    )}`,
+    `${API_BASE}/storage/audio/chunks?${params.toString()}`,
     {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       credentials: "include",
+      cache: cacheBust ? "no-store" : "default",
     },
   );
 
   console.info("[EditorWebCodecs][MeetingAudioChunks] List response", {
     recordingId,
     meetingId,
+    attempt,
+    cacheBust,
     status: res.status,
     ok: res.ok,
   });
@@ -479,6 +590,8 @@ const listMeetingAudioChunks = async (
     requestedMeetingId: meetingId,
     responseMeetingId: data?.meetingId || null,
     prefix: data?.prefix || null,
+    attempt,
+    cacheBust,
     total: chunks.length,
     chunks,
   });
@@ -492,6 +605,8 @@ const listMeetingAudioChunks = async (
   console.info("[EditorWebCodecs][MeetingAudioChunks] List enriched", {
     recordingId,
     meetingId: data?.meetingId || meetingId,
+    attempt,
+    cacheBust,
     total: enrichedChunks.length,
     downloaded: enrichedChunks.filter((chunk) => chunk.audioBlob instanceof Blob).length,
     failed: enrichedChunks.filter((chunk) => chunk.downloadError).length,
@@ -729,25 +844,98 @@ const Sandbox = () => {
           meetingContext,
         });
 
-        const audioChunks = await listMeetingAudioChunks(
-          meetingContext,
-          recordingId,
-          slingUserRef.current,
-        );
+        const initialAlignment = buildMeetingAudioAlignment(null, resolvedRecordingMeta);
+        const recordingStartedAtMs = initialAlignment.recordingStartedAtMs;
+        const maxAttempts = MEETING_AUDIO_CHUNK_STALE_RETRY_DELAYS_MS.length + 1;
+        let alignedAudioChunks = null;
+        let timingSummary = null;
 
-        if (!audioChunks) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          const cacheBust = attempt > 1;
+          const audioChunks = await listMeetingAudioChunks(
+            meetingContext,
+            recordingId,
+            slingUserRef.current,
+            {
+              recordingStartedAtMs,
+              attempt,
+              cacheBust,
+              reason,
+            },
+          );
+
+          if (!audioChunks) {
+            setIsPostStopProcessing(false);
+            sendMeetingAudioChunksErrorToIframe(
+              new Error("Não foi possível resolver o meetingId dos chunks MP3."),
+              reason,
+            );
+            return null;
+          }
+
+          alignedAudioChunks = {
+            ...audioChunks,
+            alignment: buildMeetingAudioAlignment(audioChunks, resolvedRecordingMeta),
+          };
+          timingSummary = summarizeMeetingAudioChunkTiming(
+            alignedAudioChunks,
+            alignedAudioChunks.alignment.recordingStartedAtMs,
+          );
+
+          console.info("[EditorWebCodecs][MeetingAudioChunks] List timing summary", {
+            reason,
+            recordingId,
+            meetingId: alignedAudioChunks.meetingId,
+            attempt,
+            maxAttempts,
+            alignment: alignedAudioChunks.alignment,
+            timingSummary,
+          });
+
+          if (!timingSummary.appearsStaleForRecordingStart) break;
+
+          const retryDelayMs = MEETING_AUDIO_CHUNK_STALE_RETRY_DELAYS_MS[attempt - 1];
+          if (!retryDelayMs) {
+            console.warn(
+              "[EditorWebCodecs][MeetingAudioChunks] List still appears stale after retries; using last response",
+              {
+                reason,
+                recordingId,
+                meetingId: alignedAudioChunks.meetingId,
+                attempt,
+                maxAttempts,
+                recordingStartedAtMs,
+                timingSummary,
+              },
+            );
+            break;
+          }
+
+          console.info(
+            "[EditorWebCodecs][MeetingAudioChunks] List appears stale for recording start; retrying with cache bust",
+            {
+              reason,
+              recordingId,
+              meetingId: alignedAudioChunks.meetingId,
+              attempt,
+              nextAttempt: attempt + 1,
+              maxAttempts,
+              retryDelayMs,
+              recordingStartedAtMs,
+              timingSummary,
+            },
+          );
+          await sleep(retryDelayMs);
+        }
+
+        if (!alignedAudioChunks) {
           setIsPostStopProcessing(false);
           sendMeetingAudioChunksErrorToIframe(
-            new Error("Não foi possível resolver o meetingId dos chunks MP3."),
+            new Error("Não foi possível carregar chunks MP3 da reunião."),
             reason,
           );
           return null;
         }
-
-        const alignedAudioChunks = {
-          ...audioChunks,
-          alignment: buildMeetingAudioAlignment(audioChunks, resolvedRecordingMeta),
-        };
 
         console.info("[EditorWebCodecs][MeetingAudioChunks] Chunks resolved", {
           reason,
@@ -756,6 +944,7 @@ const Sandbox = () => {
           prefix: alignedAudioChunks.prefix,
           total: alignedAudioChunks.chunks.length,
           alignment: alignedAudioChunks.alignment,
+          timingSummary,
           chunks: alignedAudioChunks.chunks,
           downloaded: alignedAudioChunks.chunks.filter((chunk) => chunk.audioBlob instanceof Blob).length,
         });
