@@ -339,7 +339,7 @@ export const updateFromStorage = (check = true, id = null) => {
       }
 
       if (result.countdown === undefined || result.countdown === null) {
-        chrome.storage.local.set({ countdown: true });
+        chrome.storage.local.set({ countdown: false });
       }
 
       if (result.backupSetup === undefined || result.backupSetup === null) {

@@ -1207,7 +1207,7 @@ const ContentState = (props) => {
     cameraFlipped: false,
     backgroundEffect: "blur",
     backgroundEffectsActive: false,
-    countdown: true,
+    countdown: false,
     showExtension: false,
     showPopup: false,
     blurMode: false,

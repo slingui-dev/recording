@@ -269,6 +269,141 @@ const summarizeMeetingAudioChunkTiming = (audioChunks, recordingStartedAtMs = nu
   };
 };
 
+const normalizeDurationMs = (value, { assumeMs = false } = {}) => {
+  const duration = toFiniteNumber(value);
+  if (!(duration > 0)) return null;
+
+  return assumeMs || duration >= 1000 ? duration : duration * 1000;
+};
+
+const resolveRecordingDurationMsForChunkPrefilter = (
+  recordingMeta = null,
+  storedRecordingDurationMs = null,
+) =>
+  normalizeDurationMs(storedRecordingDurationMs, { assumeMs: true }) ??
+  normalizeDurationMs(recordingMeta?.recordingDurationMs, { assumeMs: true }) ??
+  normalizeDurationMs(recordingMeta?.durationMs, { assumeMs: true }) ??
+  normalizeDurationMs(recordingMeta?.videoDurationMs, { assumeMs: true }) ??
+  normalizeDurationMs(recordingMeta?.recordingDurationSeconds) ??
+  normalizeDurationMs(recordingMeta?.durationSeconds) ??
+  normalizeDurationMs(recordingMeta?.recordingDuration) ??
+  normalizeDurationMs(recordingMeta?.duration);
+
+const resolveRecordingEndedAtMsForChunkPrefilter = (
+  recordingMeta = null,
+  recordingStartedAtMs = null,
+  recordingDurationMs = null,
+) => {
+  const explicitEndedAtMs =
+    toEpochMs(recordingMeta?.recordingEndedAtMs) ??
+    toEpochMs(recordingMeta?.recordingEndedAt) ??
+    toEpochMs(recordingMeta?.endedAtMs) ??
+    toEpochMs(recordingMeta?.endedAt) ??
+    toEpochMs(recordingMeta?.finishedAtMs) ??
+    toEpochMs(recordingMeta?.finishedAt);
+
+  if (Number.isFinite(explicitEndedAtMs)) return explicitEndedAtMs;
+
+  if (Number.isFinite(recordingStartedAtMs) && Number.isFinite(recordingDurationMs)) {
+    return recordingStartedAtMs + recordingDurationMs;
+  }
+
+  return null;
+};
+
+const resolveRecordingWindowForChunkPrefilter = ({
+  recordingStartedAtMs = null,
+  recordingDurationMs = null,
+  recordingEndedAtMs = null,
+} = {}) => {
+  const startedAtMs = toEpochMs(recordingStartedAtMs);
+  const endedAtMs = toEpochMs(recordingEndedAtMs) ?? (
+    Number.isFinite(startedAtMs) && Number.isFinite(recordingDurationMs)
+      ? startedAtMs + recordingDurationMs
+      : null
+  );
+
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(endedAtMs) || endedAtMs <= startedAtMs) {
+    return null;
+  }
+
+  return {
+    startedAtMs,
+    endedAtMs,
+    durationMs: endedAtMs - startedAtMs,
+  };
+};
+
+const resolveMeetingAudioChunkWindowForPrefilter = (chunk) => {
+  const startedAtMs = resolveMeetingAudioChunkStartedAtMs(chunk);
+  const durationMs = resolveMeetingAudioChunkDurationMs(chunk);
+
+  if (!Number.isFinite(startedAtMs) || !(Number.isFinite(durationMs) && durationMs > 0)) {
+    return null;
+  }
+
+  return {
+    startedAtMs,
+    durationMs,
+    endedAtMs: startedAtMs + durationMs,
+  };
+};
+
+const summarizeSkippedMeetingAudioChunk = ({ chunk, chunkWindow }) => ({
+  fileName: chunk?.fileName || null,
+  metadata: chunk?.metadata || null,
+  startedAtMs: chunkWindow?.startedAtMs ?? null,
+  durationMs: chunkWindow?.durationMs ?? null,
+  endedAtMs: chunkWindow?.endedAtMs ?? null,
+});
+
+const filterMeetingAudioChunksBeforeDownload = (chunks, recordingWindow = null) => {
+  if (!recordingWindow) {
+    return {
+      chunks,
+      skipped: [],
+      keptWithoutChunkWindow: chunks.length,
+      recordingWindow: null,
+      reason: "missing-recording-window",
+    };
+  }
+
+  const selected = [];
+  const skipped = [];
+  let keptWithoutChunkWindow = 0;
+
+  chunks.forEach((chunk) => {
+    const chunkWindow = resolveMeetingAudioChunkWindowForPrefilter(chunk);
+
+    // Conservador: se o filename/listagem não trouxer janela absoluta confiável,
+    // mantém o chunk para não regredir fluxos antigos. O filtro final ainda valida.
+    if (!chunkWindow) {
+      keptWithoutChunkWindow += 1;
+      selected.push(chunk);
+      return;
+    }
+
+    const overlapsRecording =
+      chunkWindow.startedAtMs < recordingWindow.endedAtMs &&
+      chunkWindow.endedAtMs > recordingWindow.startedAtMs;
+
+    if (overlapsRecording) {
+      selected.push(chunk);
+      return;
+    }
+
+    skipped.push({ chunk, chunkWindow });
+  });
+
+  return {
+    chunks: selected,
+    skipped,
+    keptWithoutChunkWindow,
+    recordingWindow,
+    reason: "filtered-by-recording-window",
+  };
+};
+
 const resolveRecordingStartFromId = (recordingId) => {
   const match = String(recordingId || "").match(/^(\d{12,14})(?:-|$)/);
   if (!match) return null;
@@ -504,6 +639,8 @@ const listMeetingAudioChunks = async (
   preferredUser = null,
   {
     recordingStartedAtMs = null,
+    recordingDurationMs = null,
+    recordingEndedAtMs = null,
     attempt = 1,
     cacheBust = false,
     reason = "unknown",
@@ -517,6 +654,8 @@ const listMeetingAudioChunks = async (
     meetingContext,
     hasPreferredUser: Boolean(preferredUser),
     recordingStartedAtMs,
+    recordingDurationMs,
+    recordingEndedAtMs,
     attempt,
     cacheBust,
     reason,
@@ -544,6 +683,12 @@ const listMeetingAudioChunks = async (
   if (recordingId) params.set("recordingId", String(recordingId));
   if (Number.isFinite(recordingStartedAtMs)) {
     params.set("recordingStartedAtMs", String(Math.round(recordingStartedAtMs)));
+  }
+  if (Number.isFinite(recordingDurationMs)) {
+    params.set("recordingDurationMs", String(Math.round(recordingDurationMs)));
+  }
+  if (Number.isFinite(recordingEndedAtMs)) {
+    params.set("recordingEndedAtMs", String(Math.round(recordingEndedAtMs)));
   }
   if (Number.isFinite(attempt)) params.set("attempt", String(attempt));
   if (cacheBust) params.set("_", String(Date.now()));
@@ -596,8 +741,33 @@ const listMeetingAudioChunks = async (
     chunks,
   });
 
+  const recordingWindow = resolveRecordingWindowForChunkPrefilter({
+    recordingStartedAtMs,
+    recordingDurationMs,
+    recordingEndedAtMs,
+  });
+  const predownloadFilter = filterMeetingAudioChunksBeforeDownload(chunks, recordingWindow);
+  const chunksToDownload = predownloadFilter.chunks;
+
+  console.info("[EditorWebCodecs][MeetingAudioChunks] Pre-download filter", {
+    recordingId,
+    meetingId: data?.meetingId || meetingId,
+    attempt,
+    cacheBust,
+    reason,
+    filterReason: predownloadFilter.reason,
+    recordingWindow: predownloadFilter.recordingWindow,
+    totalListed: chunks.length,
+    selectedForDownload: chunksToDownload.length,
+    skippedBeforeDownload: predownloadFilter.skipped.length,
+    keptWithoutChunkWindow: predownloadFilter.keptWithoutChunkWindow,
+    skippedChunks: predownloadFilter.skipped
+      .slice(0, 10)
+      .map(summarizeSkippedMeetingAudioChunk),
+  });
+
   const enrichedChunks = await mapWithConcurrencyLimit(
-    chunks,
+    chunksToDownload,
     MEETING_AUDIO_CHUNK_DOWNLOAD_CONCURRENCY,
     (chunk) => downloadMeetingAudioChunk(chunk),
   );
@@ -804,6 +974,7 @@ const Sandbox = () => {
           "screenityMeetingState",
           "latestRecordingMeta",
           "latestRecordingMetaKey",
+          "recordingDuration",
         ];
         if (scopedRecordingMetaKey) storageKeys.push(scopedRecordingMetaKey);
 
@@ -813,6 +984,7 @@ const Sandbox = () => {
           screenityMeetingState = null,
           latestRecordingMeta = null,
           latestRecordingMetaKey = null,
+          recordingDuration = null,
         } = storage;
         const scopedRecordingMeta = scopedRecordingMetaKey
           ? storage[scopedRecordingMetaKey] || null
@@ -841,11 +1013,21 @@ const Sandbox = () => {
           scopedRecordingMeta,
           resolvedRecordingMeta,
           screenityMeetingState,
+          recordingDuration,
           meetingContext,
         });
 
         const initialAlignment = buildMeetingAudioAlignment(null, resolvedRecordingMeta);
         const recordingStartedAtMs = initialAlignment.recordingStartedAtMs;
+        const recordingDurationMs = resolveRecordingDurationMsForChunkPrefilter(
+          resolvedRecordingMeta,
+          recordingDuration,
+        );
+        const recordingEndedAtMs = resolveRecordingEndedAtMsForChunkPrefilter(
+          resolvedRecordingMeta,
+          recordingStartedAtMs,
+          recordingDurationMs,
+        );
         const maxAttempts = MEETING_AUDIO_CHUNK_STALE_RETRY_DELAYS_MS.length + 1;
         let alignedAudioChunks = null;
         let timingSummary = null;
@@ -858,6 +1040,8 @@ const Sandbox = () => {
             slingUserRef.current,
             {
               recordingStartedAtMs,
+              recordingDurationMs,
+              recordingEndedAtMs,
               attempt,
               cacheBust,
               reason,
