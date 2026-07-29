@@ -747,7 +747,7 @@ const Recorder = () => {
       });
       if (useWebCodecs.current) {
         await chrome.storage.local.set({
-          useWebCodecsRecorder: false,
+          useWebCodecsRecorder_v2: false,
           lastWebCodecsFailureAt: Date.now(),
           lastWebCodecsFailureCode: "start-exception",
         });
@@ -769,8 +769,8 @@ const Recorder = () => {
     await chunksStore.clear();
 
     try {
-      const { qualityValue } = await chrome.storage.local.get(["qualityValue"]);
-      const { fpsValue } = await chrome.storage.local.get(["fpsValue"]);
+      const { qualityValue_v2 } = await chrome.storage.local.get(["qualityValue_v2"]);
+      const { fpsValue_v2 } = await chrome.storage.local.get(["fpsValue_v2"]);
       const activeVideoTrack =
         liveStream.current?.getVideoTracks?.()[0] ||
         helperVideoStream.current?.getVideoTracks?.()[0] ||
@@ -782,38 +782,38 @@ const Recorder = () => {
       const width =
         Number.isFinite(trackSettings.width) && trackSettings.width > 0
           ? Math.floor(trackSettings.width)
-          : 1920;
+          : 1280;
       const height =
         Number.isFinite(trackSettings.height) && trackSettings.height > 0
           ? Math.floor(trackSettings.height)
-          : 1080;
-      let fps = Number.parseInt(fpsValue, 10);
+          : 720;
+      let fps = Number.parseInt(fpsValue_v2, 10);
       if (!Number.isFinite(fps) || fps <= 0) {
         fps =
           Number.isFinite(trackSettings.frameRate) && trackSettings.frameRate > 0
             ? Math.round(trackSettings.frameRate)
-            : 30;
+            : 24;
       }
 
       let audioBitsPerSecond = 128000;
       let videoBitsPerSecond = 5000000;
 
-      if (qualityValue === "4k") {
+      if (qualityValue_v2 === "4k") {
         audioBitsPerSecond = 192000;
         videoBitsPerSecond = 40000000;
-      } else if (qualityValue === "1080p") {
+      } else if (qualityValue_v2 === "1080p") {
         audioBitsPerSecond = 192000;
         videoBitsPerSecond = 8000000;
-      } else if (qualityValue === "720p") {
+      } else if (qualityValue_v2 === "720p") {
         audioBitsPerSecond = 128000;
         videoBitsPerSecond = 5000000;
-      } else if (qualityValue === "480p") {
+      } else if (qualityValue_v2 === "480p") {
         audioBitsPerSecond = 96000;
         videoBitsPerSecond = 2500000;
-      } else if (qualityValue === "360p") {
+      } else if (qualityValue_v2 === "360p") {
         audioBitsPerSecond = 96000;
         videoBitsPerSecond = 1000000;
-      } else if (qualityValue === "240p") {
+      } else if (qualityValue_v2 === "240p") {
         audioBitsPerSecond = 64000;
         videoBitsPerSecond = 500000;
       }
@@ -844,11 +844,11 @@ const Recorder = () => {
         fastRecorderValidation: null,
       });
 
-      const { useWebCodecsRecorder } = await chrome.storage.local.get([
-        "useWebCodecsRecorder",
+      const { useWebCodecsRecorder_v2 } = await chrome.storage.local.get([
+        "useWebCodecsRecorder_v2",
       ]);
       // undefined defaults to enabled; only explicit `false` opts out.
-      const userSetting = useWebCodecsRecorder === false ? false : true;
+      const userSetting = useWebCodecsRecorder_v2 === false ? false : true;
       const stickyState = await getFastRecorderStickyState();
       const probeResult = await probeFastRecorderSupport();
       const shouldUseFast = shouldUseFastRecorder(
@@ -1110,7 +1110,7 @@ const Recorder = () => {
             if (validation && !validation.ok) {
               await markFastRecorderFailure("validation-failed", validation);
               await chrome.storage.local.set({
-                useWebCodecsRecorder: false,
+                useWebCodecsRecorder_v2: false,
                 lastWebCodecsFailureAt: Date.now(),
                 lastWebCodecsFailureCode: "validation-failed",
               });
@@ -1184,14 +1184,14 @@ const Recorder = () => {
             const errStr = String(err);
             const transient = isTransientFastRecorderError(errStr);
             markFastRecorderFailure("webcodecs-error", { error: errStr });
-            // Keep useWebCodecsRecorder on for transient stream errors.
+            // Keep useWebCodecsRecorder_v2 on for transient stream errors.
             const persisted = {
               lastWebCodecsFailureAt: Date.now(),
               lastWebCodecsFailureCode: transient
                 ? "webcodecs-transient"
                 : "webcodecs-error",
             };
-            if (!transient) persisted.useWebCodecsRecorder = false;
+            if (!transient) persisted.useWebCodecsRecorder_v2 = false;
             chrome.storage.local.set(persisted);
             updateFreeFinalizeStatus("failed", 100, errStr);
 
@@ -1298,7 +1298,7 @@ const Recorder = () => {
           useWebCodecs.current = false;
           await chrome.storage.local.set({ fastRecorderInUse: false });
           await chrome.storage.local.set({
-            useWebCodecsRecorder: false,
+            useWebCodecsRecorder_v2: false,
             lastWebCodecsFailureAt: Date.now(),
             lastWebCodecsFailureCode: "start-failed",
           });
@@ -2163,36 +2163,36 @@ const Recorder = () => {
     });
     try {
       const endStorageReads = perfSpan("Region.Recorder storage.reads");
-      const { qualityValue } = await chrome.storage.local.get(["qualityValue"]);
+      const { qualityValue_v2 } = await chrome.storage.local.get(["qualityValue_v2"]);
 
       let width = 1920;
-      let height = 1080;
+      let height = 720;
 
-      if (qualityValue === "4k") {
+      if (qualityValue_v2 === "4k") {
         width = 4096;
         height = 2160;
-      } else if (qualityValue === "1080p") {
+      } else if (qualityValue_v2 === "1080p") {
         width = 1920;
         height = 1080;
-      } else if (qualityValue === "720p") {
+      } else if (qualityValue_v2 === "720p") {
         width = 1280;
         height = 720;
-      } else if (qualityValue === "480p") {
+      } else if (qualityValue_v2 === "480p") {
         width = 854;
         height = 480;
-      } else if (qualityValue === "360p") {
+      } else if (qualityValue_v2 === "360p") {
         width = 640;
         height = 360;
-      } else if (qualityValue === "240p") {
+      } else if (qualityValue_v2 === "240p") {
         width = 426;
         height = 240;
       }
 
-      const { fpsValue } = await chrome.storage.local.get(["fpsValue"]);
-      let fps = parseInt(fpsValue);
+      const { fpsValue_v2 } = await chrome.storage.local.get(["fpsValue_v2"]);
+      let fps = parseInt(fpsValue_v2);
 
       if (isNaN(fps)) {
-        fps = 30;
+        fps = 24;
       }
       endStorageReads();
 

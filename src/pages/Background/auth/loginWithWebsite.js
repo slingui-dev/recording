@@ -80,7 +80,7 @@ export const loginWithWebsite = async (_depth = 0) => {
           ? {
               backgroundEffectsActive: false,
               backgroundEffect: "",
-              fpsValue: "30",
+              fpsValue_v2: "24",
             }
           : {}),
       });
@@ -131,7 +131,7 @@ export const loginWithWebsite = async (_depth = 0) => {
         ? {
             backgroundEffectsActive: false,
             backgroundEffect: "",
-            fpsValue: "30",
+            fpsValue_v2: "24",
           }
         : {}),
     });
@@ -214,7 +214,7 @@ export const loginWithWebsite = async (_depth = 0) => {
           ? {
               backgroundEffectsActive: false,
               backgroundEffect: "",
-              fpsValue: "30",
+              fpsValue_v2: "24",
             }
           : {}),
       });

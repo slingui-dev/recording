@@ -17,7 +17,7 @@ const TRACKED_KEYS = new Set([
   "region",
   "customRegion",
   "recordingType",
-  "useWebCodecsRecorder",
+  "useWebCodecsRecorder_v2",
   "fastRecorderInUse",
   "fastRecorderDisabledForDevice",
   "memoryError",

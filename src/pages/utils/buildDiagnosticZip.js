@@ -49,7 +49,7 @@ const FAST_RECORDER_KEYS = [
   "fastRecorderValidationFailed",
   "fastRecorderInUse",
   "fastRecorderSelectedEncoder",
-  "useWebCodecsRecorder",
+  "useWebCodecsRecorder_v2",
   "lastWebCodecsFailureAt",
   "lastWebCodecsFailureCode",
   // Detailed WebCodecs failure payload (framesEncoded, firstChunkSeen,

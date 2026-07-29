@@ -36,6 +36,6 @@ export const VIDEO_QUALITIES = {
   default: { width: 2560, height: 1440 }, // 2.5K as default
 };
 
-export function getResolutionForQuality(qualityValue = "default") {
-  return VIDEO_QUALITIES[qualityValue] || VIDEO_QUALITIES.default;
+export function getResolutionForQuality(qualityValue_v2 = "default") {
+  return VIDEO_QUALITIES[qualityValue_v2] || VIDEO_QUALITIES.default;
 }

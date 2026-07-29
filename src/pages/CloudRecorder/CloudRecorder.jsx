@@ -3198,7 +3198,7 @@ const CloudRecorder = () => {
         ?.getSettings?.() || {};
       const probeOptions = {
         screenWidth: Number(screenSettings.width) || 1920,
-        screenHeight: Number(screenSettings.height) || 1080,
+        screenHeight: Number(screenSettings.height) || 720,
         cameraWidth: Number(cameraSettings.width) || 1280,
         cameraHeight: Number(cameraSettings.height) || 720,
         framerate:
@@ -3918,8 +3918,8 @@ const CloudRecorder = () => {
           },
           probeOptions: {
             screenWidth: Number(screenSettings.width) || 1920,
-            screenHeight: Number(screenSettings.height) || 1080,
-            framerate: Number(screenSettings.frameRate) || 30,
+            screenHeight: Number(screenSettings.height) || 720,
+            framerate: Number(screenSettings.frameRate) || 24,
           },
         });
         screenRecorder.current = screenSelection.recorder;
@@ -4114,7 +4114,7 @@ const CloudRecorder = () => {
           probeOptions: {
             cameraWidth: Number(cameraSettings.width) || 1280,
             cameraHeight: Number(cameraSettings.height) || 720,
-            framerate: Number(cameraSettings.frameRate) || 30,
+            framerate: Number(cameraSettings.frameRate) || 24,
           },
           onDataAvailable: async (blob) => {
             if (!blob || blob.size === 0) {
@@ -4530,7 +4530,7 @@ const CloudRecorder = () => {
           track: "screen",
           probeOptions: {
             screenWidth: 1920,
-            screenHeight: 1080,
+            screenHeight: 720,
             cameraWidth: 1280,
             cameraHeight: 720,
             framerate: 30,
@@ -5071,12 +5071,12 @@ const CloudRecorder = () => {
         dimensions: {
           screen: {
             width: uploadMeta.screen?.width || 1920,
-            height: uploadMeta.screen?.height || 1080,
+            height: uploadMeta.screen?.height || 720,
           },
           camera: uploadMeta.camera
             ? {
                 width: uploadMeta.camera?.width || 1920,
-                height: uploadMeta.camera?.height || 1080,
+                height: uploadMeta.camera?.height || 720,
                 flip: cameraFlipped,
               }
             : null,
@@ -5909,10 +5909,10 @@ const CloudRecorder = () => {
       streamOpts.canRequestAudioTrack !== false;
     const useDisplayMedia = !!streamOpts.useDisplayMedia;
     const prewarmedStream = streamOpts.prewarmedStream || null;
-    const { width = 1920, height = 1080 } = getResolutionForQuality() || {};
+    const { width = 1280, height = 720 } = getResolutionForQuality() || {};
 
-    const { fpsValue } = await chrome.storage.local.get(["fpsValue"]);
-    const fps = parseInt(fpsValue) || 30;
+    const { fpsValue_v2 } = await chrome.storage.local.get(["fpsValue_v2"]);
+    const fps = parseInt(fpsValue_v2) || 24;
 
     const { instantMode: instant } = await chrome.storage.local.get([
       "instantMode",

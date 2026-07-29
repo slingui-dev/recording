@@ -66,11 +66,11 @@ export const updateFromStorage = (check = true, id = null) => {
       "systemAudio",
       "backup",
       "backupSetup",
-      "qualityValue",
-      "fpsValue",
+      "qualityValue_v2",
+      "fpsValue_v2",
       "fastRecorderBeta",
       "fastRecorderStatus",
-      "useWebCodecsRecorder",
+      "useWebCodecsRecorder_v2",
       "multiMode",
       "multiSceneCount",
       "sortBy",
@@ -287,14 +287,14 @@ export const updateFromStorage = (check = true, id = null) => {
           result.backupSetup !== undefined && result.backupSetup !== null
             ? result.backupSetup
             : prevContentState.backupSetup,
-        qualityValue:
-          result.qualityValue !== undefined && result.qualityValue !== null
-            ? result.qualityValue
-            : prevContentState.qualityValue,
-        fpsValue:
-          result.fpsValue !== undefined && result.fpsValue !== null
-            ? result.fpsValue
-            : prevContentState.fpsValue,
+        qualityValue_v2:
+          result.qualityValue_v2 !== undefined && result.qualityValue_v2 !== null
+            ? result.qualityValue_v2
+            : prevContentState.qualityValue_v2,
+        fpsValue_v2:
+          result.fpsValue_v2 !== undefined && result.fpsValue_v2 !== null
+            ? result.fpsValue_v2
+            : prevContentState.fpsValue_v2,
         fastRecorderBeta:
           result.fastRecorderBeta !== undefined &&
           result.fastRecorderBeta !== null
@@ -305,11 +305,11 @@ export const updateFromStorage = (check = true, id = null) => {
           result.fastRecorderStatus !== null
             ? result.fastRecorderStatus
             : prevContentState.fastRecorderStatus,
-        useWebCodecsRecorder:
-          result.useWebCodecsRecorder !== undefined &&
-          result.useWebCodecsRecorder !== null
-            ? result.useWebCodecsRecorder
-            : prevContentState.useWebCodecsRecorder,
+        useWebCodecsRecorder_v2:
+          result.useWebCodecsRecorder_v2 !== undefined &&
+          result.useWebCodecsRecorder_v2 !== null
+            ? result.useWebCodecsRecorder_v2
+            : prevContentState.useWebCodecsRecorder_v2,
         multiMode: result.multiMode || false,
         multiSceneCount: result.multiSceneCount || 0,
         wasLoggedIn: result.wasLoggedIn || false,

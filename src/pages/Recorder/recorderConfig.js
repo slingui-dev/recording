@@ -22,7 +22,7 @@ export function getBitrates(quality) {
     case "240p":
       return { audio: 64000, video: 1000000 };
     default:
-      return { audio: 128000, video: 12000000 };
+      return { audio: 128000, video: 5000000 };
   }
 }
 export const VIDEO_QUALITIES = {
@@ -32,9 +32,9 @@ export const VIDEO_QUALITIES = {
   "480p": { width: 854, height: 480 },
   "360p": { width: 640, height: 360 },
   "240p": { width: 426, height: 240 },
-  default: { width: 1920, height: 1080 },
+  default: { width: 1280, height: 720 },
 };
 
-export function getResolutionForQuality(qualityValue = "default") {
-  return VIDEO_QUALITIES[qualityValue] || VIDEO_QUALITIES.default;
+export function getResolutionForQuality(qualityValue_v2 = "default") {
+  return VIDEO_QUALITIES[qualityValue_v2] || VIDEO_QUALITIES.default;
 }

@@ -93,7 +93,7 @@ const _startRecordingInner = async (caller) => {
         "pendingRecording",
         "restarting",
         "offscreen",
-        "useWebCodecsRecorder",
+        "useWebCodecsRecorder_v2",
         "fastRecorderInUse",
         "backup",
         "backupSetup",

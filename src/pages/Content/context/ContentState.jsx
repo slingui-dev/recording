@@ -1262,11 +1262,11 @@ const ContentState = (props) => {
     backupSetup: false,
     openWarning: false,
     hasOpenedBefore: false,
-    qualityValue: "1080p",
-    fpsValue: "30",
+    qualityValue_v2: "720p",
+    fpsValue_v2: "24",
     fastRecorderBeta: null,
     fastRecorderStatus: null,
-    useWebCodecsRecorder: true,
+    useWebCodecsRecorder_v2: true,
     countdownActive: false,
     countdownCancelled: false,
     multiMode: false,
@@ -2242,10 +2242,10 @@ const ContentState = (props) => {
   // Each cleanup branch in startStreaming writes storage itself.
 
   useEffect(() => {
-    if (!contentState.qualityValue) {
-      const suggested = "1080p";
-      setContentState((prev) => ({ ...prev, qualityValue: suggested }));
-      chrome.storage.local.set({ qualityValue: suggested });
+    if (!contentState.qualityValue_v2) {
+      const suggested = "720p";
+      setContentState((prev) => ({ ...prev, qualityValue_v2: suggested }));
+      chrome.storage.local.set({ qualityValue_v2: suggested });
     }
   }, []);
 

@@ -148,7 +148,7 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const QUALITY_ORDER = ["240p", "360p", "480p", "720p", "1080p", "4k"];
 
 const clampQualityValue = (value, maxValue) => {
-  const current = QUALITY_ORDER.includes(value) ? value : "1080p";
+  const current = QUALITY_ORDER.includes(value) ? value : "720p";
   const max = QUALITY_ORDER.includes(maxValue) ? maxValue : "1080p";
   return QUALITY_ORDER.indexOf(current) <= QUALITY_ORDER.indexOf(max)
     ? current
@@ -1318,22 +1318,22 @@ const Recorder = () => {
 
     const endCapsRead = perfSpan("Recorder.preflight storage+caps");
     const [
-      { qualityValue, useWebCodecsRecorder: prefUseWebCodecs },
+      { qualityValue_v2, useWebCodecsRecorder_v2: prefUseWebCodecs },
       { isPro, maxQuality, maxFps },
     ] = await Promise.all([
-      chrome.storage.local.get(["qualityValue", "useWebCodecsRecorder"]),
+      chrome.storage.local.get(["qualityValue_v2", "useWebCodecsRecorder_v2"]),
       getFreeCaptureCaps(),
     ]);
     endCapsRead();
     const effectiveQualityValue = isPro
-      ? qualityValue
-      : clampQualityValue(qualityValue, maxQuality);
+      ? qualityValue_v2
+      : clampQualityValue(qualityValue_v2, maxQuality);
     const { audioBitsPerSecond, videoBitsPerSecond: bitratePreset } =
       getBitrates(effectiveQualityValue);
     let videoBitsPerSecond = bitratePreset;
 
     debug("Bitrates resolved", {
-      qualityValue: effectiveQualityValue,
+      qualityValue_v2: effectiveQualityValue,
       audioBitsPerSecond,
       videoBitsPerSecond,
     });
@@ -1362,12 +1362,12 @@ const Recorder = () => {
     // can't read. Parallel probe + storage reads drop preflight from
     // ~340ms to <50ms on cache hit.
     const [userSettingRaw, stickyState, probeResult] = await Promise.all([
-      chrome.storage.local.get(["useWebCodecsRecorder"]),
+      chrome.storage.local.get(["useWebCodecsRecorder_v2"]),
       getFastRecorderStickyState(),
       probeFastRecorderSupport(),
     ]);
     // Default-on: undefined means enabled; only explicit `false` opts out.
-    const userSetting = userSettingRaw.useWebCodecsRecorder === false ? false : true;
+    const userSetting = userSettingRaw.useWebCodecsRecorder_v2 === false ? false : true;
     const shouldUseFast = shouldUseFastRecorder(
       userSetting,
       probeResult,
@@ -1526,13 +1526,13 @@ const Recorder = () => {
     const { width: qualityWidth, height: qualityHeight } =
       getResolutionForQuality(effectiveQualityValue);
     const trackWidth = settings.width ?? qualityWidth ?? 1920;
-    const trackHeight = settings.height ?? qualityHeight ?? 1080;
+    const trackHeight = settings.height ?? qualityHeight ?? 720;
     const width = Math.min(trackWidth, qualityWidth ?? trackWidth);
     const height = Math.min(trackHeight, qualityHeight ?? trackHeight);
 
-    const { fpsValue } = await chrome.storage.local.get(["fpsValue"]);
-    let fps = parseInt(fpsValue);
-    if (Number.isNaN(fps)) fps = 30;
+    const { fpsValue_v2 } = await chrome.storage.local.get(["fpsValue_v2"]);
+    let fps = parseInt(fpsValue_v2);
+    if (Number.isNaN(fps)) fps = 24;
 
     if (!isPro) {
       fps = Math.min(fps, maxFps);
@@ -1934,7 +1934,7 @@ const Recorder = () => {
             if (validation && !validation.ok) {
               await markFastRecorderFailure("validation-failed", validation);
               await chrome.storage.local.set({
-                useWebCodecsRecorder: false,
+                useWebCodecsRecorder_v2: false,
                 lastWebCodecsFailureAt: Date.now(),
                 lastWebCodecsFailureCode: "validation-failed",
                 // Survives subsequent starts (which clear fastRecorderValidation).
@@ -2034,7 +2034,7 @@ const Recorder = () => {
                 : failureCode,
               lastWebCodecsFailureDetail: err?.detail || null,
             };
-            if (!transient) persisted.useWebCodecsRecorder = false;
+            if (!transient) persisted.useWebCodecsRecorder_v2 = false;
             chrome.storage.local.set(persisted);
             updateFreeFinalizeStatus("failed", 100, errStr);
 
@@ -2140,7 +2140,7 @@ const Recorder = () => {
           useWebCodecs.current = false;
           await chrome.storage.local.set({ fastRecorderInUse: false });
           await chrome.storage.local.set({
-            useWebCodecsRecorder: false,
+            useWebCodecsRecorder_v2: false,
             lastWebCodecsFailureAt: Date.now(),
             lastWebCodecsFailureCode: "start-failed",
           });
@@ -2426,7 +2426,7 @@ const Recorder = () => {
       debugError("startRecording() top-level error", err);
       if (useWebCodecs.current) {
         await chrome.storage.local.set({
-          useWebCodecsRecorder: false,
+          useWebCodecsRecorder_v2: false,
           lastWebCodecsFailureAt: Date.now(),
           lastWebCodecsFailureCode: "start-exception",
         });
@@ -3224,18 +3224,18 @@ const Recorder = () => {
       micPermissions: permissions2?.state,
     });
 
-    const { qualityValue } = await chrome.storage.local.get(["qualityValue"]);
+    const { qualityValue_v2 } = await chrome.storage.local.get(["qualityValue_v2"]);
     const { isPro, maxQuality, maxFps } = await getFreeCaptureCaps();
     const effectiveQualityValue = isPro
-      ? qualityValue
-      : clampQualityValue(qualityValue, maxQuality);
+      ? qualityValue_v2
+      : clampQualityValue(qualityValue_v2, maxQuality);
     const { width, height } = getResolutionForQuality(effectiveQualityValue);
 
-    const { fpsValue } = await chrome.storage.local.get(["fpsValue"]);
-    let fps = parseInt(fpsValue);
+    const { fpsValue_v2 } = await chrome.storage.local.get(["fpsValue_v2"]);
+    let fps = parseInt(fpsValue_v2);
 
     if (isNaN(fps)) {
-      fps = 30;
+      fps = 24;
     }
     if (!isPro) {
       fps = Math.min(fps, maxFps);
@@ -3280,7 +3280,7 @@ const Recorder = () => {
 
     debug("User media constraints", {
       userConstraints,
-      qualityValue: effectiveQualityValue,
+      qualityValue_v2: effectiveQualityValue,
       fps,
     });
 

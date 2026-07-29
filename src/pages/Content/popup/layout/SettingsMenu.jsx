@@ -135,9 +135,9 @@ const SettingsMenu = (props) => {
   const runFastRecorderProbe = async (source = "auto") => {
     if (!contentState) return;
     const userSetting =
-      contentState.useWebCodecsRecorder === true
+      contentState.useWebCodecsRecorder_v2 === true
         ? true
-        : contentState.useWebCodecsRecorder === false
+        : contentState.useWebCodecsRecorder_v2 === false
         ? false
         : null;
     const sticky = await getFastRecorderStickyState();
@@ -260,7 +260,7 @@ const SettingsMenu = (props) => {
     return () => {
       canceled = true;
     };
-  }, [contentState?.useWebCodecsRecorder]);
+  }, [contentState?.useWebCodecsRecorder_v2]);
 
   return (
     <DropdownMenu.Root
@@ -477,7 +477,7 @@ const SettingsMenu = (props) => {
               <DropdownMenu.SubTrigger className="DropdownMenuItem">
                 {chrome.i18n.getMessage("maxResolutionLabel") +
                   " (" +
-                  contentState.qualityValue +
+                  contentState.qualityValue_v2 +
                   ")"}
                 <div className="ItemIndicatorArrow">
                   <img src={DropdownGroup} />
@@ -490,14 +490,14 @@ const SettingsMenu = (props) => {
                   alignOffset={-3}
                 >
                   <DropdownMenu.RadioGroup
-                    value={contentState.qualityValue}
+                    value={contentState.qualityValue_v2}
                     onValueChange={(value) => {
                       setContentState((prevContentState) => ({
                         ...prevContentState,
-                        qualityValue: value,
+                        qualityValue_v2: value,
                       }));
                       chrome.storage.local.set({
-                        qualityValue: value,
+                        qualityValue_v2: value,
                       });
                     }}
                   >
@@ -601,7 +601,7 @@ const SettingsMenu = (props) => {
               <DropdownMenu.SubTrigger className="DropdownMenuItem">
                 {chrome.i18n.getMessage("maxFPSLabel") +
                   " (" +
-                  contentState.fpsValue +
+                  contentState.fpsValue_v2 +
                   " fps)"}
                 <div className="ItemIndicatorArrow">
                   <img src={DropdownGroup} />
@@ -614,14 +614,14 @@ const SettingsMenu = (props) => {
                   alignOffset={-3}
                 >
                   <DropdownMenu.RadioGroup
-                    value={contentState.fpsValue}
+                    value={contentState.fpsValue_v2}
                     onValueChange={(value) => {
                       setContentState((prevContentState) => ({
                         ...prevContentState,
-                        fpsValue: value,
+                        fpsValue_v2: value,
                       }));
                       chrome.storage.local.set({
-                        fpsValue: value,
+                        fpsValue_v2: value,
                       });
                     }}
                   >
@@ -717,10 +717,10 @@ const SettingsMenu = (props) => {
                 onCheckedChange={(checked) => {
                   setContentState((prevContentState) => ({
                     ...prevContentState,
-                    useWebCodecsRecorder: checked,
+                    useWebCodecsRecorder_v2: checked,
                   }));
                   chrome.storage.local.set({
-                    useWebCodecsRecorder: checked,
+                    useWebCodecsRecorder_v2: checked,
                     ...(checked
                       ? {
                           lastWebCodecsFailureAt: null,
@@ -729,7 +729,7 @@ const SettingsMenu = (props) => {
                       : {}),
                   });
                 }}
-                checked={contentState.useWebCodecsRecorder !== false}
+                checked={contentState.useWebCodecsRecorder_v2 !== false}
               >
                 {chrome.i18n.getMessage("webcodecsToggleLabel")}
                 <DropdownMenu.ItemIndicator className="ItemIndicator">

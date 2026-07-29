@@ -305,7 +305,7 @@ initLifecycleObserver();
 cleanupOrphanOpfsSessions();
 
 // 4.3.7 finalize-hang bug sticky-disabled WebCodecs for many users; clear once.
-// User's explicit opt-out (useWebCodecsRecorder === false) is preserved by overwrite anyway.
+// User's explicit opt-out (useWebCodecsRecorder_v2 === false) is preserved by overwrite anyway.
 const CURRENT_MIGRATION_VERSION = "4.3.9-clearStickyTransient3";
 const runUpgradeMigrations = async () => {
   try {
@@ -324,7 +324,7 @@ const runUpgradeMigrations = async () => {
       "lastWebCodecsFailureAt",
       "lastWebCodecsFailureCode",
       "lastFailedValidation",
-      "useWebCodecsRecorder",
+      "useWebCodecsRecorder_v2",
     ]);
     await chrome.storage.local.set({
       screenityMigratedForVersion: CURRENT_MIGRATION_VERSION,
