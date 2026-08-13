@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import styles from "../../styles/player/_RightPanel.module.scss";
 
 import { buildDiagnosticZip } from "../../../utils/buildDiagnosticZip";
@@ -6,11 +7,43 @@ import { downloadResolvedRecording } from "../../recorderStorage/resolveRecordin
 import { stageBlobToOpfs } from "../../recorderStorage/stageBlobToOpfs";
 import { diagForward } from "../../../utils/diagForward";
 import { showEditorToast } from "../../utils/editorToast";
+import { login, logout, getUser } from "../../../../utils/slingui-auth";
+import { upload, UploadStrategyPathEnum } from "../../../../utils/slingui-upload";
+import { createRecordingDocument } from "../../../../utils/slingui-documents";
 
 import { ReactSVG } from "react-svg";
 
 const URL =
   "chrome-extension://" + chrome.i18n.getMessage("@@extension_id") + "/assets/";
+const CLASSROOM_RECORDINGS_URL = "https://meeting.slingui.com/recordings";
+
+const firstValue = (...values) =>
+  values.find((value) => value != null && String(value).trim()) || null;
+
+const getMeetingId = (context) =>
+  firstValue(
+    context?.meetingId,
+    context?.meetingID,
+    context?.meeting?.meetingId,
+    context?.meeting?.meetingID,
+    context?.meeting?.id,
+    context?.callId,
+    context?.callID,
+    context?.classroom?.meetingId,
+    context?.classroom?.meetingID,
+  );
+
+const getParticipants = (context) => {
+  const participants = context?.participants;
+  if (Array.isArray(participants)) return participants;
+  if (Array.isArray(participants?.items)) return participants.items;
+  if (Array.isArray(participants?.ids)) {
+    return participants.ids.map((id) => ({ id, userId: id }));
+  }
+  if (Array.isArray(context?.classroom?.attendees)) return context.classroom.attendees;
+  if (Array.isArray(context?.classroom?.finalAttendees)) return context.classroom.finalAttendees;
+  return [];
+};
 
 import CropUI from "../editor/CropUI";
 import AudioUI from "../editor/AudioUI";
@@ -19,6 +52,9 @@ import { ContentStateContext } from "../../context/ContentState";
 
 const RightPanel = () => {
   const [contentState, setContentState] = useContext(ContentStateContext);
+  const [slingUser, setSlingUser] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
   const contentStateRef = useRef(contentState);
   const consoleErrorRef = useRef([]);
   // `disabled` on a <div role="button"> is inert, so the click still fires
@@ -31,6 +67,10 @@ const RightPanel = () => {
     console.error = (error) => {
       consoleErrorRef.current.push(error);
     };
+
+    getUser().then((user) => {
+      if (user && !user.expired) setSlingUser(user);
+    });
   }, []);
 
   useEffect(() => {
@@ -40,6 +80,17 @@ const RightPanel = () => {
   useEffect(() => {
     if (!contentState.saveDrive) saveDriveInFlight.current = false;
   }, [contentState.saveDrive]);
+
+  useEffect(() => {
+    return () => {
+      if (uploadResult?.previewUrl) {
+        globalThis.URL.revokeObjectURL(uploadResult.previewUrl);
+      }
+    };
+  }, [uploadResult]);
+
+  const closeUploadResult = () => setUploadResult(null);
+
 
   const getNotAvailableLabel = () => {
     if (contentState.fallback && contentState.noffmpeg && contentState.editLimit === 0) {
@@ -382,7 +433,7 @@ const RightPanel = () => {
                 try {
                   await fallbackViaBackground();
                 } catch (err) {
-                  console.error("[Screenity] raw download fallback failed:", err);
+                  console.error("[Slingui] raw download fallback failed:", err);
                 }
               } else if (
                 delta.state.current === "complete" ||
@@ -395,14 +446,14 @@ const RightPanel = () => {
             chrome.downloads.onChanged.addListener(interruptHandler);
           } catch (err) {
             console.warn(
-              "[Screenity] raw download direct path failed, using fallback:",
+              "[Slingui] raw download direct path failed, using fallback:",
               err,
             );
             try {
               await fallbackViaBackground();
             } catch (fallbackErr) {
               console.error(
-                "[Screenity] raw download fallback failed:",
+                "[Slingui] raw download fallback failed:",
                 fallbackErr,
               );
               showEditorToast(
@@ -453,7 +504,7 @@ const RightPanel = () => {
               },
             );
           } catch (err) {
-            console.error("[Screenity] Troubleshooting export failed:", err);
+            console.error("[Slingui] Troubleshooting export failed:", err);
           }
         },
         () => {},
@@ -873,36 +924,168 @@ const RightPanel = () => {
               </div>
             )}
             <div className={styles.buttonWrap}>
-              <div
-                role="button"
-                className={styles.button}
-                onClick={runSaveToDrive}
-                aria-disabled={contentState.saveDrive}
-                disabled={contentState.saveDrive}
-              >
-                <div className={styles.buttonLeft}>
-                  <ReactSVG src={URL + "editor/icons/drive.svg"} />
-                </div>
-                <div className={styles.buttonMiddle}>
-                  <div className={styles.buttonTitle}>
-                    {contentState.saveDrive
-                      ? chrome.i18n.getMessage("savingDriveLabel")
-                      : contentState.driveEnabled
-                      ? chrome.i18n.getMessage("saveDriveButtonTitle")
-                      : chrome.i18n.getMessage("signInDriveLabel")}
+              {slingUser ? (
+                <>
+                  <div
+                    className={styles.buttonLogout}
+                    onClick={async () => {
+                      await logout();
+                      setSlingUser(null);
+                    }}
+                  >
+                    Sign out of Slingui ({slingUser.profile?.email || "account"})
                   </div>
-                  <div className={styles.buttonDescription}>
-                    {contentState.offline
-                      ? chrome.i18n.getMessage("noConnectionLabel")
-                      : contentState.updateChrome
-                      ? chrome.i18n.getMessage("notAvailableLabel")
-                      : chrome.i18n.getMessage("saveDriveButtonDescription")}
+                  <div
+                    role="button"
+                    className={styles.button}
+                    onClick={async () => {
+                      if (isUploading) return;
+                      const blobToUpload =
+                        contentState.mp4ready && contentState.blob
+                          ? contentState.blob
+                          : contentState.webm;
+                      if (!(blobToUpload instanceof Blob)) return;
+
+                      setUploadResult(null);
+                      setIsUploading(true);
+                      try {
+                        const {
+                          recordingMeta = null,
+                          screenityMeetingState = null,
+                          lastMeetingContext = null,
+                        } = await chrome.storage.local.get([
+                          "recordingMeta",
+                          "screenityMeetingState",
+                          "lastMeetingContext",
+                        ]);
+                        const meetingContext =
+                          recordingMeta?.meetingContext ||
+                          screenityMeetingState ||
+                          lastMeetingContext ||
+                          null;
+                        const uploadMeetingId = getMeetingId(meetingContext);
+                        const participants = getParticipants(meetingContext);
+                        const recordingMetadata = {
+                          source: "slingui-recording-extension",
+                          meetingId: uploadMeetingId,
+                          callId: firstValue(
+                            meetingContext?.callId,
+                            meetingContext?.callID,
+                            meetingContext?.meeting?.meetingId,
+                            uploadMeetingId,
+                          ),
+                          participants,
+                          recordingMeta,
+                          meetingContext,
+                          classroom: meetingContext?.classroom || null,
+                          meeting: meetingContext?.meeting || null,
+                          meetingEndedAt: recordingMeta?.meetingEndedAt || null,
+                        };
+                        const uploadResponse = await upload(
+                          {
+                            contentType: blobToUpload.type
+                              .split("/")[1]
+                              ?.split(";")[0],
+                            strategy: UploadStrategyPathEnum.RECORDING,
+                            parameters: {
+                              meetingId: uploadMeetingId,
+                              callId: recordingMetadata.callId,
+                              metadata: recordingMetadata,
+                            },
+                          },
+                          blobToUpload,
+                          slingUser.access_token,
+                        );
+
+                        const recordingName =
+                          contentStateRef.current.title?.trim() ||
+                          recordingMeta?.title?.trim() ||
+                          `Recording ${new Date().toLocaleString()}`;
+                        const createdRecordingDocument = await createRecordingDocument({
+                          name: recordingName,
+                          storageUrl: uploadResponse?.urlFile,
+                          token: slingUser.access_token,
+                          metadata: recordingMetadata,
+                        });
+
+                        setUploadResult({
+                          url:
+                            createdRecordingDocument?.storageUrl ||
+                            uploadResponse?.urlFile ||
+                            null,
+                          previewUrl: globalThis.URL.createObjectURL(blobToUpload),
+                        });
+                      } catch (error) {
+                        console.error("Slingui upload or document registration failed:", error);
+                        showEditorToast(
+                          contentStateRef.current,
+                          error?.message || "Unable to save recording to Slingui",
+                        );
+                      } finally {
+                        setIsUploading(false);
+                      }
+                    }}
+                    aria-disabled={isUploading || (!contentState.blob && !contentState.webm)}
+                  >
+                    <div className={styles.buttonLeft}>
+                      <img
+                        src={URL + "img/icon-128.png"}
+                        alt="Slingui"
+                        width="32"
+                        height="32"
+                      />
+                    </div>
+                    <div className={styles.buttonMiddle}>
+                      <div className={styles.buttonTitle}>
+                        {isUploading ? "Uploading…" : "Save to Slingui"}
+                      </div>
+                      <div className={styles.buttonDescription}>
+                        {contentState.mp4ready
+                          ? "Save the MP4 video to your Slingui account"
+                          : "Save the WEBM video to your Slingui account"}
+                      </div>
+                    </div>
+                    <div className={styles.buttonRight}>
+                      <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div
+                  role="button"
+                  className={styles.button}
+                  onClick={async () => {
+                    try {
+                      setSlingUser(await login());
+                    } catch (error) {
+                      console.error("Slingui login failed:", error);
+                      showEditorToast(
+                        contentStateRef.current,
+                        "Unable to sign in to Slingui",
+                      );
+                    }
+                  }}
+                >
+                  <div className={styles.buttonLeft}>
+                    <img
+                      src={URL + "img/icon-128.png"}
+                      alt="Slingui"
+                      width="32"
+                      height="32"
+                    />
+                  </div>
+                  <div className={styles.buttonMiddle}>
+                    <div className={styles.buttonTitle}>Sign in to Slingui</div>
+                    <div className={styles.buttonDescription}>
+                      Save your recordings to Slingui
+                    </div>
+                  </div>
+                  <div className={styles.buttonRight}>
+                    <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
                   </div>
                 </div>
-                <div className={styles.buttonRight}>
-                  <ReactSVG src={URL + "editor/icons/right-arrow.svg"} />
-                </div>
-              </div>
+              )}
+
             </div>
           </div>
           <div className={styles.section}>
@@ -1124,6 +1307,61 @@ const RightPanel = () => {
           </div>
         </div>
       )}
+      {uploadResult &&
+        createPortal(
+          <div
+            className={styles.uploadResultWrap}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="slingui-upload-title"
+          >
+          <div
+            className={styles.uploadResultBackground}
+            onClick={closeUploadResult}
+          />
+          <div className={styles.uploadResultModal}>
+            <button
+              type="button"
+              className={styles.uploadResultClose}
+              onClick={closeUploadResult}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div id="slingui-upload-title" className={styles.uploadResultTitle}>
+              Recording saved to Slingui
+            </div>
+            <video
+              className={styles.uploadResultVideo}
+              src={uploadResult.previewUrl}
+              controls
+              playsInline
+            />
+            {!uploadResult.url && (
+              <div className={styles.uploadResultMessage}>
+                The recording was uploaded, but Slingui did not return a link.
+              </div>
+            )}
+            <div className={styles.uploadResultActions}>
+
+              <button
+                type="button"
+                className={styles.uploadResultSecondary}
+                onClick={() =>
+                  window.open(
+                    CLASSROOM_RECORDINGS_URL,
+                    "_blank",
+                    "noopener,noreferrer",
+                  )
+                }
+              >
+                Return to Classroom
+              </button>
+            </div>
+          </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

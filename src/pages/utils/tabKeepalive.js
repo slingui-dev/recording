@@ -120,8 +120,8 @@ const startMediaSession = (state) => {
     if (typeof navigator === "undefined" || !navigator.mediaSession) return;
     if (typeof window.MediaMetadata === "function") {
       navigator.mediaSession.metadata = new window.MediaMetadata({
-        title: "Screenity recording",
-        artist: "Screenity",
+        title: "Slingui recording",
+        artist: "Slingui",
       });
     }
     navigator.mediaSession.playbackState = "playing";

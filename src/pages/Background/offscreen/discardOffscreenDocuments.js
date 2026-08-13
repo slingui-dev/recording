@@ -8,7 +8,7 @@ export const discardOffscreenDocuments = async ({
   // a finalize emits video-ready and opens the editor on the discarded take.
   shouldFinalize = true,
 } = {}) => {
-  console.warn("[Screenity][discardOffscreenDocuments]", { reason, flush, shouldFinalize, stack: new Error().stack });
+  console.warn("[Slingui][discardOffscreenDocuments]", { reason, flush, shouldFinalize, stack: new Error().stack });
   const endFlush = perfSpan("BG.offscreen discardOffscreenDocuments", { reason, flush });
   try {
     if (flush) {

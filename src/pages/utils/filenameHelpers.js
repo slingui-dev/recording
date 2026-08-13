@@ -1,5 +1,5 @@
 export const sanitizeFilenameBase = (value) => {
-  const fallback = "Screenity recording";
+  const fallback = "Slingui recording";
   if (typeof value !== "string") return fallback;
 
   let sanitized = value.replace(/[\u0000-\u001f\u007f]/g, "");

@@ -1,6 +1,6 @@
 {
   "reviewAskTitle": {
-    "message": "Comment se passe votre expérience avec Screenity ?",
+    "message": "Comment se passe votre expérience avec Slingui ?",
     "description": "Review prompt step 1 question (sentiment check) in the editor"
   },
   "reviewAskGood": {
@@ -16,7 +16,7 @@
     "description": "Review prompt happy-branch title in the editor"
   },
   "reviewThanksDescription": {
-    "message": "Je suis Alyssa, la créatrice indépendante derrière Screenity. J'ai créé la première version en 2020, et je continue de maintenir activement l'extension gratuite aujourd'hui.\n\nSi Screenity vous a été utile, laisser un petit avis est l'une des meilleures façons de la soutenir ❤️",
+    "message": "Je suis Alyssa, la créatrice indépendante derrière Slingui. J'ai créé la première version en 2020, et je continue de maintenir activement l'extension gratuite aujourd'hui.\n\nSi Slingui vous a été utile, laisser un petit avis est l'une des meilleures façons de la soutenir ❤️",
     "description": "Review prompt happy-branch description (founder voice) in the editor. Paragraphs separated by a blank line."
   },
   "reviewThanksButton": {
@@ -32,7 +32,7 @@
     "description": "Review prompt unhappy-branch title in the editor"
   },
   "reviewSorryDescription": {
-    "message": "Je suis Alyssa, la créatrice de Screenity, et je lis chaque message personnellement. Dites-moi ce qui n'a pas fonctionné et je ferai de mon mieux pour le corriger.",
+    "message": "Je suis Alyssa, la créatrice de Slingui, et je lis chaque message personnellement. Dites-moi ce qui n'a pas fonctionné et je ferai de mon mieux pour le corriger.",
     "description": "Review prompt unhappy-branch description in the editor"
   },
   "reviewSorryButton": {
@@ -44,7 +44,7 @@
     "description": "Review prompt dismiss button on the unhappy branch"
   },
   "extName": {
-    "message": "Screenity - Capture & Annotation d'écran",
+    "message": "Slingui - Capture & Annotation d'écran",
     "description": "Nom de l'extension"
   },
   "extDesc": {
@@ -92,7 +92,7 @@
     "description": "Titre de la fenêtre modale d'avertissement des autorisations de la caméra/du microphone"
   },
   "permissionsModalDescription": {
-    "message": "Il semble que Screenity ne puisse pas accéder à votre caméra ou à votre microphone. Autorisez l'accès en cliquant sur l'icône de la caméra dans la barre d'adresse.",
+    "message": "Il semble que Slingui ne puisse pas accéder à votre caméra ou à votre microphone. Autorisez l'accès en cliquant sur l'icône de la caméra dans la barre d'adresse.",
     "description": "Description de la fenêtre modale d'avertissement des autorisations de la caméra/du microphone"
   },
   "permissionsModalDismiss": {
@@ -112,7 +112,7 @@
     "description": "Modal title shown when the editor cannot read the recording file from the device's storage"
   },
   "opfsLoadErrorDescription": {
-    "message": "Il semble que Screenity n'ait pas pu charger l'enregistrement depuis le stockage de votre appareil. Il a peut-être été effacé ou déplacé. Si cela se reproduit, contactez-nous à support@screenity.io.",
+    "message": "Il semble que Slingui n'ait pas pu charger l'enregistrement depuis le stockage de votre appareil. Il a peut-être été effacé ou déplacé. Si cela se reproduit, contactez-nous à contact@atlascli.io.",
     "description": "Modal description shown when the editor cannot read the recording file from the device's storage"
   },
   "recordingWriterFailedToast": {
@@ -724,11 +724,11 @@
     "description": "Titre de la boîte de dialogue d'enregistrement en pause"
   },
   "chromePermissionsModalTitle": {
-    "message": "Screenity n'a pas la permission d'enregistrer votre écran",
+    "message": "Slingui n'a pas la permission d'enregistrer votre écran",
     "description": "Titre de la boîte de dialogue des autorisations"
   },
   "chromePermissionsModalDescription": {
-    "message": "Pour activer l'enregistrement de l'écran, vous devez accorder des autorisations à Screenity.",
+    "message": "Pour activer l'enregistrement de l'écran, vous devez accorder des autorisations à Slingui.",
     "description": "Description de la boîte de dialogue des autorisations"
   },
   "chromePermissionsModalAction": {
@@ -756,7 +756,7 @@
     "description": "Annuler la boîte de dialogue du microphone désactivé"
   },
   "setupTitle": {
-    "message": "Commencez à utiliser Screenity en trois étapes simples :",
+    "message": "Commencez à utiliser Slingui en trois étapes simples :",
     "description": "Titre des étapes de configuration"
   },
   "setupStep1Before": {
@@ -780,7 +780,7 @@
     "description": "Étape 3 de configuration, avant l'icône. Besoin d'un espace à la fin."
   },
   "setupStep3After": {
-    "message": " de Screenity pour commencer",
+    "message": " de Slingui pour commencer",
     "description": "Étape 3 de configuration, après l'icône. Besoin d'un espace au début."
   },
   "setupCompleteTitle": {
@@ -840,7 +840,7 @@
     "description": "Stop recording button in recording screen"
   },
   "updateAnnouncementTitle": {
-    "message": "Bienvenue dans le nouveau Screenity !",
+    "message": "Bienvenue dans le nouveau Slingui !",
     "description": "Titre de l'annonce de mise à jour pour les utilisateurs existants"
   },
   "updateAnnouncementDescription": {
@@ -860,7 +860,7 @@
     "description": "Titre du modal d'erreur de flux"
   },
   "streamErrorModalDescription": {
-    "message": "Il semble y avoir une erreur lors du démarrage de l'enregistrement. Redémarrez votre navigateur et réessayez. Si le problème persiste, veuillez nous contacter à l'adresse support@screenity.io.",
+    "message": "Il semble y avoir une erreur lors du démarrage de l'enregistrement. Redémarrez votre navigateur et réessayez. Si le problème persiste, veuillez nous contacter à l'adresse contact@atlascli.io.",
     "description": "Description du modal d'erreur de flux"
   },
   "highestQuality": {
@@ -912,7 +912,7 @@
     "description": "Titre d'espace insuffisant"
   },
   "notEnoughSpaceDescription": {
-    "message": "Screenity nécessite au moins 1 Go d'espace libre pour l'enregistrement. Veuillez libérer de l'espace et réessayer.",
+    "message": "Slingui nécessite au moins 1 Go d'espace libre pour l'enregistrement. Veuillez libérer de l'espace et réessayer.",
     "description": "Description d'espace insuffisant"
   },
   "clearSpaceButton": {
@@ -944,7 +944,7 @@
     "description": "Titre de la fenêtre modale de l'enregistrement brut"
   },
   "rawRecordingModalDescription": {
-    "message": "Le fichier vidéo brut est le fichier original enregistré par Screenity. Cette vidéo n'a pas été traitée ni modifiée, elle peut donc être très volumineuse et peut ne pas être lisible sur tous les appareils. Si vous rencontrez des problèmes avec la vidéo traitée, vous pouvez utiliser ce fichier pour récupérer votre vidéo.",
+    "message": "Le fichier vidéo brut est le fichier original enregistré par Slingui. Cette vidéo n'a pas été traitée ni modifiée, elle peut donc être très volumineuse et peut ne pas être lisible sur tous les appareils. Si vous rencontrez des problèmes avec la vidéo traitée, vous pouvez utiliser ce fichier pour récupérer votre vidéo.",
     "description": "Description de la fenêtre modale de l'enregistrement brut"
   },
   "rawRecordingModalButton": {
@@ -956,7 +956,7 @@
     "description": "Titre de la fenêtre modale de dépannage"
   },
   "troubleshootModalDescription": {
-    "message": "Après le téléchargement, envoyez le fichier à support@screenity.io avec toutes les informations pertinentes. Nous utiliserons ces données pour vous aider à résoudre tout problème que vous pourriez rencontrer avec l'extension, et si possible, récupérer votre vidéo.",
+    "message": "Après le téléchargement, envoyez le fichier à contact@atlascli.io avec toutes les informations pertinentes. Nous utiliserons ces données pour vous aider à résoudre tout problème que vous pourriez rencontrer avec l'extension, et si possible, récupérer votre vidéo.",
     "description": "Description de la fenêtre modale de dépannage"
   },
   "troubleshootModalButton": {
@@ -968,11 +968,11 @@
     "description": "Titre de la fenêtre modale de limite de plus de 5 minutes"
   },
   "overLimitModalDescription": {
-    "message": "Comme Screenity est complètement privé et fonctionne en local, il est limité par le matériel de votre appareil. Le traitement d'une vidéo de cette longueur prendrait trop de temps et serait très intensif en ressources. Ne vous inquiétez pas, vous pouvez toujours télécharger le fichier WEBM ou l'enregistrement brut, mais l'édition et l'exportation en MP4 ne sont pas disponibles. Cela dit, vous pouvez toujours essayer de traiter la vidéo de toute façon, si vous comprenez les risques.",
+    "message": "Comme Slingui est complètement privé et fonctionne en local, il est limité par le matériel de votre appareil. Le traitement d'une vidéo de cette longueur prendrait trop de temps et serait très intensif en ressources. Ne vous inquiétez pas, vous pouvez toujours télécharger le fichier WEBM ou l'enregistrement brut, mais l'édition et l'exportation en MP4 ne sont pas disponibles. Cela dit, vous pouvez toujours essayer de traiter la vidéo de toute façon, si vous comprenez les risques.",
     "description": "Description de la fenêtre modale de limite de plus de 5 minutes"
   },
   "overLimitModalDescriptionFastPath": {
-    "message": "Comme Screenity est complètement privé et fonctionne en local, il est limité par le matériel de votre appareil. Le traitement d'une vidéo de cette longueur prendrait trop de temps et serait très intensif en ressources. Votre MP4 est prêt à être téléchargé, mais l'édition dans le navigateur n'est pas disponible pour des clips aussi longs. Cela dit, vous pouvez toujours essayer de traiter la vidéo de toute façon, si vous comprenez les risques.",
+    "message": "Comme Slingui est complètement privé et fonctionne en local, il est limité par le matériel de votre appareil. Le traitement d'une vidéo de cette longueur prendrait trop de temps et serait très intensif en ressources. Votre MP4 est prêt à être téléchargé, mais l'édition dans le navigateur n'est pas disponible pour des clips aussi longs. Cela dit, vous pouvez toujours essayer de traiter la vidéo de toute façon, si vous comprenez les risques.",
     "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
   },
   "overLimitModalButton": {
@@ -1014,7 +1014,7 @@
     "description": "Titre de l'extension non prise en charge sur l'onglet"
   },
   "extensionNotSupportedDescription": {
-    "message": "Screenity n'était pas pris en charge dans votre onglet précédent. Vous pouvez toujours commencer votre enregistrement ici et basculer vers l'onglet, mais votre caméra et votre barre d'outils ne seront pas visibles.",
+    "message": "Slingui n'était pas pris en charge dans votre onglet précédent. Vous pouvez toujours commencer votre enregistrement ici et basculer vers l'onglet, mais votre caméra et votre barre d'outils ne seront pas visibles.",
     "description": "Description de l'extension non prise en charge sur l'onglet"
   },
   "backupsDescription1": {
@@ -1186,7 +1186,7 @@
     "description": "Button label to go to the dashboard in the popup"
   },
   "welcomePopupTitle": {
-    "message": "Bienvenue sur Screenity",
+    "message": "Bienvenue sur Slingui",
     "description": "Title for the welcome popup shown to new users"
   },
   "welcomePopupDescriptionTop": {
@@ -1246,7 +1246,7 @@
     "description": "Title shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionDescription": {
-    "message": "Votre abonnement à Screenity Pro est inactif.",
+    "message": "Votre abonnement à Slingui Pro est inactif.",
     "description": "Description shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionReactivation": {
@@ -1335,7 +1335,7 @@
   },
   "welcomeProButton": {
     "message": "Débloquez l'éditeur",
-    "description": "Button to sign in to Screenity Pro"
+    "description": "Button to sign in to Slingui Pro"
   },
   "welcomeProSupport": {
     "message": "Soutenez la créatrice indépendante !",
@@ -1354,7 +1354,7 @@
     "description": "Pro banner title in the editor"
   },
   "proBannerDescription": {
-    "message": "Screenity restera toujours gratuit, open source et sans pub. Pro aide à couvrir les frais de cloud et soutient une créatrice indépendante ❤️",
+    "message": "Slingui restera toujours gratuit, open source et sans pub. Pro aide à couvrir les frais de cloud et soutient une créatrice indépendante ❤️",
     "description": "Pro banner description in the editor"
   },
   "proBannerAltButton": {
@@ -1386,15 +1386,15 @@
     "description": "Button to upgrade to Pro"
   },
   "hostBannerTitle": {
-    "message": "Vous utilisez Screenity en local ? Soutenez son développement !",
+    "message": "Vous utilisez Slingui en local ? Soutenez son développement !",
     "description": "Titre de la bannière d’auto-hébergement dans l’éditeur"
   },
   "hostBannerDescription": {
-    "message": "Screenity est développé par une créatrice indépendante. L’auto-hébergement est gratuit, mais si vous trouvez l’outil utile, pensez à soutenir avec la version Pro ❤️",
+    "message": "Slingui est développé par une créatrice indépendante. L’auto-hébergement est gratuit, mais si vous trouvez l’outil utile, pensez à soutenir avec la version Pro ❤️",
     "description": "Description de la bannière d’auto-hébergement dans l’éditeur"
   },
   "welcomeBackPopupTitle": {
-    "message": "Bienvenue à nouveau sur Screenity",
+    "message": "Bienvenue à nouveau sur Slingui",
     "description": "Titre de la fenêtre popup de bienvenue pour les utilisateurs de retour"
   },
   "welcomeBackProTitle": {
@@ -1402,15 +1402,15 @@
     "description": "Titre pour la fonctionnalité de stockage cloud dans la popup de bienvenue"
   },
   "welcomeBackProDescription": {
-    "message": "Screenity Pro est une nouvelle plateforme optionnelle pour sauvegarder vos vidéos dans le cloud, les partager par lien, et débloquer des outils d’édition avancés, si et quand vous en avez besoin.",
+    "message": "Slingui Pro est une nouvelle plateforme optionnelle pour sauvegarder vos vidéos dans le cloud, les partager par lien, et débloquer des outils d’édition avancés, si et quand vous en avez besoin.",
     "description": "Description de la fonctionnalité de stockage cloud dans la popup de bienvenue"
   },
   "welcomeBackProCTA": {
-    "message": "En savoir plus sur Screenity Pro",
+    "message": "En savoir plus sur Slingui Pro",
     "description": "Bouton d’appel à l’action pour la fonctionnalité cloud dans la popup de bienvenue"
   },
   "welcomeToProTitleModal": {
-    "message": "Bienvenue sur Screenity Pro",
+    "message": "Bienvenue sur Slingui Pro",
     "description": "Titre de la fenêtre de bienvenue pour Pro"
   },
   "welcomeToProDescriptionModal": {
@@ -1430,7 +1430,7 @@
     "description": "WebCodecs failure auto-disable toast"
   },
   "proOnboardingWelcomeTitle": {
-    "message": "Bienvenue dans l'extension Screenity Pro",
+    "message": "Bienvenue dans l'extension Slingui Pro",
     "description": "Pro onboarding welcome step title"
   },
   "proOnboardingWelcomeDescription": {
@@ -1566,7 +1566,7 @@
     "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
   },
   "editorRecoveryToast": {
-    "message": "Votre enregistrement est sauvegardé. L'éditeur ne s'est pas ouvert. Cliquez sur l'icône Screenity pour réessayer.",
+    "message": "Votre enregistrement est sauvegardé. L'éditeur ne s'est pas ouvert. Cliquez sur l'icône Slingui pour réessayer.",
     "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
   },
   "stopAckTimeoutToast": {
@@ -1609,7 +1609,7 @@
     "message": "Préparation de votre enregistrement en cours…"
   },
   "editorStuckDescription": {
-    "message": "Screenity met plus de temps que d'habitude à charger votre enregistrement. Vos données sont peut-être encore sur cet appareil. Essayez de le récupérer, ou contactez-nous s'il ne revient pas."
+    "message": "Slingui met plus de temps que d'habitude à charger votre enregistrement. Vos données sont peut-être encore sur cet appareil. Essayez de le récupérer, ou contactez-nous s'il ne revient pas."
   },
   "editorStuckTryRecover": {
     "message": "Essayer de récupérer"
@@ -1636,7 +1636,7 @@
     "message": "Impossible de démarrer l'enregistrement"
   },
   "recordingFailedModalDescription": {
-    "message": "Quelque chose a empêché le démarrage de l'enregistrement. Réessayez. Si le problème persiste, écrivez-nous à support@screenity.io."
+    "message": "Quelque chose a empêché le démarrage de l'enregistrement. Réessayez. Si le problème persiste, écrivez-nous à contact@atlascli.io."
   },
   "editAudioTooLargeTitle": {
     "message": "Le fichier audio est trop volumineux"

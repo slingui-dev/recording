@@ -80,7 +80,7 @@ export const initLifecycleObserver = () => {
             : "assets/icon-34.png",
         });
       } catch (err) {
-        console.warn("[Screenity][BG] reactive setIcon failed:", err);
+        console.warn("[Slingui][BG] reactive setIcon failed:", err);
       }
 
       // Hand the UI to the focused tab. onActivated has no branch for the
@@ -92,7 +92,7 @@ export const initLifecycleObserver = () => {
             if (tabId) void handleTabActivation({ tabId });
           });
         } catch (err) {
-          console.warn("[Screenity][BG] recording-start UI handoff failed:", err);
+          console.warn("[Slingui][BG] recording-start UI handoff failed:", err);
         }
       }
     }

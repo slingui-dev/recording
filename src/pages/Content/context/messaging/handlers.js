@@ -60,7 +60,7 @@ export const setupHandlers = () => {
     const targetOrigin = getProjectMessageTargetOrigin();
     if (!targetOrigin) {
       console.warn(
-        "[Screenity][Content] Ignoring project handoff on untrusted origin",
+        "[Slingui][Content] Ignoring project handoff on untrusted origin",
         {
           source: payload?.source || "unknown",
           pageOrigin: window.location.origin,
@@ -98,7 +98,7 @@ export const setupHandlers = () => {
   const revokeActiveLocalPlaybackSource = (reason = "unknown") => {
     if (activeLocalPlaybackSource?.url) {
       URL.revokeObjectURL(activeLocalPlaybackSource.url);
-      console.info("[Screenity][Content] Revoked local screen playback URL", {
+      console.info("[Slingui][Content] Revoked local screen playback URL", {
         reason,
         offerId: activeLocalPlaybackSource.offerId || null,
       });
@@ -278,7 +278,7 @@ export const setupHandlers = () => {
       built = await fetchLocalPlaybackBlobViaBridge(offer);
     } catch (bridgeErr) {
       console.warn(
-        "[Screenity][Content] Local playback bridge unavailable, falling back to runtime copy",
+        "[Slingui][Content] Local playback bridge unavailable, falling back to runtime copy",
         { offerId: offer.offerId, error: bridgeErr?.message || bridgeErr },
       );
       transport = "runtime";
@@ -501,7 +501,7 @@ export const setupHandlers = () => {
       offer,
     })
       .then((readySource) => {
-        console.info("[Screenity][Content] Local screen playback used", {
+        console.info("[Slingui][Content] Local screen playback used", {
           projectId: requestedProjectId,
           sceneId: requestedSceneId || latestLocalPlaybackSceneId || null,
           offerId: offer.offerId,
@@ -534,7 +534,7 @@ export const setupHandlers = () => {
       .catch((err) => {
         const reason = err?.message || "local-playback-build-failed";
         console.warn(
-          "[Screenity][Content] Local screen playback fallback",
+          "[Slingui][Content] Local screen playback fallback",
           {
             projectId: requestedProjectId,
             sceneId: requestedSceneId || latestLocalPlaybackSceneId || null,
@@ -904,7 +904,7 @@ export const setupHandlers = () => {
       state.recording ||
       state.pipEnded
     ) {
-      console.warn("[Screenity][Content] start-stream BLOCKED by guard state:", {
+      console.warn("[Slingui][Content] start-stream BLOCKED by guard state:", {
         preparingRecording: state.preparingRecording,
         pendingRecording: state.pendingRecording,
         recording: state.recording,
@@ -1156,7 +1156,7 @@ export const setupHandlers = () => {
         filename,
       });
       if (!resp?.ok || typeof resp.base64 !== "string") {
-        console.warn("[Screenity] troubleshooting zip failed:", resp?.error);
+        console.warn("[Slingui] troubleshooting zip failed:", resp?.error);
         return;
       }
       const bin = atob(resp.base64);
@@ -1459,7 +1459,7 @@ export const setupHandlers = () => {
     const projectId = message?.projectId || null;
     if (!projectId) {
       console.warn(
-        "[Screenity][Content] Ignoring update-project-ready without projectId",
+        "[Slingui][Content] Ignoring update-project-ready without projectId",
       );
       return;
     }
@@ -1527,7 +1527,7 @@ export const setupHandlers = () => {
     const capturedOffer = latestLocalPlaybackOffer;
     if (posted && capturedOffer?.offerId) {
       const capturedSceneId = message.sceneId || null;
-      console.info("[Screenity][Content] Local screen playback offered", {
+      console.info("[Slingui][Content] Local screen playback offered", {
         projectId,
         sceneId: capturedSceneId,
         offerId: capturedOffer.offerId,
@@ -1540,7 +1540,7 @@ export const setupHandlers = () => {
         offer: capturedOffer,
       })
         .then((readySource) => {
-          console.info("[Screenity][Content] Local screen playback ready", {
+          console.info("[Slingui][Content] Local screen playback ready", {
             projectId,
             sceneId: capturedSceneId,
             offerId: capturedOffer.offerId,
@@ -1555,7 +1555,7 @@ export const setupHandlers = () => {
         })
         .catch((err) => {
           const reason = err?.message || "local-playback-build-failed";
-          console.warn("[Screenity][Content] Local screen playback fallback", {
+          console.warn("[Slingui][Content] Local screen playback fallback", {
             projectId,
             sceneId: capturedSceneId,
             offerId: capturedOffer.offerId,

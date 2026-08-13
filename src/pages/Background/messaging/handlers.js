@@ -114,6 +114,38 @@ const DEBUG_FLOW =
   (typeof globalThis !== "undefined" && !!globalThis.SCREENITY_DEBUG_RECORDER);
 const DAY_MS = 86400000;
 
+// The Classroom page can provide the meeting context before recording starts.
+// Keep the last valid value so opening/reloading editor.html does not lose the
+// meeting ID needed to recover external meeting-audio chunks.
+const persistMeetingContext = async (context, source = "unknown") => {
+  if (!context || typeof context !== "object") {
+    return { ok: false, error: "invalid-meeting-context" };
+  }
+  const now = Date.now();
+  const meetingId =
+    context.meetingId ||
+    context.meetingID ||
+    context.meeting?.meetingId ||
+    context.meeting?.id ||
+    context.callId ||
+    context.callID ||
+    null;
+  const storedContext = context.meetingId || !meetingId
+    ? context
+    : { ...context, meetingId };
+  await chrome.storage.local.set({
+    screenityMeetingState: storedContext,
+    lastMeetingContext: storedContext,
+    meetingContextUpdatedAt: now,
+    meetingContextSource: source,
+  });
+  console.info("[Slingui][MeetingContext] stored", {
+    source,
+    meetingId,
+  });
+  return { ok: true };
+};
+
 // Gating for the editor review prompt: only ask established users right after
 // a smooth recording, stay quiet otherwise.
 const REVIEW_GATE = {
@@ -358,7 +390,7 @@ const scheduleLocalPlaybackAlarm = async (offer) => {
       when: Number(offer.expiresAt),
     });
   } catch (err) {
-    console.warn("[Screenity][BG] Failed to schedule local playback alarm", err);
+    console.warn("[Slingui][BG] Failed to schedule local playback alarm", err);
   }
 };
 
@@ -386,7 +418,7 @@ const clearStoredLocalPlaybackOffer = async ({
     const targetStore = offerScreenStore(existing);
     await targetStore.clear().catch((err) => {
       console.warn(
-        "[Screenity][BG] Failed to clear screen chunks while clearing local playback offer",
+        "[Slingui][BG] Failed to clear screen chunks while clearing local playback offer",
         err,
       );
     });
@@ -409,7 +441,7 @@ const clearStoredLocalPlaybackOffer = async ({
   });
 
   if (existing?.offerId) {
-    console.info("[Screenity][BG] Cleared local screen playback offer", {
+    console.info("[Slingui][BG] Cleared local screen playback offer", {
       reason,
       offerId: existing.offerId,
       clearChunks: Boolean(clearChunks),
@@ -451,7 +483,7 @@ const logStopRecordingTabEvent = (message, sender) => {
     const senderTabId = message?.tabId || sender?.tab?.id || null;
     const senderUrl = sender?.url || null;
     const stack = new Error().stack;
-    console.warn("[Screenity][BG] stop-recording-tab received", {
+    console.warn("[Slingui][BG] stop-recording-tab received", {
       reason,
       senderTabId,
       senderUrl,
@@ -466,7 +498,7 @@ const logStopRecordingTabEvent = (message, sender) => {
       },
     });
   } catch (err) {
-    console.warn("[Screenity][BG] stop-recording-tab logging failed", err);
+    console.warn("[Slingui][BG] stop-recording-tab logging failed", err);
   }
 };
 
@@ -674,13 +706,13 @@ export const handleFinishMultiRecording = async () => {
           projectId: projectId || null,
         }).catch((err) =>
           console.warn(
-            "[Screenity][BG] Failed to send update-project-ready (finish-multi-recording)",
+            "[Slingui][BG] Failed to send update-project-ready (finish-multi-recording)",
             err,
           ),
         );
       } else {
         console.warn(
-          "[Screenity][BG] No tab available for update-project-ready (finish-multi-recording)",
+          "[Slingui][BG] No tab available for update-project-ready (finish-multi-recording)",
           { projectId, instantMode: Boolean(instantMode) },
         );
       }
@@ -781,7 +813,7 @@ const registerRecordingTabListener = (ownerTabId) => {
         }),
       ).catch((err) => {
         console.error(
-          "[Screenity][BG] handleStopRecordingTab failed in tab-removed",
+          "[Slingui][BG] handleStopRecordingTab failed in tab-removed",
           err,
         );
       });
@@ -867,7 +899,7 @@ const resolveActiveSessionConflict = async (incomingSession) => {
 
   const alive = await isActiveSessionAlive(activeRecordingSession);
   if (alive) {
-    console.warn("[Screenity][BG] session_conflict_rejected", {
+    console.warn("[Slingui][BG] session_conflict_rejected", {
       activeId: activeRecordingSession.id,
       incomingId: incomingSession.id,
       activeRecorderTabId:
@@ -879,7 +911,7 @@ const resolveActiveSessionConflict = async (incomingSession) => {
   await clearRecordingSessionSafe("stale-conflict-recovered", {
     incomingId: incomingSession.id,
   });
-  console.warn("[Screenity][BG] session_conflict_stale_recovered", {
+  console.warn("[Slingui][BG] session_conflict_stale_recovered", {
     incomingId: incomingSession.id,
   });
   return { allow: true, staleRecovered: true };
@@ -1127,7 +1159,7 @@ export const setupHandlers = () => {
     } catch {
       payloadStr = String(message.payload);
     }
-    console.warn("[Screenity][OffscreenDiag]", message.source, payloadStr);
+    console.warn("[Slingui][OffscreenDiag]", message.source, payloadStr);
     return { ok: true };
   });
   registerMessage("offscreen-ready", async () => {
@@ -1428,7 +1460,7 @@ export const setupHandlers = () => {
     ) {
       if (DEBUG_POSTSTOP) {
         console.warn(
-          "[Screenity][BG] Suppressed duplicate stop-recording-tab message",
+          "[Slingui][BG] Suppressed duplicate stop-recording-tab message",
           {
             inFlight: stopRecordingTabInFlight,
             deltaMs: now - stopRecordingTabLastAt,
@@ -1581,7 +1613,7 @@ export const setupHandlers = () => {
 
   registerMessage("review-screenity", () =>
     createTab(
-      "https://chrome.google.com/webstore/detail/screenity-screen-recorder/kbbdabhdfibnancpjfhlkhafgdilcnji/reviews",
+      "https://slingui.com",
       true,
     ),
   );
@@ -1594,25 +1626,25 @@ export const setupHandlers = () => {
         ? message.source
         : "extension";
     return createTab(
-      `https://screenity.io/?ref=${encodeURIComponent(source)}`,
+      `https://slingui.com/?ref=${encodeURIComponent(source)}`,
       true,
     );
   });
   registerMessage("open-processing-info", () =>
     createTab(
-      "https://help.screenity.io/editing-and-exporting/dJRFpGq56JFKC7k8zEvsqb/why-is-there-a-5-minute-limit-for-editing/ddy4e4TpbnrFJ8VoRT37tQ",
+      "https://slingui.com/help/editing-and-exporting/dJRFpGq56JFKC7k8zEvsqb/why-is-there-a-5-minute-limit-for-editing/ddy4e4TpbnrFJ8VoRT37tQ",
       true,
     ),
   );
   registerMessage("upgrade-info", () =>
     createTab(
-      "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9",
+      "https://slingui.com/help/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-slingui/6kdB6qru6naVD8ZLFvX3m9",
       true,
     ),
   );
   registerMessage("trim-info", () =>
     createTab(
-      "https://help.screenity.io/editing-and-exporting/dJRFpGq56JFKC7k8zEvsqb/how-to-cut-trim-or-mute-parts-of-your-video/svNbM7YHYY717MuSWXrKXH",
+      "https://slingui.com/help/editing-and-exporting/dJRFpGq56JFKC7k8zEvsqb/how-to-cut-trim-or-mute-parts-of-your-video/svNbM7YHYY717MuSWXrKXH",
       true,
     ),
   );
@@ -1621,7 +1653,7 @@ export const setupHandlers = () => {
   );
   registerMessage("chrome-update-info", () =>
     createTab(
-      "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9",
+      "https://slingui.com/help/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-slingui/6kdB6qru6naVD8ZLFvX3m9",
       true,
     ),
   );
@@ -1630,16 +1662,16 @@ export const setupHandlers = () => {
   registerMessage("pip-started", () => handlePip(true));
   registerMessage("sign-out-drive", (message) => handleSignOutDrive(message));
   registerMessage("open-help", () =>
-    createTab("https://help.screenity.io/", true),
+    createTab("https://slingui.com/help/", true),
   );
   registerMessage("memory-limit-help", () =>
     createTab(
-      "https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/what-does-%E2%80%9Cmemory-limit-reached%E2%80%9D-mean-when-recording/8WkwHbt3puuXunYqQnyPcb",
+      "https://slingui.com/help/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/what-does-%E2%80%9Cmemory-limit-reached%E2%80%9D-mean-when-recording/8WkwHbt3puuXunYqQnyPcb",
       true,
     ),
   );
   registerMessage("open-home", () =>
-    createTab("https://screenity.io/", true),
+    createTab("https://slingui.com/", true),
   );
   registerMessage("report-bug", async (message) => {
     const qs = await supportContextQuery({
@@ -2261,7 +2293,7 @@ export const setupHandlers = () => {
       },
     });
 
-    console.info("[Screenity][BG] prepare-open-editor", {
+    console.info("[Slingui][BG] prepare-open-editor", {
       projectId: expectedProjectId,
       targetUrl,
       instantMode: Boolean(message.instantMode),
@@ -2275,7 +2307,7 @@ export const setupHandlers = () => {
       expectedKind,
       reason: "prepare-open-editor",
     });
-    console.info("[Screenity][BG] prepare-open-editor resolved", {
+    console.info("[Slingui][BG] prepare-open-editor resolved", {
       tabId: resolved.tabId || null,
       reused: Boolean(resolved.reused),
       opened: Boolean(resolved.opened),
@@ -2324,7 +2356,7 @@ export const setupHandlers = () => {
         projectId: activeProjectId || null,
       }).catch((err) =>
         console.warn(
-          "[Screenity][BG] Failed to send update-project-loading",
+          "[Slingui][BG] Failed to send update-project-loading",
           err,
         ),
       );
@@ -2374,7 +2406,7 @@ export const setupHandlers = () => {
       })) ||
       null;
 
-    console.info("[Screenity][BG] editor-ready received", {
+    console.info("[Slingui][BG] editor-ready received", {
       newProject: Boolean(message.newProject),
       multiMode: Boolean(message.multiMode),
       projectId,
@@ -2394,7 +2426,7 @@ export const setupHandlers = () => {
       });
       messageTab = resolved.tabId;
 
-      chrome.runtime.sendMessage({ type: "turn-off-pip" });
+      chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
 
       // New-project recordings are user-facing public-shareable, so
       // flip isPublic before we hand the share URL to the clipboard.
@@ -2414,7 +2446,7 @@ export const setupHandlers = () => {
       });
       messageTab = resolved.tabId;
 
-      chrome.runtime.sendMessage({ type: "turn-off-pip" });
+      chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
     }
 
     // non-newProject paths only; scene additions have null publicUrl, multiMode
@@ -2450,7 +2482,7 @@ export const setupHandlers = () => {
               trackType: "screen",
             },
       }).catch((err) =>
-        console.warn("[Screenity][BG] Failed to send update-project-ready", err),
+        console.warn("[Slingui][BG] Failed to send update-project-ready", err),
       );
     } else {
       console.warn("❗ No valid messageTab found in editor-ready");
@@ -2495,7 +2527,7 @@ export const setupHandlers = () => {
     });
     await scheduleLocalPlaybackAlarm(normalizedOffer);
 
-    console.info("[Screenity][BG] Registered local screen playback offer", {
+    console.info("[Slingui][BG] Registered local screen playback offer", {
       offerId: normalizedOffer.offerId,
       projectId: normalizedOffer.projectId,
       sceneId: normalizedOffer.sceneId,
@@ -2623,7 +2655,7 @@ export const setupHandlers = () => {
         sceneId: updated.sceneId,
       },
     });
-    console.info("[Screenity][BG] Local screen playback offer marked used", {
+    console.info("[Slingui][BG] Local screen playback offer marked used", {
       offerId: updated.offerId,
       projectId: updated.projectId,
       sceneId: updated.sceneId,
@@ -2681,7 +2713,7 @@ export const setupHandlers = () => {
         reason: updated.fallbackReason,
       },
     });
-    console.info("[Screenity][BG] Local screen playback offer fallback", {
+    console.info("[Slingui][BG] Local screen playback offer fallback", {
       offerId: updated.offerId,
       reason: updated.fallbackReason,
     });
@@ -2858,6 +2890,21 @@ export const setupHandlers = () => {
       return { success: false, message: "Cloud features disabled" };
     return await loginWithWebsite({ force: true });
   });
+  registerMessage("set-meeting-context", async (message, sender) =>
+    persistMeetingContext(
+      message?.meetingContext || message?.context || message?.payload,
+      sender?.tab?.url || "runtime-message",
+    ),
+  );
+  registerMessage("get-meeting-context", async () => {
+    const stored = await chrome.storage.local.get([
+      "screenityMeetingState",
+      "lastMeetingContext",
+    ]);
+    return {
+      meetingContext: stored.screenityMeetingState || stored.lastMeetingContext || null,
+    };
+  });
   registerMessage("sync-recording-state", async (message, sendResponse) => {
     const {
       recording,
@@ -2951,7 +2998,7 @@ export const setupHandlers = () => {
       try {
         await chrome.tabs.update(tabId, { active: true });
       } catch (err) {
-        console.warn("[Screenity] activate-recorder-tab failed:", String(err));
+        console.warn("[Slingui] activate-recorder-tab failed:", String(err));
       }
     }
   });

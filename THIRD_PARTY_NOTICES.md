@@ -1,6 +1,6 @@
 # Third-party notices
 
-Screenity is licensed under the [GNU General Public License v3.0](./LICENSE).
+The recording engine is licensed under the [GNU General Public License v3.0](./LICENSE).
 
 The extension bundles some third-party open source code. Each dependency keeps its own license, listed below with its full license text.
 

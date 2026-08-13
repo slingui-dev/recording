@@ -4,14 +4,14 @@ import { chunksStore } from "../recording/chunkHandler";
 import signIn from "../modules/signIn";
 import { diagEvent } from "../../utils/diagnosticLog";
 
-const findOrCreateScreenityFolder = async (token) => {
+const findOrCreateSlinguiFolder = async (token) => {
   const headers = new Headers({
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   });
 
   const query = encodeURIComponent(
-    `name='Screenity' and mimeType='application/vnd.google-apps.folder' and trashed=false`
+    `name='Slingui' and mimeType='application/vnd.google-apps.folder' and trashed=false`
   );
 
   const searchRes = await fetch(
@@ -33,7 +33,7 @@ const findOrCreateScreenityFolder = async (token) => {
     method: "POST",
     headers,
     body: JSON.stringify({
-      name: "Screenity",
+      name: "Slingui",
       mimeType: "application/vnd.google-apps.folder",
     }),
   });
@@ -121,7 +121,7 @@ const sanitizeDriveName = (raw) => {
   let out = String(raw ?? "");
   out = out.replace(/[\x00-\x1f\x7f]/g, " ");
   out = out.replace(/\s+/g, " ").trim();
-  if (!out) out = "Screenity Recording";
+  if (!out) out = "Slingui Recording";
   if (out.length > 200) out = out.slice(0, 200).trim();
   return out;
 };
@@ -335,7 +335,7 @@ const saveToDrive = async (videoBlob, fileName) => {
       if (!token) throw new Error("Sign-in failed");
     }
 
-    const folderId = await findOrCreateScreenityFolder(token);
+    const folderId = await findOrCreateSlinguiFolder(token);
     const fileId = await uploadResumable(token, videoBlob, fileName, folderId);
     if (!fileId) throw new Error("File ID missing after upload");
     return fileId;
@@ -442,7 +442,7 @@ export const handleSaveToDrive = async (request, fallback = false) => {
       // the filename. Read it as a disk-backed File (never materialized whole)
       // and let uploadResumable stream it in 8 MB chunks.
       const ext = request.isWebm ? ".webm" : ".mp4";
-      const fileName = (request.title || "Screenity Recording") + ext;
+      const fileName = (request.title || "Slingui Recording") + ext;
       let opfsFile;
       try {
         const dir = await navigator.storage.getDirectory();
@@ -473,7 +473,7 @@ export const handleSaveToDrive = async (request, fallback = false) => {
     } else if (!fallback) {
       const blob = base64ToUint8Array(request.base64);
       const ext = request.isWebm ? ".webm" : ".mp4";
-      const fileName = (request.title || "Screenity Recording") + ext;
+      const fileName = (request.title || "Slingui Recording") + ext;
       response = await saveToDrive(blob, fileName);
     } else {
       // viewer/recovery mode: rebuild blob from IndexedDB chunks
@@ -495,7 +495,7 @@ export const handleSaveToDrive = async (request, fallback = false) => {
         c.chunk instanceof Blob ? c.chunk : new Blob([c.chunk])
       );
       const blob = new Blob(parts, { type: "video/webm" });
-      const fileName = (request.title || "Screenity Recording") + ".webm";
+      const fileName = (request.title || "Slingui Recording") + ".webm";
       response = await saveToDrive(blob, fileName);
     }
 

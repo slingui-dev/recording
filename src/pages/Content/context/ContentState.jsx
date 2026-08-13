@@ -60,10 +60,10 @@ const ContentState = (props) => {
     process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
   setTimer = setTimerInternal;
   const [URL] = useState(
-    "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/why-does-screenity-ask-for-permissions/9AAE8zJ6iiUtCAtjn4SUT1",
+    "https://slingui.com/help/getting-started/77KizPC8MHVGfpKpqdux9D/why-does-slingui-ask-for-permissions/9AAE8zJ6iiUtCAtjn4SUT1",
   );
   const [URL2] = useState(
-    "https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9",
+    "https://slingui.com/help/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-slingui-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9",
   );
   const startBeepRef = useRef(null);
   const stopBeepRef = useRef(null);
@@ -772,7 +772,7 @@ const ContentState = (props) => {
         let clear = null;
         let clearAction = () => {};
         const helpURL =
-          "https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/what-does-%E2%80%9Cmemory-limit-reached%E2%80%9D-mean-when-recording/8WkwHbt3puuXunYqQnyPcb";
+          "https://slingui.com/help/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/what-does-%E2%80%9Cmemory-limit-reached%E2%80%9D-mean-when-recording/8WkwHbt3puuXunYqQnyPcb";
 
         const response = await chrome.runtime.sendMessage({
           type: "check-restore",
@@ -1104,15 +1104,166 @@ const ContentState = (props) => {
   });
 
   useEffect(() => {
+    const requestMeetingState = () => {
+      // The meeting page may publish its state before this content script is
+      // mounted (or while the extension is being reloaded). Ask the page to
+      // replay both meeting and microphone state.
+      const targetOrigin = window.location.origin;
+      window.postMessage(
+        {
+          type: "screenity-request-meeting-state",
+          source: "slingui-recording",
+        },
+        targetOrigin,
+      );
+      window.postMessage(
+        {
+          type: "screenity-request-microphone-state",
+          source: "slingui-recording",
+        },
+        targetOrigin,
+      );
+    };
+
     const handleMessage = (event) => {
-      if (event.data.type === "screenity-permissions") {
+      const messageType = event.data?.type;
+      const isTrustedPageMessage =
+        event.source === window && event.origin === window.location.origin;
+
+      if (
+        isTrustedPageMessage &&
+        (messageType === "mute-microphone" ||
+          messageType === "unmute-microphone" ||
+          messageType === "microphone-muted" ||
+          messageType === "microphone-unmuted" ||
+          messageType === "screenity-microphone-state")
+      ) {
+        const mutedFromState = event.data?.microphone?.muted;
+        const active =
+          typeof mutedFromState === "boolean"
+            ? !mutedFromState
+            : messageType === "unmute-microphone" ||
+              messageType === "microphone-unmuted";
+        const currentState = contentStateRef.current || {};
+        setContentState((previousState) =>
+          previousState.micActive === active
+            ? previousState
+            : { ...previousState, micActive: active },
+        );
+        chrome.storage.local.set({ micActive: active });
+        chrome.runtime
+          .sendMessage({
+            type: "set-mic-active-tab",
+            active,
+            defaultAudioInput: currentState.defaultAudioInput,
+            source: "meeting-microphone-state",
+          })
+          .catch(() => {});
+        console.info("[Slingui][Mic] meeting state received", {
+          active,
+          source: messageType,
+        });
+      } else if (messageType === "screenity-meeting-state") {
+        // The Classroom publishes the active meeting context in the page via
+        // postMessage. Forward the complete payload to the service worker so
+        // recording start/editor reloads can recover the meeting ID, class,
+        // participants, and audio-chunk lookup context.
+        const meeting = event.data?.meeting;
+        const meetingId =
+          event.data?.meetingId ||
+          event.data?.meetingID ||
+          meeting?.meetingId ||
+          meeting?.id ||
+          event.data?.callId ||
+          event.data?.callID;
+        if (
+          event.source === window &&
+          event.origin === window.location.origin &&
+          meeting &&
+          typeof meeting === "object" &&
+          meetingId
+        ) {
+          const microphone = event.data?.microphone;
+          const microphoneDeviceId =
+            typeof microphone?.deviceId === "string"
+              ? microphone.deviceId.trim()
+              : "";
+          const microphoneLabel =
+            typeof microphone?.label === "string" ? microphone.label.trim() : "";
+
+          if (typeof microphone?.muted === "boolean") {
+            const active = !microphone.muted;
+            const currentState = contentStateRef.current || {};
+            setContentState((previousState) =>
+              previousState.micActive === active
+                ? previousState
+                : { ...previousState, micActive: active },
+            );
+            chrome.storage.local.set({ micActive: active }).catch(() => {});
+            chrome.runtime
+              .sendMessage({
+                type: "set-mic-active-tab",
+                active,
+                defaultAudioInput: currentState.defaultAudioInput,
+                source: "meeting-state-replay",
+              })
+              .catch(() => {});
+          }
+
+          // The meeting publishes the selected input device as part of its
+          // replayable context. Apply it to recordings as well as persisting
+          // it, so an extension reload does not silently switch microphones.
+          if (microphoneDeviceId) {
+            const currentState = contentStateRef.current || {};
+            const audioInput = Array.isArray(currentState.audioInput)
+              ? currentState.audioInput
+              : [];
+            const hasDevice = audioInput.some(
+              (device) => device?.deviceId === microphoneDeviceId,
+            );
+            const nextAudioInput = hasDevice
+              ? audioInput
+              : [
+                  ...audioInput,
+                  {
+                    deviceId: microphoneDeviceId,
+                    label: microphoneLabel || microphoneDeviceId,
+                  },
+                ];
+            const deviceState = {
+              defaultAudioInput: microphoneDeviceId,
+              defaultAudioInputLabel: microphoneLabel,
+              audioInput: nextAudioInput,
+            };
+
+            setContentState((previous) => ({
+              ...previous,
+              ...deviceState,
+            }));
+            chrome.storage.local.set(deviceState).catch(() => {});
+          }
+
+          chrome.runtime
+            .sendMessage({
+              type: "set-meeting-context",
+              meetingContext: event.data,
+            })
+            .then(() => {
+              console.info("[Slingui][MeetingContext] content received", {
+                meetingId,
+                microphoneDeviceId: microphoneDeviceId || null,
+              });
+            })
+            .catch(() => {});
+        }
+      } else if (event.data?.type === "screenity-permissions") {
         handleDevicePermissions(event.data);
-      } else if (event.data.type === "screenity-permissions-loaded") {
+      } else if (event.data?.type === "screenity-permissions-loaded") {
         setContentState((prevContentState) => ({
           ...prevContentState,
           permissionsLoaded: true,
         }));
-      } else if (event.data.type === "screenity-site-policy") {
+      } else if (event.data?.type === "screenity-site-policy") {
         // Accurate host-page Permissions-Policy read from the cross-origin
         // permissions.html iframe: feature=(self) (e.g. facebook.com) blocks
         // our iframe even though the top-page probe above sees it as allowed.
@@ -1131,9 +1282,14 @@ const ContentState = (props) => {
     };
 
     window.addEventListener("message", handleMessage);
+    requestMeetingState();
+    // Replay requests cover extension reloads and the interval between the
+    // meeting route becoming active and its async classroom metadata fetch.
+    const requestTimer = window.setInterval(requestMeetingState, 2000);
 
     return () => {
       window.removeEventListener("message", handleMessage);
+      window.clearInterval(requestTimer);
     };
   }, []);
 
@@ -1222,7 +1378,7 @@ const ContentState = (props) => {
     cameraFlipped: false,
     backgroundEffect: "blur",
     backgroundEffectsActive: false,
-    countdown: true,
+    countdown: false,
     showExtension: false,
     showPopup: false,
     blurMode: false,
@@ -1278,8 +1434,8 @@ const ContentState = (props) => {
     systemAudio: true,
     openWarning: false,
     hasOpenedBefore: false,
-    qualityValue: "1080p",
-    fpsValue: "30",
+    qualityValue: "720p",
+    fpsValue: "15",
     fastRecorderBeta: null,
     fastRecorderStatus: null,
     useWebCodecsRecorder: true,

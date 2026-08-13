@@ -510,7 +510,7 @@ const CloudRecorder = () => {
     const payload = { ts: Date.now(), event, ...data };
     // console.warn (not console.info); Terser drop_console removes
     // info/log/debug in prod builds.
-    console.warn("[Screenity][StartFlow]", payload);
+    console.warn("[Slingui][StartFlow]", payload);
     // Mirror to BG so the timeline is visible even if the cloud
     // recorder tab closes mid-sequence (e.g. an unhandled error
     // tearing the tab down before the user can read the console).
@@ -553,13 +553,13 @@ const CloudRecorder = () => {
         typeof countdownFinishedAt === "number" &&
         firstChunkAt < countdownFinishedAt
       ) {
-        console.error("[Screenity][StartFlow] Chunk before countdown end", {
+        console.error("[Slingui][StartFlow] Chunk before countdown end", {
           firstChunkAt,
           countdownFinishedAt,
         });
       }
     } catch (err) {
-      console.warn("[Screenity][StartFlow] Countdown assert failed", err);
+      console.warn("[Slingui][StartFlow] Countdown assert failed", err);
     }
   };
 
@@ -2241,7 +2241,7 @@ const CloudRecorder = () => {
         chrome.storage.local.remove(["recorderSession", sessionStateKey]);
         sendRecordingError(
           result?.error ||
-            "Another Screenity recorder is already running. Please close it and try again.",
+            "Another Slingui recorder is already running. Please close it and try again.",
         );
         return false;
       }
@@ -2606,7 +2606,7 @@ const CloudRecorder = () => {
       try {
         await chrome.downloads.download({
           url: objectUrl,
-          filename: `Screenity-Finalize-Diagnostics-${new Date().toISOString()}.json`,
+          filename: `Slingui-Finalize-Diagnostics-${new Date().toISOString()}.json`,
           saveAs: false,
         });
       } finally {
@@ -2679,7 +2679,7 @@ const CloudRecorder = () => {
       try {
         await chrome.downloads.download({
           url: objectUrl,
-          filename: `Screenity-Recovery-${new Date().toISOString()}-${reason}.webm`,
+          filename: `Slingui-Recovery-${new Date().toISOString()}-${reason}.webm`,
           saveAs: false,
         });
         chrome.runtime.sendMessage({
@@ -2847,7 +2847,7 @@ const CloudRecorder = () => {
             try {
               await chrome.downloads.download({
                 url: objectUrl,
-                filename: `Screenity-Recovered-${ts}.webm`,
+                filename: `Slingui-Recovered-${ts}.webm`,
                 saveAs: false,
               });
             } finally {
@@ -2876,7 +2876,7 @@ const CloudRecorder = () => {
             try {
               await chrome.downloads.download({
                 url: cameraObjectUrl,
-                filename: `Screenity-Recovered-Camera-${ts}.webm`,
+                filename: `Slingui-Recovered-Camera-${ts}.webm`,
                 saveAs: false,
               });
             } finally {
@@ -3290,7 +3290,7 @@ const CloudRecorder = () => {
     emptyCleanupRef.current = true;
 
     console.warn(
-      `[Screenity] empty upload cleanup reason=${reason} screenOffset=${screenOffset} cameraOffset=${cameraOffset}`,
+      `[Slingui] empty upload cleanup reason=${reason} screenOffset=${screenOffset} cameraOffset=${cameraOffset}`,
     );
 
     await Promise.allSettled([
@@ -3324,7 +3324,7 @@ const CloudRecorder = () => {
 
   const sendRecordingError = (why, cancel = false) => {
     console.error(
-      `[Screenity][CloudRecorder] sendRecordingError why=${typeof why === "string" ? why : JSON.stringify(why)} cancel=${cancel}`,
+      `[Slingui][CloudRecorder] sendRecordingError why=${typeof why === "string" ? why : JSON.stringify(why)} cancel=${cancel}`,
     );
     void cleanupIfEmptyUploads("error");
     sendRecordingErrorBase(why, cancel);
@@ -4523,7 +4523,7 @@ const CloudRecorder = () => {
           probeOptions: {
             screenWidth: Number(screenSettings.width) || 1920,
             screenHeight: Number(screenSettings.height) || 1080,
-            framerate: Number(screenSettings.frameRate) || 30,
+            framerate: Number(screenSettings.frameRate) || 15,
           },
         });
         screenRecorder.current = screenSelection.recorder;
@@ -4726,7 +4726,7 @@ const CloudRecorder = () => {
           probeOptions: {
             cameraWidth: Number(cameraSettings.width) || 1280,
             cameraHeight: Number(cameraSettings.height) || 720,
-            framerate: Number(cameraSettings.frameRate) || 30,
+            framerate: Number(cameraSettings.frameRate) || 15,
           },
           onDataAvailable: async (blob) => {
             if (!blob || blob.size === 0) {
@@ -5159,7 +5159,7 @@ const CloudRecorder = () => {
             screenHeight: 1080,
             cameraWidth: 1280,
             cameraHeight: 720,
-            framerate: 30,
+            framerate: 15,
           },
         });
       } catch {
@@ -5429,7 +5429,7 @@ const CloudRecorder = () => {
 
     const shouldNotifyEditor = !multiMode || recordingToScene;
     if (!shouldNotifyEditor || !projectId || !sceneId) {
-      console.warn("[Screenity][CloudRecorder] Skipping editor-ready", {
+      console.warn("[Slingui][CloudRecorder] Skipping editor-ready", {
         shouldNotifyEditor,
         hasProjectId: Boolean(projectId),
         hasSceneId: Boolean(sceneId),
@@ -5439,7 +5439,7 @@ const CloudRecorder = () => {
       return;
     }
 
-    console.info("[Screenity][CloudRecorder] Sending editor-ready", {
+    console.info("[Slingui][CloudRecorder] Sending editor-ready", {
       projectId,
       sceneId,
       recordingToScene: Boolean(recordingToScene),
@@ -5838,7 +5838,7 @@ const CloudRecorder = () => {
     stopTick("stop-pressed", { reason, shouldFinalize });
 
     if (DEBUG_START_FLOW) {
-      console.debug("[Screenity] stopRecording invoked", {
+      console.debug("[Slingui] stopRecording invoked", {
         reason,
         shouldFinalize,
         screenState: screenRecorder.current?.state,
@@ -6425,7 +6425,7 @@ const CloudRecorder = () => {
     const prewarmedStream = streamOpts.prewarmedStream || null;
     const { width = 1920, height = 1080 } = getResolutionForQuality() || {};
 
-    const fps = 30;
+    const fps = 15;
 
     const { instantMode: instant } = await chrome.storage.local.get([
       "instantMode",

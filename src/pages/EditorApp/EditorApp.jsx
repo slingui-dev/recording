@@ -10,7 +10,10 @@ import Modal from "./components/global/Modal";
 import Toast from "./components/global/Toast";
 
 import HelpButton from "./components/player/HelpButton";
+import RecordingInfo from "./components/player/RecordingInfo";
 import ReviewBanner from "./components/global/ReviewBanner";
+import DevHUD from "./DevHUD";
+import AuthRequiredDialog from "./components/global/AuthRequiredDialog";
 
 import { ContentStateContext } from "./context/ContentState";
 import { diagForward } from "../utils/diagForward";
@@ -21,6 +24,19 @@ const EditorApp = () => {
   const [contentState, setContentState] = useContext(ContentStateContext);
   const parentRef = useRef(null);
   const progress = useRef("");
+
+  // `ready` means that a playable video exists, not that the recording is
+  // fully recovered. Keep the editor covered while auth, chunk download, or
+  // the meeting-audio mix is still in progress.
+  const meetingAudioStatus = contentState.meetingAudioChunksStatus;
+
+  const meetingAudioSyncPending =
+    window.top === window.self &&
+    !contentState.meetingAudioSyncSkipped &&
+    !["empty", "failed", "missing-context", "ready"].includes(
+      meetingAudioStatus,
+    );
+  const editorLoading = !contentState.ready || meetingAudioSyncPending;
 
   const getChromeVersion = () => {
     var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
@@ -191,8 +207,25 @@ const EditorApp = () => {
 
   return (
     <div ref={parentRef}>
+      <RecordingInfo contentState={contentState} />
+      <DevHUD
+        setContentState={setContentState}
+        contentStateRef={{ current: contentState }}
+        lastDownloadInfo={contentState.lastDownloadInfo}
+        lastRecordingBackend={contentState.lastRecordingBackend}
+        contentState={contentState}
+      />
       <Modal />
       <Toast />
+      <AuthRequiredDialog
+        contentState={contentState}
+        onSkipSync={() =>
+          setContentState((prev) => ({
+            ...prev,
+            meetingAudioSyncSkipped: true,
+          }))
+        }
+      />
       <video></video>
       {contentState.ffmpeg &&
         contentState.ready &&
@@ -205,24 +238,37 @@ const EditorApp = () => {
       {!contentState.ready &&
         new URLSearchParams(window.location.search).get("reviewPreview") !==
           null && <ReviewBanner />}
-      {!contentState.ready && (
-        <div className="wrap">
+      {editorLoading && (
+        <div
+          className="wrap"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483000,
+            pointerEvents: "none",
+          }}
+        >
           <img className="logo" src="/assets/logo-text.svg" />
           <div className="middle-area">
             <img src="/assets/record-tab-active.svg" />
             <div className="title">
-              {chrome.i18n.getMessage("sandboxProgressTitle") +
-                " " +
-                (contentState.processingProgress > 0
-                  ? `(${Math.round(contentState.processingProgress)}%)`
-                  : progress.current)}
+              {contentState.ready && meetingAudioSyncPending
+                ? "Sincronizando sua gravação…"
+                : chrome.i18n.getMessage("sandboxProgressTitle") +
+                  " " +
+                  (contentState.processingProgress > 0
+                    ? `(${Math.round(contentState.processingProgress)}%)`
+                    : progress.current)}
             </div>
             <div className="subtitle">
-              {chrome.i18n.getMessage("sandboxProgressDescription")}
+              {contentState.ready && meetingAudioSyncPending
+                ? "Aguarde enquanto carregamos os dados da aula e o áudio da reunião. O editor será liberado quando tudo estiver pronto."
+                : chrome.i18n.getMessage("sandboxProgressDescription")}
             </div>
             {typeof contentState.openModal === "function" && (
               <div
                 className="button-stop"
+                style={{ pointerEvents: "auto" }}
                 onClick={() => {
                   diagForward("sandbox-user-clicked-help", {
                     chunkCount: contentState?.chunkCount ?? 0,
@@ -270,7 +316,79 @@ const EditorApp = () => {
       <style>
         {`
 				
-				.wrap {
+          .recording-info {
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            z-index: 2147483000;
+            font-family: Satoshi-Medium, sans-serif;
+          }
+          .recording-info-button, .recording-info-copy {
+            border: 1px solid #dce4df;
+            border-radius: 10px;
+            background: #fff;
+            color: #205d3a;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 3px 12px rgba(25, 65, 42, .12);
+          }
+          .recording-info-button:hover, .recording-info-copy:hover {
+            background: #edf8f0;
+          }
+          .recording-info-syncing {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            padding: 9px 11px;
+            border: 1px solid #b9e4c5;
+            border-radius: 10px;
+            background: #f0fdf4;
+            color: #166534;
+            font-size: 12px;
+            font-weight: 600;
+            box-shadow: 0 3px 12px rgba(25, 65, 42, .12);
+          }
+          .recording-info-spinner {
+            width: 12px;
+            height: 12px;
+            flex: 0 0 12px;
+            border: 2px solid #b9e4c5;
+            border-top-color: #23834b;
+            border-radius: 50%;
+            animation: recording-info-spin .8s linear infinite;
+          }
+          @keyframes recording-info-spin { to { transform: rotate(360deg); } }
+          .recording-info-panel {
+            width: 290px;
+            margin-top: 8px;
+            padding: 14px;
+            border: 1px solid #dce4df;
+            border-radius: 14px;
+            background: #fff;
+            color: #243128;
+            box-shadow: 0 12px 30px rgba(24, 54, 35, .2);
+            font-size: 12px;
+          }
+          .recording-info-title {
+            color: #23834b;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 10px;
+          }
+          .recording-info-grid {
+            display: grid;
+            grid-template-columns: 92px 1fr;
+            gap: 7px 9px;
+            overflow-wrap: anywhere;
+          }
+          .recording-info-grid span { color: #718077; }
+          .recording-info-grid strong { font-weight: 600; }
+          .recording-info-error { color: #b42318; }
+          .recording-info-copy { margin-top: 12px; width: 100%; }
+          .wrap {
 					overflow: hidden;
 				}
 				.button-stop {

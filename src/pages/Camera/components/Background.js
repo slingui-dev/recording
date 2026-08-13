@@ -123,7 +123,7 @@ const Background = () => {
         } else if (running) {
           // Recreate failed; disable effects so the camera feed isn't frozen.
           console.warn(
-            "[Screenity] Segmenter recreate failed; disabling background effects",
+            "[Slingui] Segmenter recreate failed; disabling background effects",
           );
           try {
             chrome.runtime.sendMessage({

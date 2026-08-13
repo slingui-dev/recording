@@ -64,7 +64,7 @@ const tryApplyUpdate = async () => {
   try {
     chrome.runtime.reload();
   } catch (err) {
-    console.warn("[Screenity][BG] runtime.reload failed", err);
+    console.warn("[Slingui][BG] runtime.reload failed", err);
   }
 };
 

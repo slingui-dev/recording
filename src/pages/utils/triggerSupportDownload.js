@@ -22,7 +22,7 @@ export const triggerSupportDownload = async (opts = {}) => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     return filename;
   } catch (err) {
-    console.error("[Screenity] Support zip download failed:", err);
+    console.error("[Slingui] Support zip download failed:", err);
     return null;
   }
 };

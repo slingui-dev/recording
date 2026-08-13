@@ -295,6 +295,104 @@ export function isTokenExpired(user) {
   return Date.now() >= user.expires_at * 1000;
 }
 
+const readStoredAuth = async () => {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+    return { user: null, screenityToken: null };
+  }
+
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['user', 'screenityToken'], (result) => {
+      resolve({
+        user: result?.user || null,
+        screenityToken: result?.screenityToken || null,
+      });
+    });
+  });
+};
+
+const resolveStoredAccessToken = async () => {
+  const { user, screenityToken } = await readStoredAuth();
+  if (user?.access_token && !isTokenExpired(user)) {
+    return user.access_token;
+  }
+
+  // Keep the legacy token as a compatibility fallback for existing sessions.
+  // New OIDC sessions should use user.access_token above.
+  return screenityToken || null;
+};
+
+/**
+ * Wait until the OIDC callback has persisted a usable token.
+ * The editor can open before the auth flow finishes, so a one-shot storage
+ * read is not sufficient for requests started during editor recovery.
+ */
+export async function waitForAccessToken({
+  timeoutMs = 30_000,
+  pollMs = 250,
+  onStatus,
+} = {}) {
+  const startedAt = Date.now();
+  let removeStorageListener = () => {};
+  let timer = null;
+  let pollTimer = null;
+
+  const notify = (status, details = {}) => {
+    onStatus?.({ status, elapsedMs: Date.now() - startedAt, ...details });
+  };
+
+  notify('waiting-auth');
+
+  const token = await new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (pollTimer) clearTimeout(pollTimer);
+      removeStorageListener();
+      resolve(value || null);
+    };
+
+    const check = async () => {
+      try {
+        const nextToken = await resolveStoredAccessToken();
+        if (nextToken) {
+          notify('auth-ready');
+          finish(nextToken);
+          return;
+        }
+      } catch (error) {
+        console.warn('[Slingui Auth] Could not read auth state:', error);
+      }
+
+      if (!settled) pollTimer = setTimeout(check, pollMs);
+    };
+
+    if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+      const listener = (changes, area) => {
+        if (area !== 'local') return;
+        if (!changes.user && !changes.screenityToken) return;
+        check();
+      };
+      chrome.storage.onChanged.addListener(listener);
+      removeStorageListener = () => chrome.storage.onChanged.removeListener(listener);
+    }
+
+    timer = setTimeout(() => {
+      notify('auth-timeout');
+      finish(null);
+    }, timeoutMs);
+
+    check();
+  });
+
+  if (!token) {
+    throw new Error(`Authentication not ready after ${timeoutMs}ms`);
+  }
+
+  return token;
+}
+
 export async function getUser() {
   if (typeof chrome === 'undefined' || !chrome.storage) {
     return null;

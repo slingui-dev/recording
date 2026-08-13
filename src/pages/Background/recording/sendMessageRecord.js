@@ -5,6 +5,30 @@ import { diagEvent } from "../../utils/diagnosticLog";
 // `offscreen` flag, look for a live recorder offscreen doc before giving up.
 const ENABLE_RESILIENT_HANDOFF = true;
 
+const isTransientRecordError = (error) => {
+  const text = String(error?.message || error || "").toLowerCase();
+  return (
+    text.includes("message port closed") ||
+    text.includes("receiving end does not exist") ||
+    text.includes("could not establish connection") ||
+    text.includes("no recording tab available") ||
+    text.includes("no tab with id")
+  );
+};
+
+const resolveIfTransient = (resolve, reject, error, message) => {
+  if (!isTransientRecordError(error)) {
+    reject(error);
+    return false;
+  }
+  console.debug("[Slingui][Messaging] recorder unavailable", {
+    type: message?.type || null,
+    error: String(error?.message || error),
+  });
+  resolve(undefined);
+  return true;
+};
+
 export const sendMessageRecord = (message, responseCallback = null) => {
   return new Promise((resolve, reject) => {
     chrome.storage.local.get(["recordingTab", "offscreen"], (result) => {
@@ -19,13 +43,38 @@ export const sendMessageRecord = (message, responseCallback = null) => {
       if (result.offscreen) {
         chrome.runtime.sendMessage(message, (response) => {
           if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError.message);
+            resolveIfTransient(resolve, reject, chrome.runtime.lastError.message, message);
           } else {
             responseCallback ? responseCallback(response) : resolve(response);
           }
         });
       } else if (result.recordingTab) {
-        sendMessageTab(result.recordingTab, message, responseCallback)
+        // Never route recorder commands to editor.html or a stale captured tab.
+        // A hard reload can leave the old tab id in storage while the recorder
+        // has already been closed after finalization.
+        chrome.tabs.get(result.recordingTab, (tab) => {
+          const url = tab?.url || tab?.pendingUrl || "";
+          const extensionOrigin = chrome.runtime.getURL("");
+          const isRecorderPage =
+            typeof url === "string" &&
+            url.startsWith(extensionOrigin) &&
+            /\/(recorder|cloudrecorder)\.html(?:[?#]|$)/.test(url);
+          if (!isRecorderPage) {
+            console.info("sendMessageRecord: stored tab is not a live recorder", {
+              recordingTab: result.recordingTab,
+              url,
+              messageType: message?.type || null,
+            });
+            chrome.storage.local.set({ recordingTab: null });
+            resolveIfTransient(
+              resolve,
+              reject,
+              new Error("No recording tab available"),
+              message
+            );
+            return;
+          }
+          sendMessageTab(result.recordingTab, message, responseCallback)
           .then(resolve)
           .catch((err) => {
             const errStr = String(err);
@@ -36,13 +85,14 @@ export const sendMessageRecord = (message, responseCallback = null) => {
               `sendMessageRecord: failed to message recordingTab ${result.recordingTab}${isDeadTab ? " (stale/dead tab)" : ""}`,
               err
             );
-            reject(err);
+            if (!resolveIfTransient(resolve, reject, err, message)) return;
           });
+        });
       } else {
         const sendViaOffscreen = () => {
           chrome.runtime.sendMessage(message, (response) => {
             if (chrome.runtime.lastError) {
-              reject(chrome.runtime.lastError.message);
+              resolveIfTransient(resolve, reject, chrome.runtime.lastError.message, message);
             } else {
               responseCallback ? responseCallback(response) : resolve(response);
             }
@@ -63,7 +113,9 @@ export const sendMessageRecord = (message, responseCallback = null) => {
             if (sessionLive && recorderTabId) {
               sendMessageTab(recorderTabId, message, responseCallback)
                 .then(resolve)
-                .catch(reject);
+                .catch((error) => {
+                  resolveIfTransient(resolve, reject, error, message);
+                });
             } else {
               console.warn(
                 "sendMessageRecord: no recording tab available",
@@ -71,7 +123,12 @@ export const sendMessageRecord = (message, responseCallback = null) => {
                   ? { sessionStatus: session.status, recorderTabId }
                   : { session: null }
               );
-              reject(new Error("No recording tab available"));
+              resolveIfTransient(
+                resolve,
+                reject,
+                new Error("No recording tab available"),
+                message
+              );
             }
           });
         };

@@ -26,7 +26,7 @@ const applyKeepAwake = (isRecording) => {
     diagEvent("recording-keep-awake", { held: want });
   } catch (err) {
     currentlyHeld = null;
-    console.warn("[Screenity][BG] keep-awake apply failed", err);
+    console.warn("[Slingui][BG] keep-awake apply failed", err);
   }
 };
 

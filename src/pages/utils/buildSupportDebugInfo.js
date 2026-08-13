@@ -93,7 +93,7 @@ export const buildSupportDebugInfo = async (opts = {}) => {
   }
 
   const lines = [
-    `Screenity Debug Info`,
+    `Slingui Debug Info`,
     `====================`,
     `Code:      ${supportCode}`,
   ];

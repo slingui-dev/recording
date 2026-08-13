@@ -115,7 +115,7 @@ const _startRecordingInner = async (caller) => {
       !countdownIsFresh
     ) {
       console.warn(
-        "[Screenity][BG] startRecording aborted: prior recording stopped",
+        "[Slingui][BG] startRecording aborted: prior recording stopped",
         sinceStopMs,
         "ms ago, caller:",
         caller,
@@ -246,6 +246,7 @@ const _startRecordingInner = async (caller) => {
     // clear so the prior recording's "ready" signal can't trick the
     // editor into reading the new in-flight recording
     lastRecordingFinalizedFileName: null,
+    lastCompletedRecordingBackendRef: null,
     lastRecordingError: null,
     lastChunkSendFailure: null,
     lastRecordingSalvaged: null,
@@ -278,11 +279,38 @@ const _startRecordingInner = async (caller) => {
     chrome.storage.local.set({ recordingUiTabId: activeTab });
   }
 
-  const { screenityMeetingState, screenityMeetingEndedAt } =
-    await chrome.storage.local.get([
-      "screenityMeetingState",
-      "screenityMeetingEndedAt",
-    ]);
+  const {
+    screenityMeetingState,
+    lastMeetingContext,
+    screenityMeetingEndedAt,
+    recordingMeta: existingRecordingMeta,
+  } = await chrome.storage.local.get([
+    "screenityMeetingState",
+    "lastMeetingContext",
+    "screenityMeetingEndedAt",
+    "recordingMeta",
+  ]);
+  const meetingContext =
+    screenityMeetingState ||
+    lastMeetingContext ||
+    existingRecordingMeta?.meetingContext ||
+    null;
+  console.info("[Slingui][MeetingContext] recording start", {
+    source: screenityMeetingState
+      ? "screenityMeetingState"
+      : lastMeetingContext
+        ? "lastMeetingContext"
+        : existingRecordingMeta?.meetingContext
+          ? "recordingMeta"
+          : "none",
+    meetingId:
+      meetingContext?.meetingId ||
+      meetingContext?.meetingID ||
+      meetingContext?.meeting?.meetingId ||
+      meetingContext?.meeting?.id ||
+      meetingContext?.callId ||
+      null,
+  });
 
   if (recordingType === "region" || recordingType === "tab") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -296,7 +324,7 @@ const _startRecordingInner = async (caller) => {
             title,
             url,
             startedAt: Date.now(),
-            meetingContext: screenityMeetingState || null,
+            meetingContext,
             meetingEndedAt: screenityMeetingEndedAt || null,
           },
         });
@@ -322,7 +350,7 @@ const _startRecordingInner = async (caller) => {
       recordingMeta: {
         type: recordingType || "screen",
         startedAt: Date.now(),
-        meetingContext: screenityMeetingState || null,
+        meetingContext,
         meetingEndedAt: screenityMeetingEndedAt || null,
       },
     });
@@ -510,7 +538,7 @@ export const startAfterCountdown = (caller = "startAfterCountdown") => {
     // sendMessageRecord routes via recorderSession/offscreen fallback if needed
     if (recordingTab === null && !offscreen) {
       console.warn(
-        "[Screenity] startAfterCountdown: no recordingTab/offscreen available, starting with fallback routing"
+        "[Slingui] startAfterCountdown: no recordingTab/offscreen available, starting with fallback routing"
       );
     }
     startRecording(caller);

@@ -7,7 +7,7 @@ export const desktopCapture = async (request) => {
     camera: Boolean(request?.camera),
     customRegion: Boolean(request?.customRegion),
   });
-  console.log("[Screenity][desktopCapture] entered", request);
+  console.log("[Slingui][desktopCapture] entered", request);
   // batched: two sequential gets added 80-160ms of storage-queue latency
   const { onboarding } = await chrome.storage.local.get(["onboarding"]);
 
@@ -15,7 +15,7 @@ export const desktopCapture = async (request) => {
   if (onboarding === true) {
     perfMark("BG.desktopCapture.blocked-by-onboarding");
     console.log(
-      "[Screenity][desktopCapture] blocked: onboarding active",
+      "[Slingui][desktopCapture] blocked: onboarding active",
     );
     return;
   }

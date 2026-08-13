@@ -89,7 +89,7 @@ const Camera = () => {
     if (!loadingStates.modelLoading) return;
     const id = setTimeout(() => {
       console.warn(
-        "[Screenity] modelLoading hard-capped at 30s; clearing spinner",
+        "[Slingui] modelLoading hard-capped at 30s; clearing spinner",
       );
       try {
         chrome.runtime.sendMessage({

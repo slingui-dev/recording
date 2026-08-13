@@ -1,6 +1,6 @@
 {
   "reviewAskTitle": {
-    "message": "Как вам Screenity?",
+    "message": "Как вам Slingui?",
     "description": "Review prompt step 1 question (sentiment check) in the editor"
   },
   "reviewAskGood": {
@@ -16,7 +16,7 @@
     "description": "Review prompt happy-branch title in the editor"
   },
   "reviewThanksDescription": {
-    "message": "Я Alyssa, создательница Screenity, работаю в одиночку. Первую версию я создала ещё в 2020 году и до сих пор активно поддерживаю бесплатное расширение.\n\nЕсли Screenity вам помогло, короткий отзыв, это один из лучших способов его поддержать ❤️",
+    "message": "Я Alyssa, создательница Slingui, работаю в одиночку. Первую версию я создала ещё в 2020 году и до сих пор активно поддерживаю бесплатное расширение.\n\nЕсли Slingui вам помогло, короткий отзыв, это один из лучших способов его поддержать ❤️",
     "description": "Review prompt happy-branch description (founder voice) in the editor. Paragraphs separated by a blank line."
   },
   "reviewThanksButton": {
@@ -32,7 +32,7 @@
     "description": "Review prompt unhappy-branch title in the editor"
   },
   "reviewSorryDescription": {
-    "message": "Я Alyssa, создательница Screenity, и я сама читаю каждое сообщение. Напишите, что пошло не так, и я сделаю всё возможное, чтобы это исправить.",
+    "message": "Я Alyssa, создательница Slingui, и я сама читаю каждое сообщение. Напишите, что пошло не так, и я сделаю всё возможное, чтобы это исправить.",
     "description": "Review prompt unhappy-branch description in the editor"
   },
   "reviewSorryButton": {
@@ -44,7 +44,7 @@
     "description": "Review prompt dismiss button on the unhappy branch"
   },
   "extName": {
-    "message": "Screenity - Запись экрана & Аннотации",
+    "message": "Slingui - Запись экрана & Аннотации",
     "description": "Название расширения"
   },
   "extDesc": {
@@ -92,7 +92,7 @@
     "description": "Заголовок модального окна предупреждения о разрешениях для камеры / микрофона"
   },
   "permissionsModalDescription": {
-    "message": "Похоже, Screenity не может получить доступ к вашей камере или микрофону. Убедитесь, что разрешаете доступ, нажав на значок камеры в строке адреса.",
+    "message": "Похоже, Slingui не может получить доступ к вашей камере или микрофону. Убедитесь, что разрешаете доступ, нажав на значок камеры в строке адреса.",
     "description": "Описание модального окна предупреждения о разрешениях для камеры / микрофона"
   },
   "permissionsModalDismiss": {
@@ -112,7 +112,7 @@
     "description": "Modal title shown when the editor cannot read the recording file from the device's storage"
   },
   "opfsLoadErrorDescription": {
-    "message": "Похоже, Screenity не смог загрузить запись из хранилища вашего устройства. Возможно, она была удалена или перемещена. Если это продолжится, напишите нам на support@screenity.io.",
+    "message": "Похоже, Slingui не смог загрузить запись из хранилища вашего устройства. Возможно, она была удалена или перемещена. Если это продолжится, напишите нам на contact@atlascli.io.",
     "description": "Modal description shown when the editor cannot read the recording file from the device's storage"
   },
   "recordingWriterFailedToast": {
@@ -724,11 +724,11 @@
     "description": "Заголовок всплывающего окна приостановленной записи"
   },
   "chromePermissionsModalTitle": {
-    "message": "Screenity не имеет разрешения на запись вашего экрана",
+    "message": "Slingui не имеет разрешения на запись вашего экрана",
     "description": "Заголовок модального окна разрешения"
   },
   "chromePermissionsModalDescription": {
-    "message": "Для включения записи экрана вы должны предоставить разрешение на запись экрана при запросе от Screenity.",
+    "message": "Для включения записи экрана вы должны предоставить разрешение на запись экрана при запросе от Slingui.",
     "description": "Описание модального окна разрешения"
   },
   "chromePermissionsModalAction": {
@@ -756,7 +756,7 @@
     "description": "Отмена модального окна отключенного микрофона"
   },
   "setupTitle": {
-    "message": "Начните работу с Screenity в трех простых шагах:",
+    "message": "Начните работу с Slingui в трех простых шагах:",
     "description": "Заголовок шагов настройки"
   },
   "setupStep1Before": {
@@ -780,7 +780,7 @@
     "description": "Шаг 3 настройки, перед значком. Требуется пробел в конце."
   },
   "setupStep3After": {
-    "message": " значок Screenity для запуска",
+    "message": " значок Slingui для запуска",
     "description": "Шаг 3 настройки, после значка. Требуется пробел в начале."
   },
   "setupCompleteTitle": {
@@ -840,7 +840,7 @@
     "description": "Кнопка 'Остановить запись' на экране записи"
   },
   "updateAnnouncementTitle": {
-    "message": "Добро пожаловать в новый Screenity!",
+    "message": "Добро пожаловать в новый Slingui!",
     "description": "Заголовок объявления об обновлении для существующих пользователей"
   },
   "updateAnnouncementDescription": {
@@ -860,7 +860,7 @@
     "description": "Заголовок модального окна ошибки потока"
   },
   "streamErrorModalDescription": {
-    "message": "Похоже, произошла ошибка при запуске записи. Перезапустите браузер и попробуйте снова. Если проблема сохраняется, пожалуйста, свяжитесь с нами по адресу support@screenity.io.",
+    "message": "Похоже, произошла ошибка при запуске записи. Перезапустите браузер и попробуйте снова. Если проблема сохраняется, пожалуйста, свяжитесь с нами по адресу contact@atlascli.io.",
     "description": "Описание модального окна ошибки потока"
   },
   "highestQuality": {
@@ -912,7 +912,7 @@
     "description": "Заголовок сообщения о нехватке места"
   },
   "notEnoughSpaceDescription": {
-    "message": "Для работы Screenity требуется как минимум 1 ГБ свободного места. Пожалуйста, освободите место на вашем устройстве и попробуйте снова.",
+    "message": "Для работы Slingui требуется как минимум 1 ГБ свободного места. Пожалуйста, освободите место на вашем устройстве и попробуйте снова.",
     "description": "Описание сообщения о нехватке места"
   },
   "clearSpaceButton": {
@@ -944,7 +944,7 @@
     "description": "Заголовок модального окна необработанной записи"
   },
   "rawRecordingModalDescription": {
-    "message": "Необработанный видеофайл - это оригинальный видеофайл, записанный Screenity. Этот видеофайл не обработан и не редактирован, поэтому он может быть очень большим и не всегда можно воспроизвести на всех устройствах. Если у вас возникли проблемы с обработанным видео, вы можете использовать этот файл для восстановления своего видео.",
+    "message": "Необработанный видеофайл - это оригинальный видеофайл, записанный Slingui. Этот видеофайл не обработан и не редактирован, поэтому он может быть очень большим и не всегда можно воспроизвести на всех устройствах. Если у вас возникли проблемы с обработанным видео, вы можете использовать этот файл для восстановления своего видео.",
     "description": "Описание модального окна необработанной записи"
   },
   "rawRecordingModalButton": {
@@ -956,7 +956,7 @@
     "description": "Заголовок модального окна Устранения неполадок"
   },
   "troubleshootModalDescription": {
-    "message": "После скачивания отправьте этот файл на support@screenity.io вместе с любой актуальной информацией. Мы используем эти данные, чтобы помочь вам устранить любые проблемы с расширением и, при возможности, восстановить ваше видео.",
+    "message": "После скачивания отправьте этот файл на contact@atlascli.io вместе с любой актуальной информацией. Мы используем эти данные, чтобы помочь вам устранить любые проблемы с расширением и, при возможности, восстановить ваше видео.",
     "description": "Описание модального окна Устранения неполадок"
   },
   "troubleshootModalButton": {
@@ -968,11 +968,11 @@
     "description": "Заголовок модального окна ограничения более 5 минут"
   },
   "overLimitModalDescription": {
-    "message": "Поскольку Screenity полностью конфиденциален и работает локально, его возможности ограничены аппаратными ресурсами вашего устройства. Обработка видео такой длины займет слишком много времени и ресурсов. Но не волнуйтесь, вы всё равно можете скачать файл WEBM или оригинальную запись, но редактирование и экспорт в MP4 недоступны. Тем не менее, вы можете попробовать обработать видео, если осознаете риски.",
+    "message": "Поскольку Slingui полностью конфиденциален и работает локально, его возможности ограничены аппаратными ресурсами вашего устройства. Обработка видео такой длины займет слишком много времени и ресурсов. Но не волнуйтесь, вы всё равно можете скачать файл WEBM или оригинальную запись, но редактирование и экспорт в MP4 недоступны. Тем не менее, вы можете попробовать обработать видео, если осознаете риски.",
     "description": "Описание модального окна ограничения более 5 минут"
   },
   "overLimitModalDescriptionFastPath": {
-    "message": "Поскольку Screenity полностью конфиденциален и работает локально, его возможности ограничены аппаратными ресурсами вашего устройства. Обработка видео такой длины займет слишком много времени и ресурсов. Ваш файл MP4 готов к скачиванию, но редактирование в браузере недоступно для записей такой длины. Тем не менее, вы можете попробовать обработать видео, если осознаете риски.",
+    "message": "Поскольку Slingui полностью конфиденциален и работает локально, его возможности ограничены аппаратными ресурсами вашего устройства. Обработка видео такой длины займет слишком много времени и ресурсов. Ваш файл MP4 готов к скачиванию, но редактирование в браузере недоступно для записей такой длины. Тем не менее, вы можете попробовать обработать видео, если осознаете риски.",
     "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
   },
   "overLimitModalButton": {
@@ -1014,7 +1014,7 @@
     "description": "Заголовок предупреждения о не поддерживаемом расширении на вкладке"
   },
   "extensionNotSupportedDescription": {
-    "message": "Screenity не поддерживался на вашей предыдущей вкладке. Тем не менее, вы все равно можете начать запись здесь, а затем перейти на другую вкладку, но камера и панель инструментов не будут видны.",
+    "message": "Slingui не поддерживался на вашей предыдущей вкладке. Тем не менее, вы все равно можете начать запись здесь, а затем перейти на другую вкладку, но камера и панель инструментов не будут видны.",
     "description": "Описание предупреждения о не поддерживаемом расширении на вкладке"
   },
   "backupsDescription1": {
@@ -1186,7 +1186,7 @@
     "description": "Button label to go to the dashboard in the popup"
   },
   "welcomePopupTitle": {
-    "message": "Добро пожаловать в Screenity",
+    "message": "Добро пожаловать в Slingui",
     "description": "Title for the welcome popup shown to new users"
   },
   "welcomePopupDescriptionTop": {
@@ -1246,7 +1246,7 @@
     "description": "Title shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionDescription": {
-    "message": "Ваша подписка Screenity Pro неактивна.",
+    "message": "Ваша подписка Slingui Pro неактивна.",
     "description": "Description shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionReactivation": {
@@ -1335,7 +1335,7 @@
   },
   "welcomeProButton": {
     "message": "Разблокировать редактор",
-    "description": "Button to sign in to Screenity Pro"
+    "description": "Button to sign in to Slingui Pro"
   },
   "welcomeProSupport": {
     "message": "Поддержите разработку от инди-разработчицы",
@@ -1354,7 +1354,7 @@
     "description": "Pro banner title in the editor"
   },
   "proBannerDescription": {
-    "message": "Screenity всегда будет бесплатным, с открытым кодом и без рекламы. Pro покрывает облачные и серверные расходы и поддерживает инди-разработку! ❤️",
+    "message": "Slingui всегда будет бесплатным, с открытым кодом и без рекламы. Pro покрывает облачные и серверные расходы и поддерживает инди-разработку! ❤️",
     "description": "Pro banner description in the editor"
   },
   "proBannerAltButton": {
@@ -1386,15 +1386,15 @@
     "description": "Button to upgrade to Pro"
   },
   "hostBannerTitle": {
-    "message": "Нравится пользоваться Screenity локально? Поддержите дальнейшую разработку!",
+    "message": "Нравится пользоваться Slingui локально? Поддержите дальнейшую разработку!",
     "description": "Заголовок баннера о самостоятельном хостинге в редакторе"
   },
   "hostBannerDescription": {
-    "message": "Screenity разработана независимой разработчицей. Самостоятельный хостинг бесплатен, но если вам полезен этот инструмент, подумайте о поддержке через Pro ❤️",
+    "message": "Slingui разработана независимой разработчицей. Самостоятельный хостинг бесплатен, но если вам полезен этот инструмент, подумайте о поддержке через Pro ❤️",
     "description": "Описание баннера о самостоятельном хостинге в редакторе"
   },
   "welcomeBackPopupTitle": {
-    "message": "С возвращением в Screenity",
+    "message": "С возвращением в Slingui",
     "description": "Заголовок приветственного окна для возвращающихся пользователей"
   },
   "welcomeBackProTitle": {
@@ -1402,15 +1402,15 @@
     "description": "Заголовок для функции облачного хранилища в приветственном окне"
   },
   "welcomeBackProDescription": {
-    "message": "Screenity Pro — это новая дополнительная платформа для сохранения видео в облаке, обмена по ссылке и использования расширенных инструментов редактирования — если и когда они вам понадобятся.",
+    "message": "Slingui Pro — это новая дополнительная платформа для сохранения видео в облаке, обмена по ссылке и использования расширенных инструментов редактирования — если и когда они вам понадобятся.",
     "description": "Описание функции облачного хранилища в приветственном окне"
   },
   "welcomeBackProCTA": {
-    "message": "Узнать больше о Screenity Pro",
+    "message": "Узнать больше о Slingui Pro",
     "description": "Кнопка призыва к действию для функции облачного хранилища в приветственном окне"
   },
   "welcomeToProTitleModal": {
-    "message": "Добро пожаловать в Screenity Pro",
+    "message": "Добро пожаловать в Slingui Pro",
     "description": "Заголовок приветственного окна Pro"
   },
   "welcomeToProDescriptionModal": {
@@ -1430,7 +1430,7 @@
     "description": "WebCodecs failure auto-disable toast"
   },
   "proOnboardingWelcomeTitle": {
-    "message": "Добро пожаловать в расширение Screenity Pro",
+    "message": "Добро пожаловать в расширение Slingui Pro",
     "description": "Pro onboarding welcome step title"
   },
   "proOnboardingWelcomeDescription": {
@@ -1566,7 +1566,7 @@
     "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
   },
   "editorRecoveryToast": {
-    "message": "Запись сохранена. Редактор не открылся. Нажмите на значок Screenity, чтобы попробовать снова.",
+    "message": "Запись сохранена. Редактор не открылся. Нажмите на значок Slingui, чтобы попробовать снова.",
     "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
   },
   "stopAckTimeoutToast": {
@@ -1609,7 +1609,7 @@
     "message": "Запись ещё готовится…"
   },
   "editorStuckDescription": {
-    "message": "Screenity загружает вашу запись дольше обычного. Возможно, данные всё ещё хранятся на этом устройстве. Попробуйте восстановить её или свяжитесь с нами, если она не вернётся."
+    "message": "Slingui загружает вашу запись дольше обычного. Возможно, данные всё ещё хранятся на этом устройстве. Попробуйте восстановить её или свяжитесь с нами, если она не вернётся."
   },
   "editorStuckTryRecover": {
     "message": "Восстановить"
@@ -1636,7 +1636,7 @@
     "message": "Не удалось начать запись"
   },
   "recordingFailedModalDescription": {
-    "message": "Что-то помешало запустить запись. Пожалуйста, попробуйте снова. Если это повторяется, напишите нам на support@screenity.io."
+    "message": "Что-то помешало запустить запись. Пожалуйста, попробуйте снова. Если это повторяется, напишите нам на contact@atlascli.io."
   },
   "editAudioTooLargeTitle": {
     "message": "Аудиофайл слишком большой"

@@ -5,13 +5,14 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+
 import { useEffect } from "react";
 
 import fixWebmDuration from "fix-webm-duration";
 import { default as fixWebmDurationFallback } from "webm-duration-fix";
 
 import localforage from "localforage";
-import DevHUD from "../DevHUD";
+
 import {
   formatLocalTimestamp,
   getHostnameFromUrl,
@@ -28,6 +29,12 @@ import { chooseReader } from "../recorderStorage/chooseReader";
 import { downloadResolvedRecording } from "../recorderStorage/resolveRecordingFile";
 import { runEditorOp } from "../editorOps";
 import { showEditorToast } from "../utils/editorToast";
+import { waitForAccessToken } from "../../../utils/slingui-auth";
+import { listMeetingAudioChunks } from "../../../utils/meetingAudioChunks";
+
+const isAudioBlob = (value) =>
+  value instanceof Blob ||
+  Boolean(value && typeof value.arrayBuffer === "function" && Number.isFinite(value.size));
 // mediabunny is ~630KB, only used by export/remux/conversion on user action.
 // Lazy-load to keep parse cost off editor mount. Cached promise.
 let _mbPromise = null;
@@ -146,7 +153,7 @@ const ContentState = (props) => {
     }
 
     const MAX_HEARTBEATS = 6;
-    const HEARTBEAT_MS = 30000;
+    const HEARTBEAT_MS = 10000;
 
     // isFfmpegRunning/processingProgress are set while waitForFinalizeReady
     // runs, so a slow finalize counts as activity and isn't read as empty.
@@ -339,6 +346,16 @@ const ContentState = (props) => {
     reviewEligible: false,
     backupBlob: null,
     recordingMeta: null,
+    meetingAudioChunks: null,
+    applyingMeetingAudioChunks: false,
+    meetingAudioChunksApplied: false,
+    meetingAudioChunksError: null,
+    meetingAudioChunksStatus: "not-started",
+    meetingAudioChunksStartedAt: null,
+    meetingAudioChunksFinishedAt: null,
+    meetingAudioChunksRetry: 0,
+    meetingAudioSyncSkipped: false,
+    retryMeetingAudioChunks: null,
   };
 
   const [contentState, _setContentState] = useState(defaultState);
@@ -357,6 +374,7 @@ const ContentState = (props) => {
   // surfaces via OPFS_LOAD_FAILED).
   const opfsReadInFlightRef = useRef(false);
   const diagHeartbeatCountRef = useRef(0);
+  const meetingAudioChunksApplyStartedRef = useRef(false);
 
   const setContentState = useCallback((updater) => {
     _setContentState((prev) => {
@@ -373,6 +391,169 @@ const ContentState = (props) => {
       launchRecordingIdRef.current = params.get("recordingId") || null;
     } catch {}
   }, []);
+
+  const retryMeetingAudioChunks = useCallback(() => {
+    setContentState((prev) => ({
+      ...prev,
+      meetingAudioChunksRetry: (prev.meetingAudioChunksRetry || 0) + 1,
+      meetingAudioSyncSkipped: false,
+      meetingAudioChunksStatus: "waiting-auth",
+      meetingAudioChunksError: null,
+    }));
+  }, [setContentState]);
+
+  useEffect(() => {
+    setContentState((prev) =>
+      prev.retryMeetingAudioChunks === retryMeetingAudioChunks
+        ? prev
+        : { ...prev, retryMeetingAudioChunks },
+    );
+  }, [retryMeetingAudioChunks, setContentState]);
+
+  useEffect(() => {
+    if (window.top !== window.self) return;
+
+    let cancelled = false;
+
+    const loadMeetingAudioChunks = async () => {
+      const startedAt = Date.now();
+      setContentState((prev) => ({
+        ...prev,
+        meetingAudioChunksStatus: "loading",
+        meetingAudioChunksStartedAt: startedAt,
+        meetingAudioChunksFinishedAt: null,
+      }));
+      try {
+        const {
+          recordingMeta = null,
+          screenityMeetingState = null,
+          lastMeetingContext = null,
+          lastCompletedRecordingBackendRef = null,
+          postStopRecordingId = null,
+        } = await chrome.storage.local.get([
+          "recordingMeta",
+          "screenityMeetingState",
+          "lastMeetingContext",
+          "lastCompletedRecordingBackendRef",
+          "postStopRecordingId",
+        ]);
+        const meetingContext =
+          recordingMeta?.meetingContext ||
+          screenityMeetingState ||
+          lastMeetingContext ||
+          null;
+        const persistedRecordingId =
+          launchRecordingIdRef.current ||
+          recordingMeta?.recordingId ||
+          recordingMeta?.recordingSessionId ||
+          postStopRecordingId ||
+          lastCompletedRecordingBackendRef?.recordingId ||
+          lastCompletedRecordingBackendRef?.id ||
+          null;
+        if (!meetingContext) {
+          console.info("[MeetingAudioChunks] list skipped", {
+            reason: "missing-meeting-context",
+            recordingId: launchRecordingIdRef.current,
+          });
+          setContentState((prev) => ({
+            ...prev,
+            meetingAudioChunksStatus: "missing-context",
+            meetingAudioChunksError: "missing-meeting-context",
+            meetingAudioChunksFinishedAt: Date.now(),
+          }));
+          return;
+        }
+
+        // Publish the meeting context before authentication so the editor can
+        // explain why login is required instead of waiting silently.
+        setContentState((prev) => ({
+          ...prev,
+          recordingMeta: {
+            ...(prev.recordingMeta || {}),
+            ...(recordingMeta || {}),
+            type: recordingMeta?.type || prev.recordingMeta?.type || "meeting",
+            meetingContext,
+          },
+          meetingAudioChunksStatus: "waiting-auth",
+          meetingAudioChunksError: null,
+        }));
+        const token = await waitForAccessToken({
+          onStatus: ({ status, elapsedMs }) => {
+            console.info("[MeetingAudioChunks] auth status", { status, elapsedMs });
+            if (cancelled) return;
+            setContentState((prev) => ({
+              ...prev,
+              meetingAudioChunksStatus: status,
+              meetingAudioChunksError:
+                status === "auth-timeout" ? "authentication-timeout" : null,
+            }));
+          },
+        });
+        if (cancelled) return;
+
+        setContentState((prev) => ({
+          ...prev,
+          meetingAudioChunksStatus: "downloading",
+          meetingAudioChunksError: null,
+        }));
+        const audioChunks = await listMeetingAudioChunks({
+          meetingContext,
+          recordingId: persistedRecordingId,
+          token,
+          log: (message, payload) =>
+            console.info(`[MeetingAudioChunks] ${message}`, payload || ""),
+          warn: (message, payload) =>
+            console.warn(`[MeetingAudioChunks] ${message}`, payload || ""),
+        });
+        if (cancelled) return;
+        if (!audioChunks?.chunks?.length) {
+          console.info("[MeetingAudioChunks] list completed with no chunks", {
+            recordingId: persistedRecordingId,
+            meetingId: audioChunks?.meetingId || meetingContext?.meetingId || null,
+          });
+          setContentState((prev) => ({
+            ...prev,
+            recordingMeta: recordingMeta || prev.recordingMeta || {
+              type: "meeting",
+              meetingContext,
+            },
+            meetingAudioChunksError: "no-chunks-found",
+            meetingAudioChunksStatus: "empty",
+            meetingAudioChunksFinishedAt: Date.now(),
+          }));
+          return;
+        }
+
+        setContentState((prev) => ({
+          ...prev,
+          meetingAudioChunks: audioChunks,
+          recordingMeta: recordingMeta || prev.recordingMeta || {
+            type: "meeting",
+            meetingContext,
+          },
+          meetingAudioChunksStatus: "loaded",
+          meetingAudioChunksFinishedAt: Date.now(),
+        }));
+      } catch (error) {
+        if (!cancelled) {
+          const errorMessage = error?.message || String(error);
+          const isAuthTimeout = /authentication not ready/i.test(errorMessage);
+          console.warn("[MeetingAudioChunks] Failed to load chunks", error);
+          setContentState((prev) => ({
+            ...prev,
+            meetingAudioChunksError: isAuthTimeout ? "authentication-timeout" : errorMessage,
+            meetingAudioChunksStatus: isAuthTimeout ? "auth-timeout" : "failed",
+            meetingAudioChunksFinishedAt: Date.now(),
+          }));
+        }
+      }
+    };
+
+    loadMeetingAudioChunks();
+    return () => {
+      cancelled = true;
+    };
+  }, [contentState.meetingAudioChunksRetry]);
 
   useEffect(() => {
     // emit diag-editor-ready once; WebM has many "ready:true" branches
@@ -523,7 +704,7 @@ const ContentState = (props) => {
       const handleStatus = (status) => {
         if (!status || done) return;
         if (DEBUG_POSTSTOP)
-          console.debug("[Screenity][Sandbox] waitForFinalizeReady status", {
+          console.debug("[Slingui][Sandbox] waitForFinalizeReady status", {
             status,
           });
         const rawPct = typeof status.percent === "number" ? status.percent : 0;
@@ -619,11 +800,16 @@ const ContentState = (props) => {
   }, [contentState.chunkIndex, contentState.chunkCount]);
 
   const buildBlobFromChunks = async () => {
-    const { lastRecordingBackendRef } = await chrome.storage.local.get([
+    const {
+      lastRecordingBackendRef,
+      lastCompletedRecordingBackendRef,
+    } = await chrome.storage.local.get([
       "lastRecordingBackendRef",
+      "lastCompletedRecordingBackendRef",
     ]);
-    const reader = chooseReader(lastRecordingBackendRef);
-    await reader.open(lastRecordingBackendRef);
+    const backendRef = lastRecordingBackendRef || lastCompletedRecordingBackendRef;
+    const reader = chooseReader(backendRef);
+    await reader.open(backendRef);
     let readResult;
     try {
       readResult = await reader.readBlob();
@@ -633,7 +819,7 @@ const ContentState = (props) => {
     if (!readResult || readResult.chunkCount === 0) {
       if (DEBUG_POSTSTOP)
         console.warn(
-          "[Screenity][Sandbox] buildBlobFromChunks: no parts found",
+          "[Slingui][Sandbox] buildBlobFromChunks: no parts found",
         );
       debugRecordingEventWithSession(recdbgSessionRef.current, "blob-empty", {
         chunkCount: 0,
@@ -643,7 +829,7 @@ const ContentState = (props) => {
     const blob = readResult.blob;
     if (DEBUG_POSTSTOP)
       console.debug(
-        "[Screenity][Sandbox] buildBlobFromChunks: reconstructed blob",
+        "[Slingui][Sandbox] buildBlobFromChunks: reconstructed blob",
         {
           size: blob.size,
           type: blob.type,
@@ -665,25 +851,40 @@ const ContentState = (props) => {
         minute: "2-digit",
         hour12: true,
       });
-      const fallbackTitle = `Screenity video - ${formattedDate}`;
+      const fallbackTitle = `Slingui video - ${formattedDate}`;
 
       try {
-        const { recordingMeta } = await chrome.storage.local.get([
+        const {
+          recordingMeta = null,
+          screenityMeetingState = null,
+          lastMeetingContext = null,
+        } = await chrome.storage.local.get([
           "recordingMeta",
+          "screenityMeetingState",
+          "lastMeetingContext",
         ]);
-        if (recordingMeta?.type === "tab") {
+        const meetingContext =
+          screenityMeetingState || lastMeetingContext || null;
+        const effectiveMeta = recordingMeta || (meetingContext
+          ? { type: "meeting", meetingContext }
+          : null);
+        if (effectiveMeta) {
           const baseTitle = sanitizeFilenameBase(
-            recordingMeta.title?.trim() ||
-              getHostnameFromUrl(recordingMeta.url) ||
+            effectiveMeta.title?.trim() ||
+              getHostnameFromUrl(effectiveMeta.url) ||
               fallbackTitle,
           );
-          const timestamp = formatLocalTimestamp(recordingMeta.startedAt);
+          const timestamp = formatLocalTimestamp(effectiveMeta.startedAt);
           setContentState((prevState) => ({
             ...prevState,
-            title: `${baseTitle}; ${timestamp}`,
-            recordingMeta,
+            title:
+              effectiveMeta.type === "tab"
+                ? `${baseTitle}; ${timestamp}`
+                : fallbackTitle,
+            recordingMeta: effectiveMeta,
           }));
-          chrome.storage.local.remove(["recordingMeta"]);
+          // Keep metadata available across editor reloads. It is replaced by
+          // the next recording and is cleared by explicit discard flows.
           return;
         }
       } catch (error) {
@@ -909,7 +1110,7 @@ const ContentState = (props) => {
     }
     if (blob.type === "video/mp4" || isFastWebm) {
       if (DEBUG_RECORDER)
-        console.log("[Screenity][Sandbox] reconstructVideo: fast path taken", {
+        console.log("[Slingui][Sandbox] reconstructVideo: fast path taken", {
           size: blob.size,
           type: blob.type,
           isFastWebm,
@@ -994,7 +1195,7 @@ const ContentState = (props) => {
     // If recordingDuration is missing or 0, try to probe it from the blob
     if (!recordingDuration || recordingDuration <= 0) {
       console.warn(
-        "[Screenity][WebM] recordingDuration missing or 0, probing from blob",
+        "[Slingui][WebM] recordingDuration missing or 0, probing from blob",
       );
       try {
         const probeDuration = await new Promise((resolve) => {
@@ -1025,7 +1226,7 @@ const ContentState = (props) => {
           recordingDuration = probeDuration;
         }
       } catch (err) {
-        console.warn("[Screenity][WebM] blob duration probe failed:", err);
+        console.warn("[Slingui][WebM] blob duration probe failed:", err);
       }
     }
 
@@ -1117,7 +1318,7 @@ const ContentState = (props) => {
         }
       } else {
         console.warn(
-          "[Screenity][WebM] skipping duration fix: safeDuration=0, blob will have broken seek metadata",
+          "[Slingui][WebM] skipping duration fix: safeDuration=0, blob will have broken seek metadata",
         );
         if (
           contentStateRef.current.updateChrome ||
@@ -1149,7 +1350,7 @@ const ContentState = (props) => {
       }
     } catch (error) {
       console.error(
-        "[Screenity][WebM] duration fix failed, using unfixed blob:",
+        "[Slingui][WebM] duration fix failed, using unfixed blob:",
         error,
       );
       setContentState((prevState) => ({
@@ -1167,7 +1368,7 @@ const ContentState = (props) => {
         const s = contentStateRef.current;
         if (s?.ready) return;
         console.warn(
-          "[Screenity][WebM] reconstructVideo(blob) safety timeout: forcing ready with raw blob",
+          "[Slingui][WebM] reconstructVideo(blob) safety timeout: forcing ready with raw blob",
         );
         setContentState((prev) => {
           if (prev.ready) return prev;
@@ -1241,7 +1442,7 @@ const ContentState = (props) => {
     makeVideoCheck.current = true;
     perfMark("Sandbox makeVideoTab.enter", { override: message?.override });
     if (DEBUG_POSTSTOP)
-      console.debug("[Screenity][Sandbox] makeVideoTab invoked", {
+      console.debug("[Slingui][Sandbox] makeVideoTab invoked", {
         override: message?.override,
       });
     setContentState((prevState) => ({
@@ -1257,28 +1458,34 @@ const ContentState = (props) => {
     let opfsEmpty = false;
     let backendRefForThisLoad = null;
     try {
-      const { lastRecordingBackendRef } = await chrome.storage.local.get([
+      const {
+        lastRecordingBackendRef,
+        lastCompletedRecordingBackendRef,
+      } = await chrome.storage.local.get([
         "lastRecordingBackendRef",
+        "lastCompletedRecordingBackendRef",
       ]);
-      backendRefForThisLoad = lastRecordingBackendRef;
+      const effectiveBackendRef =
+        lastRecordingBackendRef || lastCompletedRecordingBackendRef;
+      backendRefForThisLoad = effectiveBackendRef;
       if (process.env.SCREENITY_DEV_MODE === "true") {
         console.log(
           "[recorder-opfs][sandbox] makeVideoTab backend",
-          lastRecordingBackendRef || { backend: "idb" },
+          effectiveBackendRef || { backend: "idb" },
         );
       }
       setContentState((prev) => ({
         ...prev,
-        lastRecordingBackend: lastRecordingBackendRef?.backend || "idb",
+        lastRecordingBackend: effectiveBackendRef?.backend || "idb",
       }));
-      if (lastRecordingBackendRef?.backend === "opfs") {
+      if (effectiveBackendRef?.backend === "opfs") {
         // retry truncated/transient reads so a recoverable first open doesn't hit the modal
         const MAX_OPFS_READ_ATTEMPTS = 3;
         for (let attempt = 1; attempt <= MAX_OPFS_READ_ATTEMPTS; attempt += 1) {
           try {
-            const reader = chooseReader(lastRecordingBackendRef);
+            const reader = chooseReader(effectiveBackendRef);
             const readerOpenStart = Date.now();
-            await reader.open(lastRecordingBackendRef);
+            await reader.open(effectiveBackendRef);
             diagForward("sandbox-opfs-reader-open-done", {
               elapsedMs: Date.now() - readerOpenStart,
               fileName: lastRecordingBackendRef?.fileName || null,
@@ -1362,7 +1569,7 @@ const ContentState = (props) => {
               err: String(err?.message || err).slice(0, 200),
             });
             console.warn(
-              "[Screenity][Sandbox] OPFS direct read failed",
+              "[Slingui][Sandbox] OPFS direct read failed",
               { attempt, err },
             );
             // A 0-byte file has nothing to wait for; retrying twice more just
@@ -1392,7 +1599,7 @@ const ContentState = (props) => {
         err: String(err?.message || err).slice(0, 200),
       });
       console.warn(
-        "[Screenity][Sandbox] OPFS direct read failed",
+        "[Slingui][Sandbox] OPFS direct read failed",
         err,
       );
     }
@@ -1469,7 +1676,7 @@ const ContentState = (props) => {
     const safetyCheck = () => {
       const s = contentStateRef.current;
       if (DEBUG_POSTSTOP)
-        console.debug("[Screenity][Sandbox] makeVideoTab: safety-check", {
+        console.debug("[Slingui][Sandbox] makeVideoTab: safety-check", {
           chunkCount: s?.chunkCount,
           chunkIndex: s?.chunkIndex,
           rawBlob: Boolean(s?.rawBlob),
@@ -1494,7 +1701,7 @@ const ContentState = (props) => {
         if (s?.webm) {
           if (DEBUG_RECORDER)
             console.log(
-              "[Screenity][WebM] safety timeout: webm already set by fix, marking ready",
+              "[Slingui][WebM] safety timeout: webm already set by fix, marking ready",
             );
           setContentState((prev) => ({
             ...prev,
@@ -1504,7 +1711,7 @@ const ContentState = (props) => {
           }));
         } else {
           console.warn(
-            "[Screenity][WebM] safety timeout: duration fix did not complete in time, using unfixed rawBlob",
+            "[Slingui][WebM] safety timeout: duration fix did not complete in time, using unfixed rawBlob",
           );
           setContentState((prev) => ({
             ...prev,
@@ -1525,7 +1732,7 @@ const ContentState = (props) => {
     setTimeout(() => {
       if (!contentStateRef.current?.ready) {
         console.warn(
-          "[Screenity][WebM] 60s safety timeout: force-marking ready",
+          "[Slingui][WebM] 60s safety timeout: force-marking ready",
         );
         safetyCheck();
       }
@@ -1533,6 +1740,73 @@ const ContentState = (props) => {
 
     if (sendResponse) sendResponse({ status: "ok" });
   };
+
+  // A hard reload creates a fresh editor page and the original post-stop
+  // message is gone. Re-open the durable OPFS/IDB reference so video recovery
+  // does not depend on the recorder tab still being alive.
+  useEffect(() => {
+    if (window.top !== window.self) return;
+    let cancelled = false;
+    const recoverAfterEditorLoad = async () => {
+      try {
+        const {
+          lastRecordingBackendRef,
+          lastCompletedRecordingBackendRef,
+          recording,
+          pendingRecording,
+        } = await chrome.storage.local.get([
+          "lastRecordingBackendRef",
+          "lastCompletedRecordingBackendRef",
+          "recording",
+          "pendingRecording",
+        ]);
+        if (cancelled || recording || pendingRecording) return;
+        const backendRef =
+          lastRecordingBackendRef || lastCompletedRecordingBackendRef;
+        if (!backendRef?.backend) {
+          console.info("[Slingui][EditorRestore] no durable recording reference");
+          return;
+        }
+        console.info("[Slingui][EditorRestore] attempting durable recovery", {
+          backend: backendRef.backend,
+          fileName: backendRef.fileName || null,
+          mode: launchModeRef.current,
+        });
+        diagForward("editor-restore-start", {
+          backend: backendRef.backend,
+          fileName: backendRef.fileName || null,
+          mode: launchModeRef.current,
+        });
+        await makeVideoTab(null, { override: false, source: "editor-reload" });
+        if (!cancelled) {
+          console.info("[Slingui][EditorRestore] recovery read completed", {
+            ready: Boolean(contentStateRef.current?.ready),
+            bytes: contentStateRef.current?.blob?.size || 0,
+          });
+          diagForward("editor-restore-complete", {
+            ready: Boolean(contentStateRef.current?.ready),
+            bytes: contentStateRef.current?.blob?.size || 0,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("[Slingui][EditorRestore] recovery failed", {
+            error: String(error?.message || error).slice(0, 240),
+          });
+          diagForward("editor-restore-failed", {
+            error: String(error?.message || error).slice(0, 240),
+          });
+        }
+      }
+    };
+    // Let the initial editor listeners attach before reading OPFS/IDB. The
+    // post-stop message remains safe: makeVideoCheck deduplicates both paths.
+    const timer = setTimeout(recoverAfterEditorLoad, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   const toBase64 = (blob) => {
     return new Promise((resolve, reject) => {
@@ -1549,7 +1823,7 @@ const ContentState = (props) => {
     (request, sender, sendResponse) => {
       const message = request;
       if (DEBUG_POSTSTOP)
-        console.debug("[Screenity][Sandbox] onChromeMessage", {
+        console.debug("[Slingui][Sandbox] onChromeMessage", {
           type: message?.type,
           senderTab: sender?.tab?.id,
         });
@@ -1562,7 +1836,7 @@ const ContentState = (props) => {
       }
       if (message.type === "chunk-count") {
         if (DEBUG_POSTSTOP)
-          console.debug("[Screenity][Sandbox] received chunk-count", {
+          console.debug("[Slingui][Sandbox] received chunk-count", {
             count: message.count,
           });
         diagForward("sandbox-chunk-count-received", {
@@ -1648,7 +1922,7 @@ const ContentState = (props) => {
         }));
       } else if (message.type === "make-video-tab") {
         if (DEBUG_POSTSTOP)
-          console.debug("[Screenity][Sandbox] received make-video-tab");
+          console.debug("[Slingui][Sandbox] received make-video-tab");
         diagMakeVideoAtRef.current = Date.now();
         diagForward("sandbox-make-video-tab", null);
         makeVideoTab(sendResponse, message);
@@ -1703,8 +1977,17 @@ const ContentState = (props) => {
                 ffmpegLoaded: true,
                 processingProgress: 0,
               }));
-              buildBlobFromChunks().catch(() => {});
-              sendResponse({ status: "error", error: result.error });
+              buildBlobFromChunks()
+                .then((blob) => {
+                  sendResponse(
+                    blob
+                      ? { status: "ok", recoveredAfter: result.error }
+                      : { status: "error", error: result.error },
+                  );
+                })
+                .catch((error) =>
+                  sendResponse({ status: "error", error: error.message }),
+                );
               return;
             }
             buildBlobFromChunks()
@@ -1756,8 +2039,17 @@ const ContentState = (props) => {
                 ffmpegLoaded: true,
                 processingProgress: 0,
               }));
-              buildBlobFromChunks().catch(() => {});
-              sendResponse({ status: "error", error: result.error });
+              buildBlobFromChunks()
+                .then((blob) => {
+                  sendResponse(
+                    blob
+                      ? { status: "ok", recoveredAfter: result.error }
+                      : { status: "error", error: result.error },
+                  );
+                })
+                .catch((error) =>
+                  sendResponse({ status: "error", error: error.message }),
+                );
               return;
             }
             buildBlobFromChunks()
@@ -1809,8 +2101,17 @@ const ContentState = (props) => {
                 ffmpegLoaded: true,
                 processingProgress: 0,
               }));
-              buildBlobFromChunks().catch(() => {});
-              sendResponse({ status: "error", error: result.error });
+              buildBlobFromChunks()
+                .then((blob) => {
+                  sendResponse(
+                    blob
+                      ? { status: "ok", recoveredAfter: result.error }
+                      : { status: "error", error: result.error },
+                  );
+                })
+                .catch((error) =>
+                  sendResponse({ status: "error", error: error.message }),
+                );
               return;
             }
             buildBlobFromChunks()
@@ -1857,11 +2158,24 @@ const ContentState = (props) => {
     // 500ms retry in case backendRef hasn't propagated yet
     const attemptSelfTrigger = async (isRetry = false) => {
       try {
-        const { lastRecordingBackendRef } = await chrome.storage.local.get([
+        const {
+          lastRecordingBackendRef,
+          lastCompletedRecordingBackendRef,
+        } = await chrome.storage.local.get([
           "lastRecordingBackendRef",
+          "lastCompletedRecordingBackendRef",
         ]);
+        const backendRef =
+          lastRecordingBackendRef || lastCompletedRecordingBackendRef;
+        diagForward("editor-recovery-start", {
+          href: window.location.href,
+          recordingId: launchRecordingIdRef.current,
+          backend: backendRef?.backend || "idb",
+          fileName: backendRef?.fileName || null,
+          usedCompletedReference: !lastRecordingBackendRef && Boolean(lastCompletedRecordingBackendRef),
+        });
         if (cancelled) return true;
-        if (lastRecordingBackendRef?.backend === "opfs") {
+        if (backendRef?.backend === "opfs") {
           if (process.env.SCREENITY_DEV_MODE === "true") {
             console.log(
               "[recorder-opfs][sandbox] self-trigger makeVideoTab for OPFS backend",
@@ -2016,14 +2330,14 @@ const ContentState = (props) => {
         const key = `chunks_ready_for:${tabId}`;
         if (changes[key]) {
           if (DEBUG_POSTSTOP)
-            console.debug("[Screenity][Sandbox] storage fallback triggered", {
+            console.debug("[Slingui][Sandbox] storage fallback triggered", {
               key,
             });
           // guard against localforage throwing where IndexedDB is unavailable
           if (!window.indexedDB) {
             if (DEBUG_POSTSTOP)
               console.warn(
-                "[Screenity][Sandbox] storage fallback: no indexedDB in this context, skipping",
+                "[Slingui][Sandbox] storage fallback: no indexedDB in this context, skipping",
               );
             return;
           }
@@ -2033,13 +2347,13 @@ const ContentState = (props) => {
               if (!blob) {
                 if (DEBUG_POSTSTOP)
                   console.warn(
-                    "[Screenity][Sandbox] storage fallback: no blob built",
+                    "[Slingui][Sandbox] storage fallback: no blob built",
                   );
                 return;
               }
               if (DEBUG_POSTSTOP)
                 console.debug(
-                  "[Screenity][Sandbox] storage fallback: blob built",
+                  "[Slingui][Sandbox] storage fallback: blob built",
                   {
                     size: blob.size,
                   },
@@ -2048,14 +2362,14 @@ const ContentState = (props) => {
             .catch((err) => {
               if (DEBUG_POSTSTOP)
                 console.warn(
-                  "[Screenity][Sandbox] storage fallback build error",
+                  "[Slingui][Sandbox] storage fallback build error",
                   err,
                 );
             });
         }
       } catch (err) {
         if (DEBUG_POSTSTOP)
-          console.warn("[Screenity][Sandbox] storageListener error", err);
+          console.warn("[Slingui][Sandbox] storageListener error", err);
       }
     };
 
@@ -2162,6 +2476,31 @@ const ContentState = (props) => {
       }, DEFERRED_ERROR_MODAL_MS);
       return;
     }
+    if (event.data.type === "meeting-audio-chunks-result") {
+      const msgOpId = event.data._opId;
+      if (msgOpId != null && msgOpId !== opIdRef.current) return;
+      clearEditOp();
+      console.info("[MeetingAudioChunks][Editor] apply completed", {
+        recordingId: launchRecordingIdRef.current,
+        outputBlobSize: event.data.blob?.size ?? null,
+        outputBlobType: event.data.blob?.type ?? null,
+        originalVideoStillAvailable: Boolean(contentStateRef.current?.blob),
+      });
+      setContentState((prev) => ({
+        ...prev,
+        blob: event.data.blob,
+        mp4ready: true,
+        hasBeenEdited: true,
+        isFfmpegRunning: false,
+        applyingMeetingAudioChunks: false,
+        meetingAudioChunksApplied: true,
+        meetingAudioChunksStatus: "ready",
+        meetingAudioChunksError: null,
+        processingProgress: 0,
+        editErrorType: null,
+      }));
+      return;
+    }
     if (event.data.type === "updated-blob") {
       // discard timed-out/superseded ops
       const msgOpId = event.data._opId;
@@ -2218,7 +2557,7 @@ const ContentState = (props) => {
       video.preload = "metadata";
       video.onloadedmetadata = async () => {
         if (process.env.SCREENITY_DEV_MODE === "true") {
-          console.log("[Screenity][cut-debug] updated-blob received", {
+          console.log("[Slingui][cut-debug] updated-blob received", {
             blobSize: blob?.length ?? blob?.size,
             blobIsBlob: blob instanceof Blob,
             measuredDuration: video.duration,
@@ -2315,7 +2654,7 @@ const ContentState = (props) => {
         ffmpegLoaded: true,
         isFfmpegRunning: false,
       }));
-      console.log("[Screenity][Editor] recording-complete sent from ffmpeg-load-error fallback");
+      console.log("[Slingui][Editor] recording-complete sent from ffmpeg-load-error fallback");
       chrome.runtime.sendMessage({ type: "recording-complete" });
     } else if (event.data.type === "ffmpeg-error") {
       console.warn("FFmpeg error:", {
@@ -2324,6 +2663,18 @@ const ContentState = (props) => {
         opType: event.data.opType,
         errorStack: event.data.errorStack,
       });
+      const wasApplyingMeetingAudioChunks =
+        contentStateRef.current?.applyingMeetingAudioChunks;
+      if (wasApplyingMeetingAudioChunks) {
+        console.warn("[MeetingAudioChunks][Editor] apply failed/fallback", {
+          recordingId: launchRecordingIdRef.current,
+          error: event.data.error || event.data.errorMessage || "failed",
+          originalVideoStillAvailable: Boolean(contentStateRef.current?.blob),
+          fallbackVideoAvailable: Boolean(
+            contentStateRef.current?.rawBlob || contentStateRef.current?.webm,
+          ),
+        });
+      }
       clearEditOp();
 
       // fall back to webm/rawBlob even if conversion fails
@@ -2339,6 +2690,10 @@ const ContentState = (props) => {
           trimming: false,
           reencoding: false,
           cropping: false,
+          applyingMeetingAudioChunks: false,
+          meetingAudioChunksError: prev.applyingMeetingAudioChunks
+            ? event.data.error || "failed"
+            : prev.meetingAudioChunksError,
           processingProgress: 0,
           editErrorType: wasEditing ? "failed" : prev.editErrorType,
           ...(prev.rawBlob || prev.webm
@@ -2549,7 +2904,7 @@ const ContentState = (props) => {
             : {}),
         };
       });
-      console.log("[Screenity][Editor] recording-complete sent from ffmpeg-load-timeout fallback");
+      console.log("[Slingui][Editor] recording-complete sent from ffmpeg-load-timeout fallback");
       chrome.runtime.sendMessage({ type: "recording-complete" });
     }, 30000);
 
@@ -2615,6 +2970,62 @@ const ContentState = (props) => {
     }));
   };
 
+  const applyMeetingAudioChunks = async () => {
+    const current = contentStateRef.current;
+    const audioChunks = current.meetingAudioChunks;
+    const downloadedChunks = Array.isArray(audioChunks?.chunks)
+      ? audioChunks.chunks.filter((chunk) => isAudioBlob(chunk.audioBlob))
+      : [];
+
+    if (current.isFfmpegRunning || !current.blob || !downloadedChunks.length) {
+      setContentState((prev) => ({
+        ...prev,
+        meetingAudioChunksError: !current.blob
+          ? "missing-video"
+          : "missing-audio",
+      }));
+      return false;
+    }
+
+    const opId = beginEditOp();
+    setContentState((prev) => ({
+      ...prev,
+      isFfmpegRunning: true,
+      applyingMeetingAudioChunks: true,
+      meetingAudioChunksStatus: "mixing",
+      meetingAudioChunksError: null,
+      processingProgress: 0,
+      editErrorType: null,
+    }));
+    sendMessage({
+      type: "apply-meeting-audio-chunks",
+      blob: current.blob,
+      audioChunks,
+      recordingMeta: current.recordingMeta,
+      recordingDuration: current.duration,
+      topLevel: true,
+      _opId: opId,
+    });
+    return true;
+  };
+
+  useEffect(() => {
+    if (meetingAudioChunksApplyStartedRef.current) return;
+    if (!contentState.ready || !contentState.mp4ready || !contentState.blob) return;
+    if (!contentState.meetingAudioChunks || contentState.meetingAudioChunksApplied) return;
+    if (contentState.isFfmpegRunning) return;
+
+    meetingAudioChunksApplyStartedRef.current = true;
+    applyMeetingAudioChunks();
+  }, [
+    contentState.ready,
+    contentState.mp4ready,
+    contentState.blob,
+    contentState.meetingAudioChunks,
+    contentState.meetingAudioChunksApplied,
+    contentState.isFfmpegRunning,
+  ]);
+
   const addAudio = async (videoBlob, audioBlob, volume) => {
     if (contentState.isFfmpegRunning) return;
     if (
@@ -2669,7 +3080,7 @@ const ContentState = (props) => {
     const opId = beginEditOp();
 
     if (process.env.SCREENITY_DEV_MODE === "true") {
-      console.log("[Screenity][cut-debug] handleTrim dispatch", {
+      console.log("[Slingui][cut-debug] handleTrim dispatch", {
         cut,
         opId,
         sourceBlobSize: sourceBlob?.size,
@@ -2816,7 +3227,7 @@ const ContentState = (props) => {
     out = out.replace(/\s+/g, " ").trim();
     out = out.replace(/[. ]+$/g, "");
 
-    if (!out) out = "Screenity recording";
+    if (!out) out = "Slingui recording";
     if (out.length > maxLen) out = out.slice(0, maxLen).trim();
 
     return out;
@@ -2825,7 +3236,7 @@ const ContentState = (props) => {
   const requestDownload = async (url, ext) => {
     // rapid double-click would otherwise create two downloads + double-revoke
     if (contentStateRef.current?.downloadInProgress) {
-      console.warn("[Screenity] download already in progress, ignoring");
+      console.warn("[Slingui] download already in progress, ignoring");
       return;
     }
     setContentState((prev) => ({
@@ -2834,7 +3245,7 @@ const ContentState = (props) => {
       downloadError: null,
     }));
 
-    const rawTitle = contentStateRef.current.title || "Screenity recording";
+    const rawTitle = contentStateRef.current.title || "Slingui recording";
 
     const base = sanitizeDownloadFilename(rawTitle);
     const filename = `${base}${ext}`;
@@ -2901,7 +3312,7 @@ const ContentState = (props) => {
         } catch {}
         revoke();
         console.warn(
-          "[Screenity] download status listener timed out, releasing handle",
+          "[Slingui] download status listener timed out, releasing handle",
           { downloadId, filename, timeoutMs },
         );
         // surface error so editor toasts fire; silent resolve would mask as success
@@ -3249,7 +3660,7 @@ const ContentState = (props) => {
       remuxPath = "offscreen-opfs";
       diagForward("remux-offscreen-ok", { inputBytes: inputSize });
     } catch (err) {
-      console.warn("[Screenity] offscreen remux failed, falling back", err);
+      console.warn("[Slingui] offscreen remux failed, falling back", err);
       diagForward("remux-offscreen-fail", {
         inputBytes: inputSize,
         err: String(err?.message || err).slice(0, 200),
@@ -3269,7 +3680,7 @@ const ContentState = (props) => {
         diagForward("remux-buffer-target-ok", { inputBytes: inputSize });
       } catch (err) {
         console.warn(
-          "[Screenity] buffer-target remux failed, falling back",
+          "[Slingui] buffer-target remux failed, falling back",
           err,
         );
         diagForward("remux-buffer-target-fail", {
@@ -3438,7 +3849,7 @@ const ContentState = (props) => {
       remuxedBlob = res.blob;
       remuxPath = res.path;
     } catch (err) {
-      console.warn("[Screenity] standard mp4 finalize failed", err);
+      console.warn("[Slingui] standard mp4 finalize failed", err);
     }
 
     const remuxDurationMs = Date.now() - remuxStartedAt;
@@ -3612,7 +4023,7 @@ const ContentState = (props) => {
         );
       } catch (err) {
         console.warn(
-          "[Screenity] offscreen webm convert failed, falling back",
+          "[Slingui] offscreen webm convert failed, falling back",
           err,
         );
       }
@@ -3624,7 +4035,7 @@ const ContentState = (props) => {
         await requestDownload(url, ext);
         URL.revokeObjectURL(url);
       } catch (err) {
-        console.error("[Screenity] webm download failed", err);
+        console.error("[Slingui] webm download failed", err);
       }
       setContentState((prevState) => ({
         ...prevState,
@@ -3685,7 +4096,7 @@ const ContentState = (props) => {
         await requestDownload(url, ext);
         URL.revokeObjectURL(url);
       } catch (err) {
-        console.error("[Screenity] webm fallback download failed", err);
+        console.error("[Slingui] webm fallback download failed", err);
       }
       setContentState((prevState) => ({
         ...prevState,
@@ -3767,14 +4178,7 @@ const ContentState = (props) => {
   return (
     <ContentStateContext.Provider value={[contentState, setContentState]}>
       {props.children}
-      {process.env.SCREENITY_DEV_MODE === "true" && (
-        <DevHUD
-          setContentState={setContentState}
-          contentStateRef={contentStateRef}
-          lastDownloadInfo={contentState.lastDownloadInfo}
-          lastRecordingBackend={contentState.lastRecordingBackend}
-        />
-      )}
+
     </ContentStateContext.Provider>
   );
 };

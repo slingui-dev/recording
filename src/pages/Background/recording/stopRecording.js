@@ -86,7 +86,7 @@ const acquirePostStopEditorLock = async (recordingId = null) => {
     ]);
   } catch {
     console.warn(
-      "[Screenity][BG] acquirePostStopEditorLock storage mirror timed out; in-memory lock holds",
+      "[Slingui][BG] acquirePostStopEditorLock storage mirror timed out; in-memory lock holds",
     );
     chrome.storage.local.set(writePayload).catch(() => {});
   } finally {
@@ -229,7 +229,8 @@ export const stopRecording = async () => {
   if (isSubscribed) {
     chrome.alarms.clear("recording-alarm");
     discardOffscreenDocuments();
-    chrome.storage.local.remove(["recordingMeta"]);
+    // Keep the recording metadata until the editor is closed/discarded. The
+    // editor can be reloaded, and it needs meetingContext to recover call audio.
   } else if (
     _inMemoryEditorLockHeld ||
     postStopEditorOpening ||
@@ -285,7 +286,7 @@ export const stopRecording = async () => {
       },
     );
 
-    chrome.runtime.sendMessage({ type: "turn-off-pip" });
+    chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
   } else if (duration > maxDuration) {
     diagEvent("editor-open", { type: "editor", viewer: true, duration });
     // Fallback for large recordings without WebCodecs - use viewer mode
@@ -337,7 +338,7 @@ export const stopRecording = async () => {
       },
     );
 
-    chrome.runtime.sendMessage({ type: "turn-off-pip" });
+    chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
   } else {
     // IDB-backed (MediaRecorder) recordings open editor too; fallback-recording drives the read
     diagEvent("editor-open", { type: "editor", via: "stop-idb" });
@@ -385,7 +386,7 @@ export const stopRecording = async () => {
       );
     });
 
-    chrome.runtime.sendMessage({ type: "turn-off-pip" });
+    chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
   }
 
   // Hold the diag session open until editorReadyAt or 90s, so sandbox-side
@@ -539,7 +540,7 @@ export const handleStopRecordingTab = async (request) => {
     endLock({ lockAcquired });
     if (!lockAcquired) {
       console.warn(
-        "[Screenity][BG] Duplicate stop-recording-tab suppressed (editor opening)",
+        "[Slingui][BG] Duplicate stop-recording-tab suppressed (editor opening)",
       );
       sendMessageRecord({ type: "stop-recording-tab" });
       return;
@@ -589,7 +590,7 @@ export const handleStopRecordingTab = async (request) => {
               }
             } catch {}
             settled = true;
-            console.warn("[Screenity][BG] Editor tab load timed out; releasing lock");
+            console.warn("[Slingui][BG] Editor tab load timed out; releasing lock");
             diagEvent("editor-open-timeout", { tabId: tab.id, type: "editor" });
             releasePostStopEditorLock();
             markEditorStartFailed(
@@ -669,7 +670,7 @@ export const handleStopRecordingTab = async (request) => {
             }
           } catch {}
           settled = true;
-          console.warn("[Screenity][BG] Editor tab load timed out; releasing lock");
+          console.warn("[Slingui][BG] Editor tab load timed out; releasing lock");
           diagEvent("editor-open-timeout", { tabId: tab.id, type: editorUrl });
           releasePostStopEditorLock({ postStopRecordingId: null });
           markEditorStartFailed(
@@ -715,7 +716,7 @@ export const handleStopRecordingTab = async (request) => {
                   sendMessageTab(tab.id, { type: "make-video-tab" }).catch(
                     (err) => {
                       console.warn(
-                        "[Screenity][BG] make-video-tab direct send failed",
+                        "[Slingui][BG] make-video-tab direct send failed",
                         err,
                       );
                     },
@@ -760,7 +761,7 @@ export const handleStopRecordingTab = async (request) => {
                 endChunkLoop({ sent, timedOut });
                 if (!sent) {
                   console.warn(
-                    "[Screenity][BG] editor opened but chunks are still unavailable",
+                    "[Slingui][BG] editor opened but chunks are still unavailable",
                   );
                   // editor watches editorRecordingError via storage.onChanged
                   try {
@@ -780,7 +781,7 @@ export const handleStopRecordingTab = async (request) => {
                     });
                   } catch (writeErr) {
                     console.error(
-                      "[Screenity][BG] failed to write editorRecordingError",
+                      "[Slingui][BG] failed to write editorRecordingError",
                       writeErr,
                     );
                   }

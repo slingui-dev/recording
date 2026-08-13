@@ -5,6 +5,44 @@ export const MEETING_AUDIO_CHUNKS_ENDPOINT = "/storage/audio/chunks";
 
 const noop = () => {};
 const DEFAULT_CHUNK_DOWNLOAD_CONCURRENCY = 4;
+const CHUNK_REQUEST_TIMEOUT_MS = 15_000;
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = CHUNK_REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`Audio chunk request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const resolveChunkUrl = (chunk) =>
+  chunk?.signedUrl ||
+  chunk?.downloadUrl ||
+  chunk?.presignedUrl ||
+  chunk?.url ||
+  chunk?.fileUrl ||
+  chunk?.publicUrl ||
+  null;
+
+const resolveChunkList = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.chunks)) return data.chunks;
+  if (Array.isArray(data?.audioChunks)) return data.audioChunks;
+  if (Array.isArray(data?.files)) return data.files;
+  if (Array.isArray(data?.objects)) return data.objects;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.result?.chunks)) return data.result.chunks;
+  return [];
+};
 
 const firstNonEmptyValue = (values) => {
   const value = values.find(
@@ -189,11 +227,31 @@ export const summarizeMeetingAudioChunk = (chunk) => ({
   sampleRate: chunk?.sampleRate ?? chunk?.metadata?.sampleRate ?? null,
   totalSamples: chunk?.totalSamples ?? chunk?.metadata?.totalSamples ?? null,
   isFinalChunk: chunk?.isFinalChunk ?? chunk?.metadata?.isFinalChunk ?? null,
-  signedUrlPresent: Boolean(chunk?.signedUrl),
+  signedUrlPresent: Boolean(resolveChunkUrl(chunk)),
   audioBlobSize: chunk?.audioBlob?.size ?? chunk?.audioBlobSize ?? null,
   audioBlobType: chunk?.audioBlob?.type ?? chunk?.audioBlobType ?? null,
   downloadError: chunk?.downloadError || null,
 });
+
+const toAudioBlob = async (value, contentType = "audio/mpeg") => {
+  if (value instanceof Blob) return value;
+  // Blob objects can cross extension/page realms and fail instanceof checks.
+  if (value && typeof value.arrayBuffer === "function" && Number.isFinite(value.size)) {
+    const bytes = await value.arrayBuffer();
+    return new Blob([bytes], { type: value.type || contentType });
+  }
+  if (value instanceof ArrayBuffer) return new Blob([value], { type: contentType });
+  if (ArrayBuffer.isView(value)) {
+    return new Blob([value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)], {
+      type: contentType,
+    });
+  }
+  if (typeof value === "string") {
+    if (value.startsWith("data:")) return fetch(value).then((response) => response.blob());
+    return new Blob([value], { type: contentType });
+  }
+  return null;
+};
 
 export const downloadMeetingAudioChunk = async (
   chunk,
@@ -201,6 +259,28 @@ export const downloadMeetingAudioChunk = async (
 ) => {
   const metadata =
     chunk?.metadata || decodeMeetingAudioChunkMetadata(chunk?.fileName, { warn });
+  const contentType =
+    chunk?.contentType || chunk?.mimeType || chunk?.audioBlobType || "audio/mpeg";
+  const inlinePayload = chunk?.audioBlob ?? chunk?.blob ?? chunk?.data ?? chunk?.body;
+
+  if (inlinePayload != null) {
+    const audioBlob = await toAudioBlob(inlinePayload, contentType);
+    if (audioBlob) {
+      log("download chunk converted inline payload", {
+        fileName: chunk?.fileName || null,
+        payloadType: typeof inlinePayload,
+        audioBlobSize: audioBlob.size,
+        audioBlobType: audioBlob.type,
+      });
+      return {
+        ...chunk,
+        metadata,
+        audioBlob,
+        audioBlobSize: audioBlob.size,
+        audioBlobType: audioBlob.type || contentType,
+      };
+    }
+  }
 
   log("download chunk start", {
     chunk: summarizeMeetingAudioChunk({ ...chunk, metadata }),
@@ -223,8 +303,9 @@ export const downloadMeetingAudioChunk = async (
     };
   }
 
-  if (!chunk?.signedUrl) {
-    log("download chunk skipped: missing signedUrl", {
+  const chunkUrl = resolveChunkUrl(chunk);
+  if (!chunkUrl) {
+    log("download chunk skipped: missing chunk URL", {
       chunk: summarizeMeetingAudioChunk({ ...chunk, metadata }),
     });
     return {
@@ -236,9 +317,10 @@ export const downloadMeetingAudioChunk = async (
   }
 
   try {
-    const response = await fetch(chunk.signedUrl);
+    const response = await fetchWithTimeout(chunkUrl);
     log("download chunk response", {
       fileName: chunk?.fileName || null,
+      sourceUrlType: chunk?.signedUrl ? "signedUrl" : "alternateUrl",
       status: response.status,
       ok: response.ok,
       contentType: response.headers.get("content-type"),
@@ -299,6 +381,7 @@ export const listMeetingAudioChunks = async ({
   log = noop,
   warn = noop,
 } = {}) => {
+  const startedAt = Date.now();
   const meetingId = resolveMeetingIdFromContext(meetingContext, recordingId);
 
   log("list start", {
@@ -325,7 +408,7 @@ export const listMeetingAudioChunks = async ({
     throw new Error("Missing JWT token for audio chunks request");
   }
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${apiBase}${MEETING_AUDIO_CHUNKS_ENDPOINT}?meetingId=${encodeURIComponent(
       meetingId,
     )}`,
@@ -351,15 +434,23 @@ export const listMeetingAudioChunks = async ({
   }
 
   const data = await res.json();
-  const chunks = Array.isArray(data?.chunks)
-    ? sortMeetingAudioChunks(data.chunks, { warn })
-    : [];
+  const rawChunks = resolveChunkList(data);
+  const chunks = sortMeetingAudioChunks(
+    rawChunks.map((chunk) => ({
+      ...chunk,
+      // Keep the server's canonical field, but accept alternate response names
+      // used by storage adapters and older recording sessions.
+      signedUrl: resolveChunkUrl(chunk),
+    })),
+    { warn },
+  );
 
   log("list payload", {
     recordingId,
     requestedMeetingId: meetingId,
-    responseMeetingId: data?.meetingId || null,
-    prefix: data?.prefix || null,
+    responseMeetingId: data?.meetingId || data?.meetingID || null,
+    prefix: data?.prefix || data?.keyPrefix || null,
+    responseKeys: data && typeof data === "object" ? Object.keys(data) : [],
     total: chunks.length,
     chunks: chunks.map(summarizeMeetingAudioChunk),
   });
@@ -372,19 +463,40 @@ export const listMeetingAudioChunks = async ({
       )
     : chunks;
 
-  log("list enriched", {
+  const downloadedCount = resolvedChunks.filter(
+    (chunk) => chunk.audioBlob instanceof Blob || chunk.audioBlob?.size > 0,
+  ).length;
+  const failedChunks = resolvedChunks.filter((chunk) => chunk.downloadError);
+  const missingUrlCount = resolvedChunks.filter(
+    (chunk) => !resolveChunkUrl(chunk),
+  ).length;
+  const summary = {
     recordingId,
-    meetingId: data?.meetingId || meetingId,
+    requestedMeetingId: meetingId,
+    responseMeetingId: data?.meetingId || data?.meetingID || meetingId,
+    elapsedMs: Date.now() - startedAt,
     total: resolvedChunks.length,
-    downloaded: resolvedChunks.filter((chunk) => chunk.audioBlob instanceof Blob)
-      .length,
-    failed: resolvedChunks.filter((chunk) => chunk.downloadError).length,
-    chunks: resolvedChunks.map(summarizeMeetingAudioChunk),
-  });
+    downloaded: downloadedCount,
+    failed: failedChunks.length,
+    missingUrl: missingUrlCount,
+    audioTypes: [...new Set(
+      resolvedChunks
+        .map((chunk) => chunk.audioBlob?.type || chunk.audioBlobType)
+        .filter(Boolean),
+    )],
+    failedFiles: failedChunks.map((chunk) => ({
+      fileName: chunk.fileName || null,
+      error: chunk.downloadError,
+    })),
+  };
+
+  // Single end-of-call diagnostic: this is the first line to inspect when a
+  // recording opens without meeting audio.
+  log("list completed summary", summary);
 
   return {
-    meetingId: data?.meetingId || meetingId,
-    prefix: data?.prefix || null,
+    meetingId: data?.meetingId || data?.meetingID || meetingId,
+    prefix: data?.prefix || data?.keyPrefix || null,
     chunks: resolvedChunks,
   };
 };

@@ -18,6 +18,7 @@ const DevHUD = ({
   contentStateRef,
   lastDownloadInfo,
   lastRecordingBackend,
+  contentState,
 }) => {
   const [collapsed, setCollapsed] = useState(true);
 
@@ -27,9 +28,11 @@ const DevHUD = ({
         onClick={() => setCollapsed(false)}
         style={{
           position: "fixed",
-          top: 6,
-          right: 6,
+          bottom: 18,
+          left: "50%",
+          transform: "translateX(-50%)",
           zIndex: Z,
+          pointerEvents: "auto",
           background: "rgba(0,0,0,0.65)",
           color: "#0f0",
           fontSize: "10px",
@@ -207,9 +210,11 @@ const DevHUD = ({
     <div
       style={{
         position: "fixed",
-        top: 6,
-        right: 6,
+        bottom: 18,
+        left: "50%",
+        transform: "translateX(-50%)",
         zIndex: Z,
+        pointerEvents: "auto",
         background: "rgba(20,20,20,0.9)",
         borderRadius: "6px",
         padding: "8px",
@@ -230,7 +235,7 @@ const DevHUD = ({
           marginBottom: "2px",
         }}
       >
-        <span style={{ color: "#0f0", fontSize: "10px" }}>DEV HUD</span>
+        <span style={{ color: "#0f0", fontSize: "10px" }}>Slingui debug</span>
         <span
           onClick={() => setCollapsed(true)}
           style={{ color: "#888", fontSize: "12px", cursor: "pointer" }}
@@ -254,6 +259,30 @@ const DevHUD = ({
           <div style={{ color: "#8ff" }}>{lastRecordingBackend}</div>
         </div>
       )}
+      <div
+        style={{
+          color: "#ddd",
+          fontSize: "9px",
+          background: "rgba(35,35,35,0.7)",
+          padding: "4px 6px",
+          borderRadius: "3px",
+          lineHeight: 1.4,
+          whiteSpace: "normal",
+        }}
+      >
+        <div>Meeting ID: {contentState?.recordingMeta?.meetingContext?.meetingId || "—"}</div>
+        <div>Recording ID: {contentState?.recordingMeta?.recordingId || "—"}</div>
+        <div>
+          Audio chunks: {contentState?.meetingAudioChunks?.chunks?.length || 0} / {contentState?.chunkCount || 0}
+        </div>
+        <div>Chunk status: {contentState?.meetingAudioChunksStatus || "—"}</div>
+        <div>Recovery: {contentState?.ready ? "ready" : "loading"}</div>
+        {contentState?.meetingAudioChunksError && (
+          <div style={{ color: "#ff8888" }}>
+            Error: {contentState.meetingAudioChunksError}
+          </div>
+        )}
+      </div>
       {lastDownloadInfo && (
         <div
           style={{

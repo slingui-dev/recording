@@ -24,6 +24,7 @@ const VideoPlayer = (props) => {
   const playerRef = useRef(null);
   const [url, setUrl] = useState(null);
   const [source, setSource] = useState(null);
+  const playerObjectUrlRef = useRef(null);
   const [isSet, setIsSet] = useState(false);
   // Probed from the blob's intrinsic dimensions; a fixed "16:9" would
   // pillarbox recordings of square-ish tabs.
@@ -78,16 +79,35 @@ const VideoPlayer = (props) => {
   useEffect(() => {
     if (contentState.blob) {
       const objectURL = URL.createObjectURL(contentState.blob);
+      playerObjectUrlRef.current = objectURL;
+      try {
+        chrome.runtime.sendMessage({
+          type: "diag-forward",
+          event: "editor-timeline-object-url-created",
+          data: {
+            url: objectURL,
+            blobSize: contentState.blob.size,
+            blobType: contentState.blob.type || null,
+          },
+        });
+      } catch {}
       setSource({
         type: "video",
         sources: [
           {
             src: objectURL,
-            type: "video/mp4",
+            type: contentState.blob.type || "video/mp4",
           },
         ],
       });
       setUrl(objectURL);
+      try {
+        chrome.runtime.sendMessage({
+          type: "diag-forward",
+          event: "editor-timeline-source-attached",
+          data: { url: objectURL },
+        });
+      } catch {}
 
       // if (playerRef.current && playerRef.current.plyr) {
       //   // Check when the video is playing, update the time in real time
@@ -101,7 +121,19 @@ const VideoPlayer = (props) => {
       // }
 
       return () => {
-        URL.revokeObjectURL(objectURL);
+        setTimeout(() => {
+          try {
+            URL.revokeObjectURL(objectURL);
+            chrome.runtime.sendMessage({
+              type: "diag-forward",
+              event: "editor-timeline-object-url-revoked",
+              data: { url: objectURL },
+            });
+          } catch {}
+          if (playerObjectUrlRef.current === objectURL) {
+            playerObjectUrlRef.current = null;
+          }
+        }, 30000);
 
         // if (playerRef.current && playerRef.current.plyr) {
         //   playerRef.current.plyr.off("timeupdate");

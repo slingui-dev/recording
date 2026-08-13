@@ -107,7 +107,7 @@ export const getUserMediaWithFallback = async ({
     }
 
     console.warn(
-      "[Screenity] Retrying getUserMedia with label-matched device IDs"
+      "[Slingui] Retrying getUserMedia with label-matched device IDs"
     );
 
     const stream = await attemptGetUserMediaWithTransientRetry(

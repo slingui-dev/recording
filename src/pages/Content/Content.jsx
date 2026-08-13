@@ -120,7 +120,7 @@ const Content = () => {
 	background: transparent!important;
 }
 
-.ScreenityDropdownMenuContent {
+.SlinguiDropdownMenuContent {
 	z-index: 99999999999!important;
   min-width: 200px;
   background-color: white;
@@ -137,19 +137,19 @@ const Content = () => {
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, opacity;
 }
-.ScreenityDropdownMenuContent[data-side="top"] {
+.SlinguiDropdownMenuContent[data-side="top"] {
   animation-name: screenity-slideDownAndFade;
 }
-.ScreenityDropdownMenuContent[data-side="right"] {
+.SlinguiDropdownMenuContent[data-side="right"] {
   animation-name: screenity-slideLeftAndFade;
 }
-.ScreenityDropdownMenuContent[data-side="bottom"] {
+.SlinguiDropdownMenuContent[data-side="bottom"] {
   animation-name: screenity-slideUpAndFade;
 }
-.ScreenityDropdownMenuContent[data-side="left"] {
+.SlinguiDropdownMenuContent[data-side="left"] {
   animation-name: screenity-slideRightAndFade;
 }
-.ScreenityItemIndicator {
+.SlinguiItemIndicator {
   position: absolute;
   right: 12px;
   width: 18px;
@@ -160,8 +160,8 @@ const Content = () => {
   align-items: center;
   justify-content: center;
 }
-.ScreenityDropdownMenuItem,
-.ScreenityDropdownMenuRadioItem {
+.SlinguiDropdownMenuItem,
+.SlinguiDropdownMenuRadioItem {
   font-size: 14px;
   line-height: 1;
   display: flex;
@@ -174,11 +174,11 @@ const Content = () => {
   user-select: none;
   outline: none;
 }
-.ScreenityDropdownMenuItem:hover {
+.SlinguiDropdownMenuItem:hover {
     background-color: #F6F7FB !important;
     cursor: pointer;
 }
-.ScreenityDropdownMenuItem[data-disabled] {
+.SlinguiDropdownMenuItem[data-disabled] {
   color: #6E7684 !important;
   cursor: not-allowed;
   background-color: #F6F7FB !important;

@@ -1,5 +1,5 @@
 import { executeScripts } from "../utils/executeScripts";
-import { supportContextQuery } from "../../utils/buildSupportContext";
+
 import { tryResumePendingUploads } from "../recording/resumePendingUploads";
 
 const cloudFeaturesEnabled =
@@ -9,12 +9,13 @@ export const onInstalledListener = () => {
   chrome.runtime.onInstalled.addListener(async (details) => {
     const version = chrome.runtime.getManifest().version;
 
+    // Do not send users to an external Tally survey when they uninstall.
+    // Clearing this explicitly also removes an uninstall URL left by older builds.
+    chrome.runtime.setUninstallURL("");
+
     if (details.reason === "install") {
       chrome.storage.local.clear();
 
-      const installQs = await supportContextQuery({ source: "uninstall" });
-      const installUrl = `https://tally.so/r/w8Zro5?${installQs}`;
-      chrome.runtime.setUninstallURL(installUrl);
 
       chrome.storage.local.set({
         firstTime: true,
@@ -62,9 +63,7 @@ export const onInstalledListener = () => {
         chrome.storage.local.set({ extensionInstalledAt: 0 });
       }
 
-      const updateQs = await supportContextQuery({ source: "uninstall" });
-      const updateUrl = `https://tally.so/r/3Ex6kX?${updateQs}`;
-      chrome.runtime.setUninstallURL(updateUrl);
+
     }
 
     if (details.reason === "install") {

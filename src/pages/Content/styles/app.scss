@@ -50,7 +50,7 @@
   border: 4px solid #f4f4f4;
 }
 
-.ScreenityDropdownMenuContent {
+.SlinguiDropdownMenuContent {
   min-width: 200px;
   background-color: white;
   margin-top: 4px;
@@ -67,19 +67,19 @@
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, opacity;
 }
-.ScreenityDropdownMenuContent[data-side="top"] {
+.SlinguiDropdownMenuContent[data-side="top"] {
   animation-name: slideDownAndFade;
 }
-.ScreenityDropdownMenuContent[data-side="right"] {
+.SlinguiDropdownMenuContent[data-side="right"] {
   animation-name: slideLeftAndFade;
 }
-.ScreenityDropdownMenuContent[data-side="bottom"] {
+.SlinguiDropdownMenuContent[data-side="bottom"] {
   animation-name: slideUpAndFade;
 }
-.ScreenityDropdownMenuContent[data-side="left"] {
+.SlinguiDropdownMenuContent[data-side="left"] {
   animation-name: slideRightAndFade;
 }
-.ScreenityItemIndicator {
+.SlinguiItemIndicator {
   position: absolute;
   right: 12px;
   width: 18px;
@@ -90,8 +90,8 @@
   align-items: center;
   justify-content: center;
 }
-.ScreenityDropdownMenuItem,
-.ScreenityDropdownMenuRadioItem {
+.SlinguiDropdownMenuItem,
+.SlinguiDropdownMenuRadioItem {
   font-size: 14px;
   line-height: 1;
   display: flex;
@@ -104,19 +104,19 @@
   user-select: none;
   outline: none;
 }
-.ScreenityDropdownMenuItem:hover {
+.SlinguiDropdownMenuItem:hover {
   background-color: #f6f7fb !important;
   cursor: pointer;
 }
-.ScreenityDropdownMenuItem[data-disabled] {
+.SlinguiDropdownMenuItem[data-disabled] {
   color: #6e7684 !important;
   cursor: not-allowed;
   background-color: #f6f7fb !important;
 }
 
 // Onboarding (driver.js)
-.driver-popover.ScreenityOnboardingPopover,
-.ScreenityOnboardingPopover,
+.driver-popover.SlinguiOnboardingPopover,
+.SlinguiOnboardingPopover,
 .onboarding-popover {
   border-radius: $container-border-radius !important;
   background: $color-background !important;
@@ -264,6 +264,6 @@
 }
 
 .driver-popover,
-.driver-popover.ScreenityOnboardingPopover {
+.driver-popover.SlinguiOnboardingPopover {
   z-index: 2147483647 !important;
 }

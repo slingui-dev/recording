@@ -63,7 +63,7 @@ if (container) {
     const root = createRoot(container);
     root.render(<OffscreenRecorder />);
   } catch (err) {
-    console.error("[Screenity][OffscreenRecorder] render error:", err);
+    console.error("[Slingui][OffscreenRecorder] render error:", err);
   }
 }
 

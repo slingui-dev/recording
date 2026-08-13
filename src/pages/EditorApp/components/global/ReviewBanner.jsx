@@ -37,7 +37,7 @@ const ReviewBanner = () => {
     return (
       <div className="review-toast">
         <span className="review-toast-text">
-          {t("reviewAskTitle", "How's Screenity working for you?")}
+          {t("reviewAskTitle", "How's Slingui working for you?")}
         </span>
         <span className="review-toast-divider" />
         <div className="review-toast-thumbs">
@@ -72,7 +72,7 @@ const ReviewBanner = () => {
           <div className="review-toast-message">
             {t(
               "reviewThanksDescription",
-              "I'm Alyssa, the solo maker behind Screenity. I built the first version back in 2020, and I'm still actively maintaining the free extension today.\n\nIf Screenity has helped you, leaving a quick review is one of the best ways to support it ❤️",
+              "I'm Alyssa, the solo maker behind Slingui. I built the first version back in 2020, and I'm still actively maintaining the free extension today.\n\nIf Slingui has helped you, leaving a quick review is one of the best ways to support it ❤️",
             )
               .split("\n\n")
               .map((paragraph, i) => (
@@ -116,7 +116,7 @@ const ReviewBanner = () => {
         <div className="review-toast-message">
           {t(
             "reviewSorryDescription",
-            "I'm Alyssa, the maker of Screenity, and I read every message myself. Tell me what went wrong and I'll do my best to fix it.",
+            "I'm Alyssa, the maker of Slingui, and I read every message myself. Tell me what went wrong and I'll do my best to fix it.",
           )}
         </div>
       </div>

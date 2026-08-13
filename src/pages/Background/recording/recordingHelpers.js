@@ -98,13 +98,13 @@ export const handleRecordingComplete = async () => {
   }
   chrome.storage.local.set(updates);
   console.log(
-    "[Screenity][BG] handleRecordingComplete fired",
+    "[Slingui][BG] handleRecordingComplete fired",
     { target, liveRecordingTab: recordingTab, cleared: target === recordingTab },
   );
 };
 
 export const handleRecordingError = async (request) => {
-  console.warn("[Screenity][handleRecordingError]", request);
+  console.warn("[Slingui][handleRecordingError]", request);
 
   const errorCode =
     request?.errorCode ||
@@ -331,7 +331,28 @@ const pushStreamingData = async (dataStr) => {
 
 export const handleGetStreamingData = async () => {
   perfMark("BG.handleGetStreamingData.enter");
+  // Do not retry delivery after stop/finalize. The editor can still ask for
+  // diagnostics during reload, but there is no recorder listener at that point.
+  // This was the source of the repeated `no recording tab available` errors.
+  const session = await chrome.storage.local.get([
+    "recording",
+    "pendingRecording",
+    "recordingTab",
+    "offscreen",
+  ]);
+  const hasLiveRecorder = Boolean(
+    session.recording || session.pendingRecording || session.offscreen,
+  );
   const data = await getStreamingData();
+  if (!hasLiveRecorder) {
+    diagEvent("sw-streaming-data-skip-no-recorder", {
+      recording: Boolean(session.recording),
+      pendingRecording: Boolean(session.pendingRecording),
+      recordingTab: session.recordingTab || null,
+      offscreen: Boolean(session.offscreen),
+    });
+    return { ok: true, data: JSON.stringify(data), skipped: "no-live-recorder" };
+  }
   const dataStr = JSON.stringify(data);
   // Fire-and-forget push (SW-initiated openRecorderTab path). Not awaited:
   // a `get-streaming-data` pull must get its response immediately, not
@@ -364,14 +385,17 @@ export const videoReady = async () => {
   // Writer sets this fire-and-forget, but the discard path below kills that
   // context first (marker set, key nulled 11s later), so re-assert it here.
   // Skipped while recording since the file isn't finalized yet.
-  if (
-    lastRecordingBackendRef?.backend === "opfs" &&
-    lastRecordingBackendRef?.fileName &&
-    !recording
-  ) {
+  if (lastRecordingBackendRef?.backend && !recording) {
     try {
       await chrome.storage.local.set({
-        lastRecordingFinalizedFileName: lastRecordingBackendRef.fileName,
+        ...(lastRecordingBackendRef.backend === "opfs" &&
+        lastRecordingBackendRef.fileName
+          ? { lastRecordingFinalizedFileName: lastRecordingBackendRef.fileName }
+          : {}),
+        // Keep a durable pointer for editor.html reloads. The active session
+        // cleanup may clear lastRecordingBackendRef after video-ready, but a
+        // finalized recording must remain recoverable from local storage.
+        lastCompletedRecordingBackendRef: lastRecordingBackendRef,
       });
     } catch {}
   }

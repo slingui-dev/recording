@@ -54,7 +54,7 @@ const InactiveSubscription = ({
             }}
           >
             {chrome.i18n.getMessage("inactiveSubscriptionDescription") ||
-              "Your Screenity Pro subscription is inactive."}
+              "Your Slingui Pro subscription is inactive."}
             <br />
             {hasSubscribedBefore
               ? chrome.i18n.getMessage("inactiveSubscriptionReactivation") ||

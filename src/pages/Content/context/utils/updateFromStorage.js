@@ -336,8 +336,10 @@ export const updateFromStorage = (check = true, id = null) => {
         chrome.storage.local.set({ backgroundEffect: "blur" });
       }
 
+      // Countdown is opt-in. Keep an existing preference, but initialize new
+      // installs and profiles with it disabled.
       if (result.countdown === undefined || result.countdown === null) {
-        chrome.storage.local.set({ countdown: true });
+        chrome.storage.local.set({ countdown: false });
       }
 
       if (!hasStoredEffects && legacyMode) {

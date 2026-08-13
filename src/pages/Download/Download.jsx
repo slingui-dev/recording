@@ -47,7 +47,7 @@ const Download = () => {
     out = out.replace(/[\x00-\x1f\x7f]/g, "_");
     out = out.replace(/\s+/g, " ").trim();
     out = out.replace(/[. ]+$/g, "");
-    if (!out) out = "Screenity recording";
+    if (!out) out = "Slingui recording";
     if (out.length > 200) out = out.slice(0, 200).trim();
     return out;
   };
@@ -160,7 +160,7 @@ const Download = () => {
             urlsToRevoke.push(url);
             await chrome.downloads.download({
               url,
-              filename: `Screenity-Recovery-${label}-${ts}.${ext}`,
+              filename: `Slingui-Recovery-${label}-${ts}.${ext}`,
               saveAs: false,
             });
             downloaded++;
@@ -279,7 +279,7 @@ const Download = () => {
               }
             } catch (err) {
               console.warn(
-                "[Screenity][Download] OPFS read failed, falling back to IDB",
+                "[Slingui][Download] OPFS read failed, falling back to IDB",
                 err,
               );
             }
@@ -300,10 +300,10 @@ const Download = () => {
             }
           }
         } catch (err) {
-          console.error("[Screenity][Download] recovery failed", err);
+          console.error("[Slingui][Download] recovery failed", err);
         }
         if (!blob || blob.size === 0) {
-          console.warn("[Screenity][Download] no bytes available to download");
+          console.warn("[Slingui][Download] no bytes available to download");
           window.close();
           return;
         }

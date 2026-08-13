@@ -18,7 +18,7 @@ export const discardRecording = async ({
       ]);
       if (currentProjectId && currentProjectId !== projectId) {
         console.warn(
-          "[Screenity][BG] discardRecording skipped: project mismatch",
+          "[Slingui][BG] discardRecording skipped: project mismatch",
           { reason, target: projectId, current: currentProjectId },
         );
         return;
@@ -90,7 +90,7 @@ export const discardRecording = async ({
   chrome.storage.local.set({ recordingUiTabId: null });
   chrome.storage.local.remove(["recordingMeta"]);
 
-  chrome.runtime.sendMessage({ type: "turn-off-pip" });
+  chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
 };
 
 export const handleDismissRecordingTab = async (message = {}) => {

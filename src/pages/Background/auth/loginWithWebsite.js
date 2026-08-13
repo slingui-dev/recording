@@ -231,7 +231,7 @@ export const loginWithWebsite = async (arg = {}) => {
     };
   } catch (err) {
     console.warn(
-      "[Screenity][Auth] verify failed:",
+      "[Slingui][Auth] verify failed:",
       err?.name,
       err?.message,
       `tokenInvalid=${isTokenInvalid}`,

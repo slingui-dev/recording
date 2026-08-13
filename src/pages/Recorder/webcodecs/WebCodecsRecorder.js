@@ -1,5 +1,5 @@
 /*!
- * Screenity WebCodecs Recorder
+ * Slingui WebCodecs Recorder
  * Copyright (c) 2025 Serial Labs Ltd.
  *
  * Licensed under the GNU GPLv3.

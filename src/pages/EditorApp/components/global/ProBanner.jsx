@@ -27,7 +27,7 @@ const ProBanner = () => {
               bannerSupport: false,
             }));
             chrome.runtime.sendMessage({ type: "hide-banner" });
-            chrome.tabs.create({ url: "http://meeting.slingui.com/recordings" });
+            chrome.tabs.create({ url: "https://meeting.slingui.com/recordings" });
           }}
         >
           Ver gravações

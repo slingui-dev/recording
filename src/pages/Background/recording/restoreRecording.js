@@ -109,7 +109,7 @@ export const restoreRecording = async () => {
           settled = true;
           chrome.tabs.onUpdated.removeListener(listener);
           console.warn(
-            "[Screenity][BG] restore-recording (opfs) tab load timed out",
+            "[Slingui][BG] restore-recording (opfs) tab load timed out",
             tab.id,
           );
           notifyRestoreTimeout(triggerTabId).catch(() => {});
@@ -175,10 +175,10 @@ export const restoreRecording = async () => {
       chunks.push(value);
     });
   } catch (err) {
-    console.warn("[Screenity][BG] restoreRecording chunksStore.iterate failed", err);
+    console.warn("[Slingui][BG] restoreRecording chunksStore.iterate failed", err);
   }
   if (chunks.length === 0) {
-    console.warn("[Screenity][BG] restoreRecording: no OPFS files and no IDB chunks");
+    console.warn("[Slingui][BG] restoreRecording: no OPFS files and no IDB chunks");
     await notifyRestoreEmpty(triggerTabId);
     return;
   }
@@ -196,7 +196,7 @@ export const restoreRecording = async () => {
         settled = true;
         chrome.tabs.onUpdated.removeListener(listener);
         console.warn(
-          "[Screenity][BG] restore-recording (idb) tab load timed out",
+          "[Slingui][BG] restore-recording (idb) tab load timed out",
           tab.id,
         );
         notifyRestoreTimeout(triggerTabId).catch(() => {});

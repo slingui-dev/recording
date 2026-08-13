@@ -96,7 +96,7 @@ const openRecorderTab = async (
       await createCloudRecorderOffscreen({ cloud: isCloudRecorder });
     } catch (err) {
       console.error(
-        "[Screenity][BG] openRecorderTab: offscreen create failed",
+        "[Slingui][BG] openRecorderTab: offscreen create failed",
         err,
       );
       chrome.runtime
@@ -144,7 +144,7 @@ const openRecorderTab = async (
         }
       }
       console.warn(
-        "[Screenity][BG] offscreen recorder loaded-send exhausted retries",
+        "[Slingui][BG] offscreen recorder loaded-send exhausted retries",
       );
     })();
     setTimeout(() => {
@@ -187,7 +187,7 @@ const openRecorderTab = async (
   // tabs.create can fulfill with no id in rare MV3 states (window-closed, profile-locked)
   if (!tab || typeof tab.id !== "number") {
     console.error(
-      "[Screenity][BG] openRecorderTab: tabs.create returned no usable tab",
+      "[Slingui][BG] openRecorderTab: tabs.create returned no usable tab",
       tab,
     );
     chrome.runtime
@@ -237,7 +237,7 @@ const openRecorderTab = async (
     } catch (err) {
       if (attempt === backoffsMs.length - 1) {
         console.warn(
-          "[Screenity] autoDiscardable failed for recorder tab",
+          "[Slingui] autoDiscardable failed for recorder tab",
           tab.id,
           String(err),
         );
@@ -287,7 +287,7 @@ const openRecorderTab = async (
           : {}),
       };
       console.warn(
-        "[Screenity][openRecorderTab] loadedMsg",
+        "[Slingui][openRecorderTab] loadedMsg",
         JSON.stringify({
           isRegion,
           camera,
@@ -329,7 +329,7 @@ export const startRecorderSession = async (request, tabId = null) => {
     region: Boolean(request?.region),
     camera: Boolean(request?.camera),
   });
-  console.log("[Screenity][startRecorderSession] entered", { request, tabId });
+  console.log("[Slingui][startRecorderSession] entered", { request, tabId });
   const endTab = perfSpan("BG.startRecorderSession getCurrentTab");
   let activeTab = await getCurrentTab();
   endTab({ tabId: activeTab?.id || null });

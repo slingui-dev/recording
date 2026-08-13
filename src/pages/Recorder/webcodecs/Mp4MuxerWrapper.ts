@@ -1,5 +1,5 @@
 /*!
- * Screenity WebCodecs Recorder - MP4 Muxer Wrapper
+ * Slingui WebCodecs Recorder - MP4 Muxer Wrapper
  * Licensed under the GNU GPLv3.
  */
 // @ts-nocheck

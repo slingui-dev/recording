@@ -17,7 +17,7 @@ const MicToggle = (props) => {
       content={
         contentState.microphonePermission && contentState.micActive
           ? chrome.i18n.getMessage("disableMicrophoneTooltip")
-          : contentState.microphonePermission && !contentState.micactive
+          : contentState.microphonePermission && !contentState.micActive
           ? chrome.i18n.getMessage("enableMicrophoneTooltip")
           : chrome.i18n.getMessage("noMicrophonePermissionsTooltip")
       }
@@ -32,6 +32,14 @@ const MicToggle = (props) => {
             contentState.defaultAudioInput === "none"
           }
           onPressedChange={(pressed) => {
+            // The Meeting listens for these state events and applies them to
+            // its local microphone. It publishes the resulting state back as
+            // mute-microphone/unmute-microphone.
+            window.postMessage(
+              { type: pressed ? "microphone-unmuted" : "microphone-muted" },
+              window.location.origin,
+            );
+
             setContentState((prevContentState) => ({
               ...prevContentState,
               micActive: pressed,

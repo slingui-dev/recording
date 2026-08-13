@@ -3,10 +3,10 @@ import { hasSeenOnboarding, markOnboardingSeen } from "./storage";
 
 const CORE_KEY = "proPopupCore";
 const CAMERA_KEY = "proCameraInfo";
-const POPOVER_CLASS = "ScreenityOnboardingPopover onboarding-popover";
+const POPOVER_CLASS = "SlinguiOnboardingPopover onboarding-popover";
 const DRIVER_STYLE_ID = "screenity-driver-onboarding-style";
 const TOOLBAR_HELP_URL =
-  "https://help.screenity.io/recording/how-to-hide-the-toolbar";
+  "https://slingui.com/help/recording/how-to-hide-the-toolbar";
 const IDLE_START_DELAY_MS = 420;
 
 const STEP_IDS = {
@@ -60,7 +60,7 @@ let pendingStartToken = 0;
 const logDebug = (event, payload = {}) => {
   if (!DEBUG) return;
   // eslint-disable-next-line no-console
-  console.debug("[Screenity][Onboarding]", event, payload);
+  console.debug("[Slingui][Onboarding]", event, payload);
 };
 
 const getRoot = (context) => (context?.querySelector ? context : document);
@@ -76,7 +76,7 @@ const t = (key, fallback) => {
 const getOnboardingText = () => ({
   welcomeTitle: t(
     "proOnboardingWelcomeTitle",
-    "Welcome to the Screenity Pro extension",
+    "Welcome to the Slingui Pro extension",
   ),
   welcomeDescription: t(
     "proOnboardingWelcomeDescription",
@@ -448,8 +448,8 @@ const ensureDriverStyles = () => {
 
     .driver-overlay { z-index: 2147483645 !important; }
     .driver-stage { z-index: 2147483646 !important; }
-    .driver-popover.ScreenityOnboardingPopover,
-    .ScreenityOnboardingPopover {
+    .driver-popover.SlinguiOnboardingPopover,
+    .SlinguiOnboardingPopover {
       z-index: 2147483647 !important;
       border-radius: 30px !important;
       max-width: 340px !important;
@@ -472,16 +472,16 @@ const ensureDriverStyles = () => {
       text-align: left !important;
       text-shadow: none !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-title,
-    .ScreenityOnboardingPopover .driver-popover-title {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-title,
+    .SlinguiOnboardingPopover .driver-popover-title {
       font-size: 16px !important;
       font-family: "Satoshi-Medium", sans-serif !important;
       font-weight: 500 !important;
       margin-bottom: 12px !important;
       color: var(--color-text-primary, #1f2430) !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-description,
-    .ScreenityOnboardingPopover .driver-popover-description {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-description,
+    .SlinguiOnboardingPopover .driver-popover-description {
       font-size: 14px !important;
       font-family: "Satoshi-Medium", sans-serif !important;
       font-weight: 500 !important;
@@ -489,44 +489,44 @@ const ensureDriverStyles = () => {
       line-height: 1.5 !important;
       margin-bottom: 18px !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-close-btn,
-    .ScreenityOnboardingPopover .driver-popover-close-btn {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-close-btn,
+    .SlinguiOnboardingPopover .driver-popover-close-btn {
       display: none !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-description a,
-    .ScreenityOnboardingPopover .driver-popover-description a {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-description a,
+    .SlinguiOnboardingPopover .driver-popover-description a {
       color: #3b82f6 !important;
       text-decoration: none !important;
       cursor: pointer !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-progress-text,
-    .ScreenityOnboardingPopover .driver-popover-progress-text {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-progress-text,
+    .SlinguiOnboardingPopover .driver-popover-progress-text {
       font-size: 12px !important;
       font-family: "Satoshi-Medium", sans-serif !important;
       color: var(--color-text-secondary, #667085) !important;
       opacity: 0.7 !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns,
-    .ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns,
+    .SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns {
       gap: 6px !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-next-btn,
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-prev-btn,
-    .ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-next-btn,
-    .ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-prev-btn {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-next-btn,
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-prev-btn,
+    .SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-next-btn,
+    .SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-prev-btn {
       border-radius: 30px !important;
       padding: 10px 14px !important;
       font-size: 14px !important;
       text-shadow: none !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-next-btn,
-    .ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-next-btn {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-next-btn,
+    .SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-next-btn {
       background-color: var(--color-primary, #3b82f6) !important;
       color: white !important;
       border: none !important;
     }
-    .driver-popover.ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-prev-btn,
-    .ScreenityOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-prev-btn {
+    .driver-popover.SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-prev-btn,
+    .SlinguiOnboardingPopover .driver-popover-footer .driver-popover-navigation-btns .driver-popover-prev-btn {
       background-color: transparent !important;
       color: var(--color-text-primary, #1f2430) !important;
       border: 1px solid var(--color-border, #d0d5dd) !important;
@@ -541,16 +541,16 @@ const ensureDriverStyles = () => {
   display: none !important;
 }
 
-.screenity-driver-modal-step .driver-popover.ScreenityOnboardingPopover,
-.screenity-driver-modal-step .ScreenityOnboardingPopover {
+.screenity-driver-modal-step .driver-popover.SlinguiOnboardingPopover,
+.screenity-driver-modal-step .SlinguiOnboardingPopover {
   position: fixed !important;
   top: 50% !important;
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
   margin: 0 !important;
 }
-	.screenity-driver-modal-step .driver-popover.ScreenityOnboardingPopover,
-.screenity-driver-modal-step .ScreenityOnboardingPopover {
+	.screenity-driver-modal-step .driver-popover.SlinguiOnboardingPopover,
+.screenity-driver-modal-step .SlinguiOnboardingPopover {
   max-width: 420px !important;
   padding: 26px !important;
 }

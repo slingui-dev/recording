@@ -16,10 +16,10 @@ const RecordingType = (props) => {
   const [contentState, setContentState] = useContext(contentStateContext);
   const [time, setTime] = useState(0);
   const [URL] = useState(
-    "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9"
+    "https://slingui.com/help/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-slingui/6kdB6qru6naVD8ZLFvX3m9"
   );
   const [URL2] = useState(
-    "https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9"
+    "https://slingui.com/help/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-slingui-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9"
   );
 
   const buttonRef = useRef(null);

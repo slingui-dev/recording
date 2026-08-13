@@ -217,7 +217,7 @@ export const getCameraStream = async (
       const timeoutId = setTimeout(() => {
         if (settled) return;
         console.warn(
-          "[Screenity] Camera loadedmetadata timeout (likely virtual camera); proceeding with defaults",
+          "[Slingui] Camera loadedmetadata timeout (likely virtual camera); proceeding with defaults",
           {
             readyState: video.readyState,
             videoWidth: video.videoWidth,

@@ -18,7 +18,7 @@ const acquireScreenStream = ({ sources, anchorTab }) =>
     const requested =
       Array.isArray(sources) && sources.length ? sources : DEFAULT_SCREEN_SOURCES;
     try {
-      console.log("[Screenity][acquireStream] chooseDesktopMedia invoked", {
+      console.log("[Slingui][acquireStream] chooseDesktopMedia invoked", {
         requested,
         anchorTabId: anchorTab?.id,
       });
@@ -26,7 +26,7 @@ const acquireScreenStream = ({ sources, anchorTab }) =>
         requested,
         anchorTab || undefined,
         (streamId, opts) => {
-          console.log("[Screenity][acquireStream] chooseDesktopMedia callback", {
+          console.log("[Slingui][acquireStream] chooseDesktopMedia callback", {
             streamIdPresent: !!streamId,
             streamIdPrefix: streamId ? streamId.slice(0, 16) + "..." : null,
             opts,

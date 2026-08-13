@@ -11,11 +11,52 @@ import { handleFinishMultiRecording } from "../messaging/handlers";
 const CLOUD_FEATURES_ENABLED =
   process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
 
+const persistMeetingContext = async (context, source = "external-message") => {
+  if (!context || typeof context !== "object") {
+    return { ok: false, error: "invalid-meeting-context" };
+  }
+  const meetingId =
+    context.meetingId ||
+    context.meetingID ||
+    context.meeting?.meetingId ||
+    context.meeting?.id ||
+    context.callId ||
+    context.callID ||
+    null;
+  const storedContext = context.meetingId || !meetingId
+    ? context
+    : { ...context, meetingId };
+  await chrome.storage.local.set({
+    screenityMeetingState: storedContext,
+    lastMeetingContext: storedContext,
+    meetingContextUpdatedAt: Date.now(),
+    meetingContextSource: source,
+  });
+  console.info("[Slingui][MeetingContext] stored", {
+    source,
+    meetingId,
+  });
+  return { ok: true };
+};
+
 export const onMessageExternalListener = () => {
   if (!CLOUD_FEATURES_ENABLED) return;
 
   chrome.runtime.onMessageExternal.addListener(
     async (message, sender, sendResponse) => {
+      if (
+        ["SET_MEETING_CONTEXT", "MEETING_CONTEXT", "SET_RECORDING_CONTEXT"].includes(
+          message?.type,
+        )
+      ) {
+        const result = await persistMeetingContext(
+          message.meetingContext || message.context || message.payload,
+          `external:${sender?.url || sender?.id || "unknown"}`,
+        );
+        sendResponse(result);
+        return true;
+      }
+
       if (message.type === "AUTH_SUCCESS" && message.token) {
         const { stayLoggedOut } = await chrome.storage.local.get([
           "stayLoggedOut",
@@ -49,7 +90,7 @@ export const onMessageExternalListener = () => {
 
         if (!auth?.authenticated) {
           console.warn(
-            "[Screenity][Auth] AUTH_SUCCESS token did not verify, staying logged out",
+            "[Slingui][Auth] AUTH_SUCCESS token did not verify, staying logged out",
           );
           await chrome.storage.local.set({
             isLoggedIn: false,

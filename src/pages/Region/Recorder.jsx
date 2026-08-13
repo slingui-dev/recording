@@ -56,7 +56,7 @@ const chunksStore = localforage.createInstance({
 
 const DEBUG_RECORDER =
   typeof window !== "undefined" ? !!window.SCREENITY_DEBUG_RECORDER : false;
-const logPrefix = "[Screenity Region Recorder]";
+const logPrefix = "[Slingui Region Recorder]";
 
 const { debug, debugWarn, debugError } = createDebugLogger(
   logPrefix,

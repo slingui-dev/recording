@@ -54,7 +54,7 @@ export const resetActiveTab = async (forceRestart = false, message = {}) => {
       } catch (err) {
         // source tab closed between picker-confirm and ready-to-record
         console.warn(
-          "[Screenity][resetActiveTab] source tab gone, surfacing recording-error",
+          "[Slingui][resetActiveTab] source tab gone, surfacing recording-error",
           { activeTab, err: String(err).slice(0, 120) },
         );
         // chrome.runtime.sendMessage from SW doesn't fire SW's own listeners

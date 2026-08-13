@@ -30,6 +30,7 @@ const VideoPlayer = (props) => {
   const [url, setUrl] = useState(null);
   const [source, setSource] = useState(null);
   const [overlayHost, setOverlayHost] = useState(null);
+  const playerObjectUrlRef = useRef(null);
   const contentStateRef = useRef(contentState);
   const bannerRef = useRef(null);
 
@@ -122,6 +123,19 @@ const VideoPlayer = (props) => {
         vid = contentState.webm;
       }
       const objectURL = URL.createObjectURL(vid);
+      playerObjectUrlRef.current = objectURL;
+      try {
+        chrome.runtime.sendMessage({
+          type: "diag-forward",
+          event: "editor-player-object-url-created",
+          data: {
+            url: objectURL,
+            blobSize: vid?.size ?? null,
+            blobType: vid?.type || null,
+            sourceType: contentState.blob ? "blob" : "webm",
+          },
+        });
+      } catch {}
       // Long recordings can take seconds to parse metadata.
       setContentState((prev) => ({ ...prev, playerLoading: true }));
       setSource({
@@ -129,14 +143,39 @@ const VideoPlayer = (props) => {
         sources: [
           {
             src: objectURL,
-            type: contentState.blob ? "video/mp4" : "video/webm",
+            type:
+              vid?.type ||
+              (contentState.blob ? "video/mp4" : "video/webm"),
           },
         ],
       });
       setUrl(objectURL);
+      try {
+        chrome.runtime.sendMessage({
+          type: "diag-forward",
+          event: "editor-player-source-attached",
+          data: { url: objectURL },
+        });
+      } catch {}
 
       return () => {
-        URL.revokeObjectURL(objectURL);
+        // Plyr may still be resolving metadata after React has replaced the
+        // source. Revoking here synchronously turns a valid recovery into
+        // blob:* ERR_FILE_NOT_FOUND. Give the media element time to detach.
+        const revokeId = setTimeout(() => {
+          try {
+            URL.revokeObjectURL(objectURL);
+            chrome.runtime.sendMessage({
+              type: "diag-forward",
+              event: "editor-player-object-url-revoked",
+              data: { url: objectURL },
+            });
+          } catch {}
+          if (playerObjectUrlRef.current === objectURL) {
+            playerObjectUrlRef.current = null;
+          }
+        }, 30000);
+        return () => clearTimeout(revokeId);
       };
     }
   }, [
@@ -176,6 +215,16 @@ const VideoPlayer = (props) => {
           chrome.i18n.getMessage("recordingCorruptToast"),
           8000,
         );
+      } catch {}
+      try {
+        chrome.runtime.sendMessage({
+          type: "diag-forward",
+          event: "editor-player-source-error",
+          data: {
+            url: source?.sources?.[0]?.src || null,
+            mediaError: videoEl?.error?.code ?? null,
+          },
+        });
       } catch {}
       try {
         chrome.runtime.sendMessage({

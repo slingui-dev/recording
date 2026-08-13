@@ -8,19 +8,28 @@ import Content from "./Content";
 
 // Idempotency: content script is injected via manifest AND by
 // executeScripts() on session start; both mounts would double-fire.
-if (window.__screenityContentBootstrapped) {
-} else {
-  window.__screenityContentBootstrapped = true;
+// The manifest runs this at document_start, when document.body may not exist yet.
+const mountContent = () => {
+  if (window.__screenityContentBootstrapped) return;
+
+  const body = document.body;
+  if (!body) return false;
 
   const existingRoot = document.getElementById("screenity-ui");
   if (existingRoot) {
-    document.body.removeChild(existingRoot);
+    existingRoot.remove();
   }
 
   const root = document.createElement("div");
   root.id = "screenity-ui";
-  document.body.appendChild(root);
+  body.appendChild(root);
 
+  window.__screenityContentBootstrapped = true;
   const appRoot = createRoot(root);
   appRoot.render(<Content />);
+  return true;
+};
+
+if (!mountContent()) {
+  document.addEventListener("DOMContentLoaded", mountContent, { once: true });
 }

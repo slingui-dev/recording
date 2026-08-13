@@ -52,15 +52,15 @@ const clearStaleLocks = async () => {
     const stale = {};
     if (sendingChunks) {
       stale.sendingChunks = false;
-      console.warn("[Screenity][BG] Stale lock found on startup: sendingChunks, clearing");
+      console.warn("[Slingui][BG] Stale lock found on startup: sendingChunks, clearing");
     }
     if (postStopEditorOpening) {
       stale.postStopEditorOpening = false;
-      console.warn("[Screenity][BG] Stale lock found on startup: postStopEditorOpening, clearing");
+      console.warn("[Slingui][BG] Stale lock found on startup: postStopEditorOpening, clearing");
     }
     if (postStopEditorOpened) {
       stale.postStopEditorOpened = false;
-      console.warn("[Screenity][BG] Stale lock found on startup: postStopEditorOpened, clearing");
+      console.warn("[Slingui][BG] Stale lock found on startup: postStopEditorOpened, clearing");
     }
 
     // SW died mid-dispatch or tab closed
@@ -101,7 +101,7 @@ const clearStaleLocks = async () => {
         Date.now() - recordingStartingAt < START_GRACE_MS;
       if (!recorderAlive && startIsFresh) {
         console.warn(
-          "[Screenity][BG] Stale-looking start on startup but within start grace, keeping",
+          "[Slingui][BG] Stale-looking start on startup but within start grace, keeping",
           { recordingStartingAt, ageMs: Date.now() - recordingStartingAt },
         );
         diagEvent("sw-init-start-grace-kept", {
@@ -129,7 +129,7 @@ const clearStaleLocks = async () => {
         stale.tabRecordedID = null;
         stale.recordingUiTabId = null;
         console.warn(
-          "[Screenity][BG] Stale recording state on startup (no live recorder tab or offscreen doc) - clearing",
+          "[Slingui][BG] Stale recording state on startup (no live recorder tab or offscreen doc) - clearing",
           { recording, pendingRecording, restarting, recordingTab, offscreen },
         );
       }
@@ -140,18 +140,18 @@ const clearStaleLocks = async () => {
       stale.multiSceneCount = 0;
       stale.multiProjectId = null;
       stale.multiLastSceneId = null;
-      console.warn("[Screenity][BG] Stale multi-mode state found on startup, clearing");
+      console.warn("[Slingui][BG] Stale multi-mode state found on startup, clearing");
     }
 
     if (region && !recording) {
       stale.region = false;
-      console.warn("[Screenity][BG] Stale region state found on startup, clearing");
+      console.warn("[Slingui][BG] Stale region state found on startup, clearing");
     }
 
     if (Object.keys(stale).length > 0) {
       await chrome.storage.local.set(stale);
       console.info(
-        "[Screenity][BG] Startup stale locks cleared:",
+        "[Slingui][BG] Startup stale locks cleared:",
         Object.keys(stale).join(", "),
       );
     }
@@ -180,7 +180,7 @@ const clearStaleLocks = async () => {
             "logoutPendingTokenClear",
           ]);
           console.info(
-            "[Screenity][BG] Drained deferred logout token-clear on startup",
+            "[Slingui][BG] Drained deferred logout token-clear on startup",
           );
         } else {
           // re-login during SW death; just clear the marker
@@ -200,10 +200,10 @@ const clearStaleLocks = async () => {
           : "assets/icon-34.png",
       });
     } catch (err) {
-      console.warn("[Screenity][BG] icon reconciliation failed:", err);
+      console.warn("[Slingui][BG] icon reconciliation failed:", err);
     }
   } catch (err) {
-    console.error("[Screenity][BG] Failed to clear stale startup locks:", err);
+    console.error("[Slingui][BG] Failed to clear stale startup locks:", err);
   }
 };
 
@@ -263,15 +263,15 @@ const recoverInFlightRecording = async () => {
           : {}),
       });
     } catch (err) {
-      console.warn("[Screenity][BG] redeliver loaded failed:", err);
+      console.warn("[Slingui][BG] redeliver loaded failed:", err);
     }
     // Both recorder pages dedup streaming-data via streamingDataReceivedAt,
     // so a duplicate push is safe.
     handleGetStreamingData().catch((err) => {
-      console.warn("[Screenity][BG] redeliver streaming-data failed:", err);
+      console.warn("[Slingui][BG] redeliver streaming-data failed:", err);
     });
   } catch (err) {
-    console.warn("[Screenity][BG] recoverInFlightRecording threw:", err);
+    console.warn("[Slingui][BG] recoverInFlightRecording threw:", err);
   }
 };
 
@@ -314,12 +314,12 @@ const cleanupOrphanOpfsSessions = async () => {
 
     await Promise.allSettled(orphans.map((id) => destroySessionDir(id)));
     console.info(
-      "[Screenity][BG] Reaped orphan OPFS cloud-chunks sessions:",
+      "[Slingui][BG] Reaped orphan OPFS cloud-chunks sessions:",
       orphans.length,
     );
   } catch (err) {
     console.warn(
-      "[Screenity][BG] cleanupOrphanOpfsSessions failed:",
+      "[Slingui][BG] cleanupOrphanOpfsSessions failed:",
       err,
     );
   }
@@ -368,10 +368,10 @@ const runUpgradeMigrations = async () => {
       screenityMigratedForVersion: CURRENT_MIGRATION_VERSION,
     });
     console.info(
-      "[Screenity][BG] Cleared stale 4.3.7 sticky-disable flags on upgrade",
+      "[Slingui][BG] Cleared stale 4.3.7 sticky-disable flags on upgrade",
     );
   } catch (err) {
-    console.error("[Screenity][BG] Upgrade migration failed:", err);
+    console.error("[Slingui][BG] Upgrade migration failed:", err);
   }
 };
 runUpgradeMigrations();

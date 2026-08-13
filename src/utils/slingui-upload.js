@@ -21,13 +21,30 @@ export async function getSignedUrl(data, token) {
   return await res.json();
 }
 
+function getUploadContentType(blob, signedContentType) {
+  // For a presigned S3 URL, this must match the Content-Type used to sign it.
+  // Prefer the value returned by Slingui; browser Blob types may include codec
+  // parameters that are not part of the signed value.
+  const contentType = signedContentType || blob?.type;
+  if (contentType) return contentType;
+
+  const name = blob?.name?.toLowerCase() || '';
+  if (name.endsWith('.mp3')) return 'audio/mpeg';
+  if (name.endsWith('.webm')) return 'video/webm';
+  return 'application/octet-stream';
+}
+
 export async function sendFile(uploadUrl, blob, contentType) {
+  const uploadContentType = getUploadContentType(blob, contentType);
   const res = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
-      'content-type': contentType.split(';')[0],
-      'Access-Control-Allow-Origin': '*',
-      DISABLE_INTERCEPTORS: 'true',
+      // Do not strip parameters: signed headers must be sent verbatim.
+      'Content-Type': uploadContentType,
+      // Access-Control-Allow-Origin is a response header and must be set by
+      // S3/API CORS configuration, not sent in the upload request. Avoiding
+      // extra custom headers also keeps this PUT from requiring a needless
+      // preflight on the signed S3 URL.
     },
     body: blob,
   });

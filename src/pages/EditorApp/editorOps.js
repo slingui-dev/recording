@@ -8,6 +8,9 @@ const lazyUtil = (importFn) =>
   (...args) =>
     importFn().then((m) => m.default(...args));
 const addAudioToVideo = lazyUtil(() => import("../Editor/utils/addAudioToVideo"));
+const addMeetingAudioChunksToVideo = lazyUtil(() =>
+  import("../Editor/utils/addMeetingAudioChunksToVideo"),
+);
 const convertWebmToMp4 = lazyUtil(() => import("../Editor/utils/convertWebmToMp4"));
 const cropVideo = lazyUtil(() => import("../Editor/utils/cropVideo"));
 const cutVideo = lazyUtil(() => import("../Editor/utils/cutVideo"));
@@ -106,6 +109,19 @@ export async function runEditorOp(message, reply, { viewer = false } = {}) {
             error: String(error),
           });
         }
+        break;
+      }
+
+      case "apply-meeting-audio-chunks": {
+        const blob = await addMeetingAudioChunksToVideo(
+          null,
+          message.blob,
+          message.audioChunks,
+          message.recordingMeta,
+          message.recordingDuration,
+          (progress) => reply({ type: "ffmpeg-progress", progress }),
+        );
+        reply({ type: "meeting-audio-chunks-result", blob, _opId: message._opId });
         break;
       }
 
@@ -294,7 +310,7 @@ export async function runEditorOp(message, reply, { viewer = false } = {}) {
     const errMsg = error instanceof Error ? error.message : String(error);
     const errStack = error instanceof Error ? error.stack : null;
     // Error props are non-enumerable; JSON.stringify drops them.
-    console.error("[Screenity][Editor] op failed", {
+    console.error("[Slingui][Editor] op failed", {
       type: message.type,
       message: errMsg,
       stack: errStack,

@@ -30,18 +30,18 @@ const scheduleFallback = (delayMs = FALLBACK_AFTER_COUNTDOWN_STARTED_MS) => {
       // Skip during restart - that flow has its own start sequencing.
       if (!pendingRecording || recording || restarting) return;
       console.info(
-        "[Screenity][BG] countdown-finished missing after delay, auto-dispatching start",
+        "[Slingui][BG] countdown-finished missing after delay, auto-dispatching start",
       );
       try {
         startAfterCountdown("countdownFallback");
       } catch (err) {
         console.error(
-          "[Screenity][BG] countdownFallback startAfterCountdown failed",
+          "[Slingui][BG] countdownFallback startAfterCountdown failed",
           err,
         );
       }
     } catch (err) {
-      console.error("[Screenity][BG] countdownFallback storage read failed", err);
+      console.error("[Slingui][BG] countdownFallback storage read failed", err);
     }
   }, delayMs);
 };
@@ -76,20 +76,20 @@ export const recoverPendingCountdownOnStartup = async () => {
     const elapsed = Date.now() - startedAt;
     if (elapsed < FALLBACK_AFTER_COUNTDOWN_STARTED_MS) return;
     console.info(
-      "[Screenity][BG] recoverPendingCountdownOnStartup: SW restarted past countdown deadline, dispatching",
+      "[Slingui][BG] recoverPendingCountdownOnStartup: SW restarted past countdown deadline, dispatching",
       { elapsedMs: elapsed },
     );
     try {
       startAfterCountdown("countdownFallback-sw-restart");
     } catch (err) {
       console.error(
-        "[Screenity][BG] recoverPendingCountdownOnStartup startAfterCountdown failed",
+        "[Slingui][BG] recoverPendingCountdownOnStartup startAfterCountdown failed",
         err,
       );
     }
   } catch (err) {
     console.error(
-      "[Screenity][BG] recoverPendingCountdownOnStartup storage read failed",
+      "[Slingui][BG] recoverPendingCountdownOnStartup storage read failed",
       err,
     );
   }

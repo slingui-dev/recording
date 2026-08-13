@@ -13,7 +13,7 @@ import * as ToastEl from "@radix-ui/react-toast";
 import { shouldUseDisplayMediaForScreen } from "../utils/screenCaptureMode";
 
 // shared between CloudRecorder and Recorder; alwaysInteractive keeps the viewport clickable (CloudRecorder) vs pass-through-until-open (Recorder)
-const Warning = ({ alwaysInteractive = false }) => {
+const Warning = () => {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("Record computer audio");
   const [description, setDescription] = useState("");
@@ -97,30 +97,27 @@ const Warning = ({ alwaysInteractive = false }) => {
 					all: unset;
 				}
 				.WarningViewport {
-					--viewport-padding: 25px;
+					--viewport-padding: 16px;
 					position: fixed;
-					bottom: 0;
-					right: 0;
-					left: 0;
-					margin: auto !important;
+					bottom: var(--viewport-padding) !important;
+					left: 50% !important;
+					right: auto !important;
+					transform: translateX(-50%) !important;
 					display: flex;
 					flex-direction: column;
-					padding: var(--viewport-padding);
+					padding: 0 !important;
 					gap: 14px;
-					max-width: 100vw;
-					width: fit-content;
+					max-width: min(420px, calc(100vw - 32px)) !important;
+					width: max-content !important;
 					list-style: none;
-					z-index: 2147483647;
+					z-index: 2147483000 !important;
 					outline: none;
-					pointer-events: ${alwaysInteractive ? "all !important" : "none"};
+					pointer-events: none !important;
 				}
-					${
-            alwaysInteractive
-              ? ""
-              : `.WarningViewport:has(.warning-root[data-state="open"]) {
-  pointer-events: all;
-}`
-          }
+
+				.warning-root {
+					pointer-events: auto !important;
+				}
 
 				.warning-root {
 					background-color: #29292F;

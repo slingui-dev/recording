@@ -17,7 +17,7 @@ export const handleDismiss = async () => {
     }
 
     chrome.action.setIcon({ path: "assets/icon-34.png" });
-    chrome.runtime.sendMessage({ type: "turn-off-pip" });
+    chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
     chrome.storage.local.set({ pipForceClose: Date.now() });
     chrome.storage.local.set({
       recordingUiTabId: null,
@@ -74,7 +74,7 @@ export const cancelRecording = async () => {
             const msg = String(removeErr?.message || removeErr);
             if (!/No tab with id/i.test(msg)) {
               console.warn(
-                "[Screenity][BG] cancelRecording: removeTab failed",
+                "[Slingui][BG] cancelRecording: removeTab failed",
                 { tabId: recordingTab, err: msg },
               );
             }
@@ -96,7 +96,7 @@ export const cancelRecording = async () => {
       await discardOffscreenDocuments({ reason: "cancel", shouldFinalize: false });
     } catch {}
     await resetWatchdogState();
-    chrome.runtime.sendMessage({ type: "turn-off-pip" });
+    chrome.runtime.sendMessage({ type: "turn-off-pip" }).catch(() => {});
     chrome.storage.local.set({ pipForceClose: Date.now() });
     chrome.storage.local.set({
       recordingUiTabId: null,
