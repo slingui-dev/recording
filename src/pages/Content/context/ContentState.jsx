@@ -1039,12 +1039,10 @@ const ContentState = (props) => {
             ...prevContentState,
             defaultVideoInput: videoInput[0].deviceId,
             defaultVideoInputLabel: videoInput[0].label || "",
-            cameraActive: true,
           }));
           chrome.storage.local.set({
             defaultVideoInput: videoInput[0].deviceId,
             defaultVideoInputLabel: videoInput[0].label || "",
-            cameraActive: true,
           });
         }
         if (audioInput.length > 0 || videoInput.length > 0) {

@@ -9,8 +9,7 @@ export const onInstalledListener = () => {
   chrome.runtime.onInstalled.addListener(async (details) => {
     const version = chrome.runtime.getManifest().version;
 
-    // Do not send users to an external Tally survey when they uninstall.
-    // Clearing this explicitly also removes an uninstall URL left by older builds.
+    // Keep uninstall handling internal; clear any uninstall URL left by older builds.
     chrome.runtime.setUninstallURL("");
 
     if (details.reason === "install") {

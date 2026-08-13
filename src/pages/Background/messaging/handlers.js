@@ -78,7 +78,6 @@ import {
   getStorageFlags,
   diagEvent,
 } from "../../utils/diagnosticLog";
-import { supportContextQuery } from "../../utils/buildSupportContext";
 
 const API_BASE = process.env.SCREENITY_API_BASE_URL;
 const APP_BASE = process.env.SCREENITY_APP_BASE;
@@ -1649,7 +1648,7 @@ export const setupHandlers = () => {
     ),
   );
   registerMessage("join-waitlist", () =>
-    createTab("https://tally.so/r/npojNV", true),
+    createTab("https://slingui.com/", true),
   );
   registerMessage("chrome-update-info", () =>
     createTab(
@@ -1673,46 +1672,12 @@ export const setupHandlers = () => {
   registerMessage("open-home", () =>
     createTab("https://slingui.com/", true),
   );
-  registerMessage("report-bug", async (message) => {
-    const qs = await supportContextQuery({
-      includeRecordingState: true,
-      source: "settings",
-    });
-    const zipParam = message?.zipBundled ? "&zipBundled=1" : "";
-    createTab(`https://tally.so/r/3ElpXq?${qs}${zipParam}`, true);
-  });
-  registerMessage("report-error", async (message) => {
-    const errorCode = message?.errorCode || null;
-    const errorWhy = message?.errorWhy || null;
-    const source = message?.source || "error-modal";
-
-    let user = null;
-    let isLoggedIn = false;
-    if (CLOUD_FEATURES_ENABLED) {
-      try {
-        const auth = await loginWithWebsite({ force: true });
-        if (auth.authenticated && auth.user) {
-          user = auth.user;
-          isLoggedIn = true;
-        }
-      } catch {}
-    }
-
-    const qs = await supportContextQuery({
-      includeRecordingState: true,
-      source,
-      errorCode,
-      errorWhy,
-      user: isLoggedIn ? { name: user.name, email: user.email } : undefined,
-    });
-
-    const zipParam = message?.zipBundled ? "&zipBundled=1" : "";
-    if (isLoggedIn) {
-      createTab(`https://tally.so/r/310MNg?extension=true&${qs}`, true);
-    } else {
-      createTab(`https://tally.so/r/3ElpXq?feedbackType=Bug&${qs}${zipParam}`, true);
-    }
-  });
+  registerMessage("report-bug", () =>
+    createTab("https://slingui.com/help/", true),
+  );
+  registerMessage("report-error", () =>
+    createTab("https://slingui.com/help/", true),
+  );
   registerMessage("clear-recordings", () => clearAllRecordings());
   registerMessage("force-processing", (message) => forceProcessing(message));
   registerMessage("focus-this-tab", (message, sender) =>
@@ -2777,14 +2742,7 @@ export const setupHandlers = () => {
       return;
     }
 
-    const { name, email } = user;
-    const qs = await supportContextQuery({
-      includeRecordingState: true,
-      source: "settings",
-      user: { name, email },
-    });
-    const url = `https://tally.so/r/310MNg?extension=true&${qs}`;
-    createTab(url, true);
+    createTab("https://slingui.com/help/", true);
   });
   registerMessage("check-banner-support", async (message, sendResponse) => {
     const { bannerSupport } = await chrome.storage.local.get(["bannerSupport"]);
@@ -2823,15 +2781,11 @@ export const setupHandlers = () => {
     }
     await chrome.storage.local.set({ reviewPromptState: next });
   });
-  // Thumbs-down opens the same feedback form as "Report a bug", tagged as
-  // coming from the review prompt.
-  registerMessage("review-feedback", async () => {
-    const qs = await supportContextQuery({
-      includeRecordingState: true,
-      source: "review-prompt",
-    });
-    createTab(`https://tally.so/r/3ElpXq?${qs}`, true);
-  });
+  // Thumbs-down opens Slingui help. Any local diagnostic ZIP remains on the
+  // user's device and is not sent to an external form.
+  registerMessage("review-feedback", () =>
+    createTab("https://slingui.com/help/", true),
+  );
   registerMessage("clear-recording-alarm", async () => {
     await chrome.alarms.clear("recording-alarm");
   });

@@ -342,6 +342,12 @@ export const updateFromStorage = (check = true, id = null) => {
         chrome.storage.local.set({ countdown: false });
       }
 
+      // Camera preview is opt-in. Keep an existing preference, but initialize
+      // new installs and profiles with the camera disabled.
+      if (result.cameraActive === undefined || result.cameraActive === null) {
+        chrome.storage.local.set({ cameraActive: false });
+      }
+
       if (!hasStoredEffects && legacyMode) {
         chrome.storage.local.set({
           cursorEffects: cursorEffects,

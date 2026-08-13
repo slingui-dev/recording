@@ -1648,7 +1648,7 @@ export default class BunnyTusUploader {
       }
 
       // Upload-Length must equal Upload-Offset to complete, and can never be
-      // below it. Declaring the client tally when the two disagreed was what
+      // below it. Declaring the client count when the two disagreed was what
       // Bunny rejected.
       const res = await fetch(this.uploadUrl, {
         method: "PATCH",

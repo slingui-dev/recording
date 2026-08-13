@@ -37,7 +37,6 @@ import {
 } from "./onboarding/proOnboarding";
 
 import { contentStateContext } from "../context/ContentState";
-import { supportContextQuery } from "../../utils/buildSupportContext";
 
 const PopupContainer = (props) => {
   const RECORDINGS_URL = "https://meeting.slingui.com/recordings";
@@ -64,7 +63,7 @@ const PopupContainer = (props) => {
   const recordTabRef = useRef(null);
   const videoTabRef = useRef(null);
   const pillRef = useRef(null);
-  const [URL, setURL] = useState("https://slingui.com/help/");
+  const HELP_URL = "https://slingui.com/help/";
   const isCloudBuild = process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
   const wasCameraActiveRef = useRef(null);
 
@@ -96,24 +95,6 @@ const PopupContainer = (props) => {
     contentState.showProSplash,
   ]);
 
-  useEffect(() => {
-    const buildURL = async () => {
-      let baseURL = "https://slingui.com/help/";
-
-      if (contentState?.isLoggedIn && contentState?.screenityUser) {
-        const { name, email } = contentState.screenityUser;
-        const qs = await supportContextQuery({
-          includeRecordingState: true,
-          source: "popup",
-          user: { name, email },
-        });
-        baseURL = `https://tally.so/r/310MNg?extension=true&${qs}`;
-      }
-
-      setURL(baseURL);
-    };
-    buildURL();
-  }, [contentState]);
 
   const onValueChange = (tab) => {
     setTab(tab);
@@ -496,7 +477,7 @@ const PopupContainer = (props) => {
             <div
               style={{ marginBottom: "-4px", cursor: "pointer" }}
               onClick={() => {
-                window.open(URL, "_blank");
+                window.open(HELP_URL, "_blank", "noopener,noreferrer");
               }}
             >
               <HelpIconPopup />
@@ -710,7 +691,7 @@ const PopupContainer = (props) => {
             <div
               className="HelpSection"
               onClick={() => {
-                window.open(URL, "_blank");
+                window.open(HELP_URL, "_blank", "noopener,noreferrer");
               }}
             >
               <span className="HelpIcon">

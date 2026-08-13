@@ -1,5 +1,5 @@
 /**
- * Builds a URL-safe support-context object for Tally form prefills.
+ * Builds a compact support-context object for local diagnostic packages.
  * No URLs, tokens, page content, or blobs, only sanitized technical metadata.
  */
 
@@ -225,7 +225,7 @@ export const buildSupportContext = async (opts = {}) => {
             // means the SW restarted 4 times).
             .map((ev) => `${ev.e}@${ev.t}${ev.n > 1 ? `x${ev.n}` : ""}`)
             .join(",");
-          // Cap so a runaway log doesn't blow past Tally URL limits.
+          // Cap so a runaway log does not make the diagnostic context unwieldy.
           if (compact && compact.length <= 3000) {
             ctx.diagEvents = compact;
           } else if (compact) {

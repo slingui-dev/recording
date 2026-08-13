@@ -1,16 +1,10 @@
 import { buildDiagnosticZip } from "./buildDiagnosticZip";
 
-// Anchor-tag download of the diag zip; user attaches it to the Tally
-// form that opens right after.
+// Download the diagnostic ZIP locally so the user can attach it to a
+// Slingui support request if needed.
 export const triggerSupportDownload = async (opts = {}) => {
   try {
-    // pro users get a dedicated help form (no zip attachment); skip the
-    // background zip download for them.
-    const { isLoggedIn, isSubscribed } = await chrome.storage.local.get([
-      "isLoggedIn",
-      "isSubscribed",
-    ]);
-    if (isLoggedIn && isSubscribed) return null;
+
     const { blob, filename } = await buildDiagnosticZip(opts);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
