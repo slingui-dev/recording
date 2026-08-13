@@ -12,9 +12,7 @@ const isDev = env.NODE_ENV === "development";
 // drops post-recording UI + WASM. recording + camera paths preserved.
 const isBsBuild = process.env.SCREENITY_BS_BUILD === "1";
 const BS_DROPPED_ENTRIES = new Set([
-  "editorviewer",
   "cloudrecorder",
-  "backup",
   "download",
   "waveform",
   "setup",
@@ -25,14 +23,38 @@ const ASSET_PATH = process.env.ASSET_PATH || "/";
 
 if (process.env.SCREENITY_SKIP_ENV) {
   // open-source release build, no dotenv
-} else if (isDev || process.env.SCREENITY_USE_LOCAL_ENV === "1") {
-  // SCREENITY_USE_LOCAL_ENV=1 lets you do a NODE_ENV=production
-  // (minified, fast) build that still points at localhost; useful
-  // for testing login/auth flows against a local dev server while
-  // keeping the small prod-style bundle.
-  require("dotenv").config({ path: ".env.local" });
+  console.log("[screenity] env: none (SCREENITY_SKIP_ENV), no app/api URLs baked");
 } else {
-  require("dotenv").config({ path: ".env.production" });
+  // SCREENITY_USE_LOCAL_ENV=1: minified prod-style build still pointing at
+  // localhost, for auth flows against a local dev server.
+  const envFile =
+    isDev || process.env.SCREENITY_USE_LOCAL_ENV === "1"
+      ? ".env.local"
+      : ".env.production";
+  const shadowKeys = [
+    "SCREENITY_APP_BASE",
+    "SCREENITY_API_BASE_URL",
+    "SCREENITY_WEBSITE_BASE",
+  ];
+  const preset = Object.fromEntries(shadowKeys.map((k) => [k, process.env[k]]));
+  const { parsed } = require("dotenv").config({ path: envFile });
+  // dotenv never overrides shell-exported vars, so those silently win. Warn loudly.
+  for (const key of shadowKeys) {
+    if (
+      preset[key] !== undefined &&
+      parsed?.[key] !== undefined &&
+      preset[key] !== parsed[key]
+    ) {
+      console.warn(
+        `[screenity] WARNING: shell ${key}=${preset[key]} overrides ${envFile} (${parsed[key]})`,
+      );
+    }
+  }
+  console.log(
+    `[screenity] env: ${envFile}  SCREENITY_APP_BASE=${
+      process.env.SCREENITY_APP_BASE || "(unset)"
+    }  SCREENITY_API_BASE_URL=${process.env.SCREENITY_API_BASE_URL || "(unset)"}`,
+  );
 }
 
 // Entry points for the different pages
@@ -61,37 +83,21 @@ const entryPoints = {
     "OffscreenRecorder",
     "index.jsx"
   ),
-  audiooffscreen: path.join(
-    __dirname,
-    "src",
-    "pages",
-    "AudioOffscreen",
-    "index.js"
-  ),
   camera: path.join(__dirname, "src", "pages", "Camera", "index.jsx"),
   waveform: path.join(__dirname, "src", "pages", "Waveform", "index.jsx"),
-  sandbox: path.join(__dirname, "src", "pages", "Sandbox", "index.jsx"),
   permissions: path.join(__dirname, "src", "pages", "Permissions", "index.jsx"),
   setup: path.join(__dirname, "src", "pages", "Setup", "index.jsx"),
   playground: path.join(__dirname, "src", "pages", "Playground", "index.jsx"),
-  editor: path.join(__dirname, "src", "pages", "Editor", "index.jsx"),
   region: path.join(__dirname, "src", "pages", "Region", "index.jsx"),
   download: path.join(__dirname, "src", "pages", "Download", "index.jsx"),
-  editorwebcodecs: path.join(
+  editor: path.join(__dirname, "src", "pages", "Editor", "index.jsx"),
+  localplaybackbridge: path.join(
     __dirname,
     "src",
     "pages",
-    "EditorWebCodecs",
-    "index.jsx"
+    "LocalPlaybackBridge",
+    "index.js"
   ),
-  editorviewer: path.join(
-    __dirname,
-    "src",
-    "pages",
-    "EditorViewer",
-    "index.jsx"
-  ),
-  backup: path.join(__dirname, "src", "pages", "Backup", "index.jsx"),
   remuxoffscreen: path.join(
     __dirname,
     "src",
@@ -143,10 +149,8 @@ const htmlPlugins = Object.keys(entryPoints)
     const folderNameMap = {
       cloudrecorder: "CloudRecorder",
       offscreenrecorder: "OffscreenRecorder",
-      audiooffscreen: "AudioOffscreen",
-      editorwebcodecs: "EditorWebCodecs",
-      editorviewer: "EditorViewer",
       remuxoffscreen: "RemuxOffscreen",
+      localplaybackbridge: "LocalPlaybackBridge",
     };
 
     const folderName =
@@ -179,17 +183,7 @@ const htmlPlugins = Object.keys(entryPoints)
       ...(needsKeepalive ? { chunksSortMode: "manual" } : {}),
     };
 
-    // Add favicon only for backup page
-    if (entryName === "backup") {
-      options.favicon = path.join(
-        __dirname,
-        "src",
-        "assets",
-        "backup-favicon.ico"
-      );
-    } else {
-      options.favicon = path.join(__dirname, "src", "assets", "favicon.png");
-    }
+    options.favicon = path.join(__dirname, "src", "assets", "favicon.png");
 
     return new HtmlWebpackPlugin(options);
   })
@@ -247,7 +241,9 @@ const config = {
     // prefix so webpack's default _f608.bundle.js etc. don't trip it.
     chunkFilename: "chunk.[name].[contenthash:8].bundle.js",
     path: path.resolve(__dirname, "build"),
-    clean: !isDev, // Only wipe build dir in production; dev keeps it to avoid re-copying 40MB of assets
+    // Clean one-shot builds so a dev build after a prod build can't mix stale
+    // artifacts. Only the hot-reload server skips the 40MB asset re-copy.
+    clean: !(isDev && process.env.WEBPACK_SERVE),
     publicPath: ASSET_PATH,
   },
   module: {
@@ -376,7 +372,6 @@ const config = {
           force: true,
           filter: isBsBuild
             ? (resourcePath) =>
-                !/ffmpeg-core\.wasm$/.test(resourcePath) &&
                 !/vision_wasm.*\.wasm$/.test(resourcePath) &&
                 !/\/videos\//.test(resourcePath) &&
                 !/pin\.gif$/.test(resourcePath)
@@ -385,6 +380,11 @@ const config = {
         {
           from: "src/_locales/",
           to: path.join(__dirname, "build/_locales"),
+          force: true,
+        },
+        {
+          from: "THIRD_PARTY_NOTICES.md",
+          to: path.join(__dirname, "build/THIRD_PARTY_NOTICES.md"),
           force: true,
         },
       ],

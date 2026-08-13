@@ -31,6 +31,26 @@ const shortBrowser = () => {
   return "Unknown";
 };
 
+// shortBrowser() can only say Chrome/150; the high-entropy hint has the real
+// build. Brand order mirrors shortBrowser().
+const fullBrowserVersion = async () => {
+  try {
+    const uaData = navigator.userAgentData;
+    if (!uaData?.getHighEntropyValues) return null;
+    const { fullVersionList } = await uaData.getHighEntropyValues([
+      "fullVersionList",
+    ]);
+    if (!Array.isArray(fullVersionList)) return null;
+    for (const wanted of [/^Microsoft Edge$/i, /^Google Chrome$/i, /^Chromium$/i]) {
+      const hit = fullVersionList.find((b) => wanted.test(b?.brand || ""));
+      if (hit?.version) return String(hit.version);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 /** Build support context. Returns flat key-value pairs for URLSearchParams. */
 export const buildSupportContext = async (opts = {}) => {
   const ctx = {};
@@ -38,6 +58,17 @@ export const buildSupportContext = async (opts = {}) => {
   ctx.v = chrome.runtime.getManifest().version;
   ctx.lang = chrome.i18n.getMessage("@@ui_locale") || "unknown";
   ctx.br = shortBrowser();
+  const brFull = await fullBrowserVersion();
+  if (brFull) ctx.brFull = brFull;
+
+  // Coarse device class, to see if stuck-recording reports cluster on low-RAM
+  // or low-core devices. Both are already exposed to every page, no PII.
+  if (typeof navigator.deviceMemory === "number") {
+    ctx.mem = String(navigator.deviceMemory);
+  }
+  if (typeof navigator.hardwareConcurrency === "number") {
+    ctx.cores = String(navigator.hardwareConcurrency);
+  }
 
   try {
     const info = await chrome.runtime.getPlatformInfo();
@@ -74,6 +105,9 @@ export const buildSupportContext = async (opts = {}) => {
         "editorReadyAt",
         "lastTrackEndEvent",
         "editorRecordingError",
+        "lastTabStreamMintMs",
+        "lastTabStreamMintOk",
+        "lastTabStreamMintOffscreen",
       ];
       const store = await chrome.storage.local.get(keys);
 
@@ -106,6 +140,14 @@ export const buildSupportContext = async (opts = {}) => {
           store.lastRecordingBackendRef.fileName
             ? "1"
             : "0";
+      }
+
+      // Tab streamId mint latency, for tabStreamUnavailableError reports. High
+      // mintMs with mintOk=0 means slow not hung; mintOff=1 means via the SW.
+      if (store.lastTabStreamMintMs != null) {
+        ctx.mintMs = String(store.lastTabStreamMintMs);
+        ctx.mintOk = store.lastTabStreamMintOk ? "1" : "0";
+        ctx.mintOff = store.lastTabStreamMintOffscreen ? "1" : "0";
       }
 
       if (store.freeRecorderSession) {
@@ -168,7 +210,7 @@ export const buildSupportContext = async (opts = {}) => {
         if (last?.outcome) ctx.lastOutcome = last.outcome;
         if (last?.events?.length) {
           const hasEditorOpen = last.events.some(
-            (ev) => ev.e === "editor-open" && ev.d?.type === "editorwebcodecs",
+            (ev) => ev.e === "editor-open" && ev.d?.type === "editor",
           );
           const hasEditorReady = last.events.some(
             (ev) => ev.e === "editor-load-ready",
@@ -179,7 +221,9 @@ export const buildSupportContext = async (opts = {}) => {
           // sequence, no payloads.
           const recent = last.events.slice(-30);
           const compact = recent
-            .map((ev) => `${ev.e}@${ev.t}`)
+            // xN is how many times a collapsed event repeated (sw-init@1234x4
+            // means the SW restarted 4 times).
+            .map((ev) => `${ev.e}@${ev.t}${ev.n > 1 ? `x${ev.n}` : ""}`)
             .join(",");
           // Cap so a runaway log doesn't blow past Tally URL limits.
           if (compact && compact.length <= 3000) {
@@ -189,6 +233,23 @@ export const buildSupportContext = async (opts = {}) => {
             ctx.diagEvents = compact.slice(-3000);
           }
         }
+      }
+
+      // One-line failure summary from the fields above, readable at a glance.
+      const summaryBits = [];
+      if (ctx.finalized === "0") summaryBits.push("not-finalized");
+      if (ctx.chunks === "0") summaryBits.push("0-chunks");
+      if (
+        ctx.recSessStatus &&
+        ctx.recSessStatus !== "complete" &&
+        ctx.recSessStatus !== "completed"
+      )
+        summaryBits.push(`sess:${ctx.recSessStatus}`);
+      if (ctx.editorHandoff === "incomplete") summaryBits.push("editor-stuck");
+      if (ctx.editorErr) summaryBits.push(`editorErr:${ctx.editorErr}`);
+      if (ctx.trackEndReason) summaryBits.push("track-ended");
+      if (summaryBits.length) {
+        ctx.summary = summaryBits.join("+").slice(0, 80);
       }
     } catch {}
   }

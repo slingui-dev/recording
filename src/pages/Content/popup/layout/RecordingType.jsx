@@ -15,10 +15,10 @@ const CLOUD_FEATURES_ENABLED =
 const RecordingType = (props) => {
   const [contentState, setContentState] = useContext(contentStateContext);
   const [time, setTime] = useState(0);
-  const [URL, setURL] = useState(
+  const [URL] = useState(
     "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9"
   );
-  const [URL2, setURL2] = useState(
+  const [URL2] = useState(
     "https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9"
   );
 
@@ -39,29 +39,20 @@ const RecordingType = (props) => {
     chrome.i18n.getMessage("tabRecordingDisabledToast") ||
     "Tab recording is unavailable on this page.";
 
-  // Opens the right permissions modal based on why access is blocked.
-  // When the hosting page's Permissions-Policy header disallows camera or
-  // microphone, the usual "click the camera icon in the address bar" advice
-  // is wrong (the site is the blocker, not the browser). Route to a
-  // site-specific modal in that case.
+  // When the page's Permissions-Policy blocks camera/mic, the "click the
+  // address-bar icon" advice is wrong (the site blocks it, not the browser,
+  // and the user can't grant it), so show a toast instead of the modal.
   const openPermissionsModal = () => {
-    if (typeof contentState.openModal !== "function") return;
     if (contentState.sitePermissionsBlocked) {
-      contentState.openModal(
-        chrome.i18n.getMessage("sitePermissionsBlockedTitle"),
-        chrome.i18n.getMessage("sitePermissionsBlockedDescription"),
-        null,
-        chrome.i18n.getMessage("permissionsModalDismiss"),
-        () => {},
-        () => {},
-        null,
-        chrome.i18n.getMessage("learnMoreDot"),
-        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Permissions-Policy",
-        true,
-        false
+      contentState.openWarning?.(
+        chrome.i18n.getMessage("cameraMicBlockedTitle"),
+        chrome.i18n.getMessage("cameraMicBlockedDescription"),
+        "VideoOffIcon",
+        10000
       );
       return;
     }
+    if (typeof contentState.openModal !== "function") return;
     contentState.openModal(
       chrome.i18n.getMessage("permissionsModalTitle"),
       chrome.i18n.getMessage("permissionsModalDescription"),
@@ -80,18 +71,6 @@ const RecordingType = (props) => {
       false
     );
   };
-
-  useEffect(() => {
-    const locale = chrome.i18n.getMessage("@@ui_locale");
-    if (!locale.includes("en")) {
-      setURL(
-        `https://translate.google.com/translate?sl=en&tl=${locale}&u=https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/what-are-the-technical-requirements-for-using-screenity/6kdB6qru6naVD8ZLFvX3m9`
-      );
-      setURL2(
-        `https://translate.google.com/translate?sl=en&tl=${locale}&u=https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9`
-      );
-    }
-  }, []);
 
   useEffect(() => {
     // Convert seconds to mm:ss

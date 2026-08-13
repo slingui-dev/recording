@@ -1,4 +1,40 @@
+import { perfSpan } from "../utils/perfMarks";
+
 const API_BASE = process.env.SCREENITY_API_BASE_URL;
+
+// Guard so uploaders in the same page session don't sweep concurrently.
+let _journalSweepDone = false;
+
+// Sweep TTL is generous (14d) vs the 24h resume-validity check: the only cost
+// of not sweeping is quota buildup, so leave multi-day uploads room to resume.
+const JOURNAL_SWEEP_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+// Orphan uploadJournal-<mediaId> entries accumulate against the storage.local
+// 5MB cap when an uploader dies before finalize/abort. Sweep once per session.
+async function sweepStaleUploadJournals() {
+  if (_journalSweepDone) return;
+  _journalSweepDone = true;
+  if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+  try {
+    const all = await chrome.storage.local.get(null);
+    const cutoff = Date.now() - JOURNAL_SWEEP_TTL_MS;
+    const stale = [];
+    for (const [key, value] of Object.entries(all || {})) {
+      if (!key.startsWith("uploadJournal-")) continue;
+      const updatedAt = Number(value?.updatedAt) || 0;
+      if (updatedAt > 0 && updatedAt < cutoff) stale.push(key);
+    }
+    if (stale.length > 0) {
+      console.log(
+        `[bunnyTusUploader] sweeping ${stale.length} stale journal entries (>${JOURNAL_SWEEP_TTL_MS / (24 * 60 * 60 * 1000)}d)`,
+      );
+      await chrome.storage.local.remove(stale);
+    }
+  } catch (err) {
+    // Non-fatal: a future sweep catches the leftover quota.
+    console.warn("[bunnyTusUploader] journal sweep failed", err);
+  }
+}
 
 export async function getThumbnailFromBlob(blob, seekTo = 0.1) {
   return new Promise((resolve, reject) => {
@@ -89,6 +125,9 @@ export default class BunnyTusUploader {
     this.status = "idle";
     this.error = null;
     this.isFinalizing = false;
+    // Lets finalize's own drain keep running once isFinalizing is set.
+    // write() still checks isFinalizing alone, so new writes stay out.
+    this.isDrainingForFinalize = false;
     this.isPaused = false;
     this.metadata = {};
     this.pendingUploads = [];
@@ -196,7 +235,7 @@ export default class BunnyTusUploader {
     }
   }
 
-  setUploaderError(errorCode, err = null) {
+  setUploaderError(errorCode, err = null, extra = null) {
     this.status = "error";
     this.error = errorCode || err?.message || "upload-error";
     this.lastErrorAt = Date.now();
@@ -206,6 +245,7 @@ export default class BunnyTusUploader {
     this.emitTelemetry("upload_error", {
       errorCode: errorCode || null,
       message: err?.message || this.error || "upload-error",
+      ...(extra && typeof extra === "object" ? extra : {}),
     });
     this.scheduleJournalPersist({ force: true });
   }
@@ -634,6 +674,9 @@ export default class BunnyTusUploader {
       throw new Error("Uploader has already been initialized");
     }
 
+    // Fire-and-forget orphan-journal cleanup; doesn't block the hot path.
+    void sweepStaleUploadJournals();
+
     try {
       this.projectId = projectId;
       this.metadata = { title, type, linkedMediaId, sceneId };
@@ -742,10 +785,19 @@ export default class BunnyTusUploader {
         // Retry transient failures so a backend blip doesn't abort the
         // recording. A 4xx is a real rejection, so don't retry it.
         let res = null;
+        // This POST gates capture start (canBeginRecording waits on uploader
+        // init), so its server time is start latency.
+        const endCreatePost = perfSpan("Uploader POST /bunny/videos", { type });
+        // Also kept on the instance: the perf timeline is capped and evicts
+        // the start phase on long recordings, so CloudRecorder mirrors these
+        // into the start-flow trace, which is a single uncapped object.
+        const createPostStartedAt = Date.now();
+        let postAttempts = 0;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           if (attempt > 0) {
             await new Promise((r) => setTimeout(r, 500 * attempt));
           }
+          postAttempts = attempt + 1;
           try {
             res = await fetch(`${API_BASE}/bunny/videos`, {
               method: "POST",
@@ -771,8 +823,33 @@ export default class BunnyTusUploader {
           const transient = res.status >= 500 || res.status === 429;
           if (!transient) break;
         }
+        this.createPostMs = Date.now() - createPostStartedAt;
+        this.createPostAttempts = postAttempts;
+        this.createPostStatus = res ? res.status : null;
+        endCreatePost({
+          attempts: postAttempts,
+          status: res ? res.status : null,
+          ok: Boolean(res && res.ok),
+        });
 
-        if (!res || !res.ok) throw new Error("Failed to create Bunny video");
+        if (!res || !res.ok) {
+          // PROBE: persist failure shape so post-mortem can see what
+          // came back. Removed once Playwright mock race is identified.
+          try {
+            await chrome.storage.local.set({
+              probeBunnyCreateFail: {
+                ts: Date.now(),
+                resPresent: !!res,
+                status: res?.status ?? null,
+                type: res?.type ?? null,
+                url: res?.url ?? null,
+                redirected: res?.redirected ?? null,
+                ok: res?.ok ?? null,
+              },
+            });
+          } catch {}
+          throw new Error("Failed to create Bunny video");
+        }
         const data = await res.json();
         this.videoId = data.videoId;
         this.mediaId = data.mediaId;
@@ -1088,17 +1165,27 @@ export default class BunnyTusUploader {
     }
   }
   async uploadChunk(chunk) {
-    if (this.isFinalizing) return;
-    const data = new Uint8Array(await chunk.arrayBuffer());
+    // processQueue already shifted this chunk off the queue, so bailing here
+    // drops it for good. Finalize's drain is exactly when the queue still
+    // holds bytes we are about to declare.
+    if (this.isFinalizing && !this.isDrainingForFinalize) return;
+    let data = new Uint8Array(await chunk.arrayBuffer());
+    const chunkStartOffset = this.offset;
+    // One-shot 401 refresh per chunk. Re-armed each chunk so a token
+    // expiring across many chunks keeps recovering.
+    let didAuth401Refresh = false;
 
     for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+      // Hoisted so the catch can read signal.reason (wake-jump/stall-recovery/
+      // upload-timeout) for telemetry; in-try it would be out of scope.
+      let controller = null;
       try {
         // AuthorizationSignature has ~20min TTL; refresh before every PATCH.
         await this.checkAuthExpiration();
 
         const currentOffset = this.offset;
 
-        const controller = new AbortController();
+        controller = new AbortController();
         // Exposed so the heartbeat can abort a stalled PATCH.
         this.currentPatchAbort = controller;
         const timeout = setTimeout(
@@ -1159,6 +1246,29 @@ export default class BunnyTusUploader {
         } else {
           const errorText = await res.text();
 
+          // 401 mid-flight: token expired between checkAuthExpiration
+          // and the server's check. Refresh once and retry; a second
+          // 401 falls through as non-transient.
+          if (res.status === 401 && !didAuth401Refresh) {
+            didAuth401Refresh = true;
+            console.warn(
+              "[bunnyTusUploader] 401 mid-PATCH; refreshing TUS auth + retrying once",
+            );
+            this.emitTelemetry("upload_auth_refresh_after_401", {
+              attempt,
+            });
+            try {
+              await this.refreshTusAuth();
+              continue;
+            } catch (refreshErr) {
+              console.error(
+                "[bunnyTusUploader] refreshTusAuth after 401 failed:",
+                refreshErr,
+              );
+              // Fall through to the generic error throw.
+            }
+          }
+
           // Session invalidated; fatal so callers can fall back.
           if (res.status === 404) {
             this.status = "error";
@@ -1210,12 +1320,32 @@ export default class BunnyTusUploader {
                 }
                 this.lastServerOffset = serverOffset;
                 this.offset = serverOffset;
-                this.totalBytes = Math.max(this.totalBytes || 0, serverOffset);
                 this.emitTelemetry("upload_resumed", {
                   resumedOffset: serverOffset,
                   reason: "offset-conflict",
                 });
                 this.scheduleJournalPersist({ force: true });
+
+                const chunkEnd = chunkStartOffset + data.length;
+                if (serverOffset >= chunkEnd) {
+                  this.emitTelemetry("upload_chunk_skipped_after_resync", {
+                    chunkStartOffset,
+                    chunkLength: data.length,
+                    serverOffset,
+                  });
+                  this.recordProgress(0);
+                  return;
+                }
+                if (serverOffset > chunkStartOffset) {
+                  const trimmedBytes = serverOffset - chunkStartOffset;
+                  data = data.subarray(trimmedBytes);
+                  this.emitTelemetry("upload_chunk_trimmed_after_resync", {
+                    chunkStartOffset,
+                    chunkLength: data.length + trimmedBytes,
+                    trimmedBytes,
+                    serverOffset,
+                  });
+                }
 
                 continue;
               }
@@ -1239,6 +1369,12 @@ export default class BunnyTusUploader {
           throw new Error(`Upload failed (${res.status}): ${errorText}`);
         }
       } catch (err) {
+        // err.name collapses every abort to AbortError; signal.reason keeps the
+        // real trigger (wake-jump/stall-recovery/upload-timeout) for telemetry.
+        const abortReason =
+          controller?.signal?.aborted && typeof controller.signal.reason === "string"
+            ? controller.signal.reason
+            : null;
         this.currentPatchAbort = null;
         // Transient errors (network/timeout/stall-abort/5xx/408/429) retry forever with capped backoff.
         const isExplicitAbort =
@@ -1255,14 +1391,19 @@ export default class BunnyTusUploader {
           /Upload failed \((?:5\d\d|408|429)\b/.test(msg) ||
           /network|Failed to fetch|timeout/i.test(msg);
         if (err?.name === "AbortError") {
-          console.warn("⚠️ Upload chunk aborted (timeout or stall-recovery)");
+          console.warn(
+            "⚠️ Upload chunk aborted",
+            abortReason ? `(${abortReason})` : "(reason unknown)",
+          );
         }
         if (!isTransient && attempt === this.MAX_RETRIES) {
           console.error(
             `❌ Non-transient failure after ${this.MAX_RETRIES} retries:`,
             err,
           );
-          this.setUploaderError("chunk-upload-retries-exhausted", err);
+          this.setUploaderError("chunk-upload-retries-exhausted", err, {
+            abortReason,
+          });
           throw err;
         }
         const attemptLabel = isTransient
@@ -1325,7 +1466,15 @@ export default class BunnyTusUploader {
     this.isProcessingQueue = true;
 
     try {
-      while (this.chunkQueue.length && !this.isPaused && !this.isFinalizing) {
+      // isFinalizing alone used to stop this loop, which deadlocked finalize:
+      // it sets the flag, then waits on a queue nothing was allowed to drain.
+      // Short recordings lost the final chunk and uploaded a header Bunny
+      // could not transcode.
+      while (
+        this.chunkQueue.length &&
+        !this.isPaused &&
+        (!this.isFinalizing || this.isDrainingForFinalize)
+      ) {
         const chunk = this.chunkQueue.shift();
         this.queuedBytes -= chunk.size;
 
@@ -1400,7 +1549,23 @@ export default class BunnyTusUploader {
     this.emitTelemetry("upload_finalize_started");
     this.scheduleJournalPersist({ force: true });
     try {
-      await this.waitForPendingUploads();
+      // Lets processQueue and uploadChunk run while isFinalizing is set.
+      this.isDrainingForFinalize = true;
+      try {
+        await this.waitForPendingUploads();
+      } finally {
+        this.isDrainingForFinalize = false;
+      }
+
+      // Never declare the length with bytes still queued. Bunny accepts a
+      // short upload, transcoding then fails, and the recording is gone with
+      // no error anywhere. Failing here keeps the retry path alive.
+      if (this.chunkQueue.length > 0) {
+        this.setUploaderError("finalize-queue-not-drained");
+        throw new Error(
+          `Finalize blocked: ${this.chunkQueue.length} chunk(s) (${this.queuedBytes} bytes) still queued after drain.`,
+        );
+      }
 
       if (this.bytesLostAfterFinalize > 0) {
         this.status = "error";
@@ -1463,46 +1628,35 @@ export default class BunnyTusUploader {
         throw new Error("Finalize failed: server has 0 bytes.");
       }
 
-      if (serverOffset < this.totalBytes) {
-        this.status = "error";
-        this.error = `incomplete-upload server=${serverOffset} expected=${this.totalBytes}`;
-        this.lastErrorAt = Date.now();
-        this.lastErrorCode = "finalize-incomplete-upload";
-        this.emitTelemetry("upload_error", {
-          errorCode: "finalize-incomplete-upload",
-          serverOffset,
-          expectedBytes: this.totalBytes,
-        });
-        this.scheduleJournalPersist({ force: true });
-        throw new Error(
-          `Finalize blocked: upload incomplete (server ${serverOffset} / expected ${this.totalBytes}).`,
-        );
-      }
-
+      // Server's Upload-Offset is the source of truth for the final length:
+      // re-sends at a stale offset get 409'd and trimmed (see uploadChunk), so
+      // stored bytes are always a clean prefix and drift is bookkeeping skew.
+      let recoveredBytes = 0;
+      let truncatedBytes = 0;
       if (serverOffset > this.totalBytes) {
-        this.status = "error";
-        this.error = `invalid-length server=${serverOffset} expected=${this.totalBytes}`;
-        this.lastErrorAt = Date.now();
-        this.lastErrorCode = "finalize-invalid-length";
-        this.emitTelemetry("upload_error", {
-          errorCode: "finalize-invalid-length",
-          serverOffset,
-          expectedBytes: this.totalBytes,
-        });
-        this.scheduleJournalPersist({ force: true });
-        throw new Error(
-          `Finalize blocked: serverOffset (${serverOffset}) exceeds expected totalBytes (${this.totalBytes}).`,
-        );
+        // Server holds more than the client counted: bytes PATCHed in a prior
+        // session after the last journal write. Those are durably on Bunny, so
+        // recover them by trusting the server.
+        recoveredBytes = serverOffset - this.totalBytes;
+        this.totalBytes = serverOffset;
+      } else if (serverOffset < this.totalBytes) {
+        // Server holds less: the tail is stranded (stalled uplink or a failed
+        // chunk; bytes past a tus gap are unrecoverable anyway). Declare the
+        // clean prefix instead of looping. truncatedBytes tracks the cost.
+        truncatedBytes = this.totalBytes - serverOffset;
+        this.totalBytes = serverOffset;
       }
 
-      // Complete the tus upload by declaring final length.
+      // Upload-Length must equal Upload-Offset to complete, and can never be
+      // below it. Declaring the client tally when the two disagreed was what
+      // Bunny rejected.
       const res = await fetch(this.uploadUrl, {
         method: "PATCH",
         headers: {
           "Tus-Resumable": "1.0.0",
           "Content-Type": "application/offset+octet-stream",
           "Upload-Offset": String(serverOffset),
-          "Upload-Length": String(this.totalBytes),
+          "Upload-Length": String(serverOffset),
           AuthorizationSignature: this.signature,
           AuthorizationExpire: String(this.expires),
           LibraryId: String(this.libraryId),
@@ -1510,7 +1664,10 @@ export default class BunnyTusUploader {
         },
       });
 
-      if (!res.ok && res.status !== 204) {
+      // 410 = Bunny reports the upload is already finalized. Treat as
+      // success; server is the truth, retrying would just loop.
+      const alreadyFinalized = res.status === 410;
+      if (!res.ok && res.status !== 204 && !alreadyFinalized) {
         this.setUploaderError("finalize-patch-failed");
         throw new Error("Finalization failed");
       }
@@ -1518,9 +1675,16 @@ export default class BunnyTusUploader {
       this.finalizedAt = Date.now();
       this.emitTelemetry("upload_finalize_completed", {
         finalizedBytes: this.totalBytes,
+        alreadyFinalized: alreadyFinalized || undefined,
+        // Reconciled a prior session's unjournaled bytes back in (no loss).
+        recoveredBytes: recoveredBytes || undefined,
+        // Finalized a truncated clean prefix; this many tail bytes were
+        // stranded and lost. > 0 here is the signal to watch.
+        truncatedBytes: truncatedBytes || undefined,
       });
       this.emitTelemetry("upload_complete_client", {
         finalizedBytes: this.totalBytes,
+        truncatedBytes: truncatedBytes || undefined,
       });
       this.stopHeartbeat();
       await this.clearUploadJournal();
@@ -1633,11 +1797,8 @@ export default class BunnyTusUploader {
     this.stallRecoveryInFlight = false;
     this.heartbeatTimer = setInterval(() => {
       const now = Date.now();
-      // Sleep/wake: timers don't fire while asleep, but on wake fire
-      // missed ticks back-to-back. Skip ticks whose wall-clock gap is
-      // much shorter than HEARTBEAT_INTERVAL_MS, otherwise an 8hr sleep
-      // stacks ~2880 ticks and each runs stall recovery, flooding
-      // the network on wake.
+      // Skip wake-burst ticks: an 8hr sleep stacks ~2880 missed ticks and
+      // each would run stall recovery, flooding the network on wake.
       const sinceLastTick = now - (this.lastHeartbeatTickAt || 0);
       this.lastHeartbeatTickAt = now;
       if (sinceLastTick < Math.floor(this.HEARTBEAT_INTERVAL_MS * 0.5)) {
@@ -1719,6 +1880,7 @@ export default class BunnyTusUploader {
                 stallMs,
                 serverOffset,
               });
+              this.maybeAutoFinalize();
             }
           }
         }
@@ -1728,6 +1890,28 @@ export default class BunnyTusUploader {
     } finally {
       this.stallRecoveryInFlight = false;
     }
+  }
+
+  maybeAutoFinalize() {
+    if (this.isFinalizing) return;
+    if (this.status === "completed" || this.status === "aborted") return;
+    if (this.totalBytes <= 0) return;
+    // Trigger when offset >= totalBytes (used to be strict equality,
+    // which deadlocked when 409 resync set offset past totalBytes from
+    // a prior session's unjournaled bytes).
+    if (this.offset < this.totalBytes) return;
+    if (this.chunkQueue.length > 0) return;
+    if (this.pendingUploads.length > 0) return;
+    const sinceLastWrite = Date.now() - (this.lastChunkQueuedAt || 0);
+    if (this.lastChunkQueuedAt && sinceLastWrite < this.HEARTBEAT_LAG_MS) return;
+    this.emitTelemetry("upload_auto_finalize_triggered", {
+      sinceLastWriteMs: sinceLastWrite,
+      offset: this.offset,
+      totalBytes: this.totalBytes,
+    });
+    this.finalize().catch((err) => {
+      console.warn("[bunnyTusUploader] auto-finalize failed:", err?.message || err);
+    });
   }
 
   stopHeartbeat() {

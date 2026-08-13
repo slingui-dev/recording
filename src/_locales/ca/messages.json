@@ -1,6 +1,50 @@
 {
+  "reviewAskTitle": {
+    "message": "Com et va amb Screenity?",
+    "description": "Review prompt step 1 question (sentiment check) in the editor"
+  },
+  "reviewAskGood": {
+    "message": "Va bé",
+    "description": "Review prompt positive sentiment button label / tooltip"
+  },
+  "reviewAskBad": {
+    "message": "No gaire bé",
+    "description": "Review prompt negative sentiment button label / tooltip"
+  },
+  "reviewThanksTitle": {
+    "message": "M'has alegrat el dia!",
+    "description": "Review prompt happy-branch title in the editor"
+  },
+  "reviewThanksDescription": {
+    "message": "Sóc l'Alyssa, la creadora independent que hi ha darrere de Screenity. Vaig fer la primera versió allà pel 2020, i encara avui continuo mantenint activament l'extensió gratuïta.\n\nSi Screenity t'ha ajudat, deixar una ressenya ràpida és una de les millors maneres de donar-li suport ❤️",
+    "description": "Review prompt happy-branch description (founder voice) in the editor. Paragraphs separated by a blank line."
+  },
+  "reviewThanksButton": {
+    "message": "Deixa una ressenya",
+    "description": "Review prompt button that opens the Chrome Web Store review page"
+  },
+  "reviewThanksLater": {
+    "message": "Potser més tard",
+    "description": "Review prompt snooze button on the happy branch"
+  },
+  "reviewSorryTitle": {
+    "message": "Em sap greu sentir-ho",
+    "description": "Review prompt unhappy-branch title in the editor"
+  },
+  "reviewSorryDescription": {
+    "message": "Sóc l'Alyssa, la creadora de Screenity, i llegeixo cada missatge jo mateixa. Explica'm què ha anat malament i faré tot el possible per arreglar-ho.",
+    "description": "Review prompt unhappy-branch description in the editor"
+  },
+  "reviewSorryButton": {
+    "message": "Envia comentaris",
+    "description": "Review prompt button that opens the private feedback form"
+  },
+  "reviewSorryDismiss": {
+    "message": "No, gràcies",
+    "description": "Review prompt dismiss button on the unhappy branch"
+  },
   "extName": {
-    "message": "Slingui - Grava i Anota la Pantalla",
+    "message": "Screenity - Grava i Anota la Pantalla",
     "description": "Nom de l'extensió"
   },
   "extDesc": {
@@ -48,7 +92,7 @@
     "description": "Títol del modal d'avís de permisos de càmera / micròfon"
   },
   "permissionsModalDescription": {
-    "message": " Slingui Recording no pot accedir a la teva càmera o micròfon. Permet l'accés fent clic a l'ícona de la càmera a la barra d'adreces.",
+    "message": "Screenity no pot accedir a la teva càmera o micròfon. Permet l'accés fent clic a l'ícona de la càmera a la barra d'adreces.",
     "description": "Descripció del modal d'avís de permisos de càmera / micròfon"
   },
   "permissionsModalDismiss": {
@@ -680,11 +724,11 @@
     "description": "Títol del modal de gravació en pausa"
   },
   "chromePermissionsModalTitle": {
-    "message": " Slingui Recording no té permís per gravar la pantalla",
+    "message": "Screenity no té permís per gravar la pantalla",
     "description": "Títol del modal de permisos"
   },
   "chromePermissionsModalDescription": {
-    "message": "Per habilitar la gravació de pantalla, has de concedir permisos adicionals a  Slingui Recording.",
+    "message": "Per habilitar la gravació de pantalla, has de concedir permisos adicionals a Screenity.",
     "description": "Descripció del modal de permisos"
   },
   "chromePermissionsModalAction": {
@@ -712,7 +756,7 @@
     "description": "Cancel·la del modal de micròfon apagat"
   },
   "setupTitle": {
-    "message": "Comença a utilitzar  Slingui Recording en tres passos senzills:",
+    "message": "Comença a utilitzar Screenity en tres passos senzills:",
     "description": "Títol dels passos de configuració"
   },
   "setupStep1Before": {
@@ -736,7 +780,7 @@
     "description": "Pas 3 de configuració, abans de la icona. Necessita un espai al final."
   },
   "setupStep3After": {
-    "message": "  Slingui Recording per començar",
+    "message": " Screenity per començar",
     "description": "Pas 3 de configuració, després de la icona. Necessita un espai al principi."
   },
   "setupCompleteTitle": {
@@ -796,7 +840,7 @@
     "description": "Stop recording button in recording screen"
   },
   "updateAnnouncementTitle": {
-    "message": "Benvingut al nou  Slingui Recording!",
+    "message": "Benvingut al nou Screenity!",
     "description": "Títol de l'anunci d'actualització per als usuaris existents"
   },
   "updateAnnouncementDescription": {
@@ -816,7 +860,7 @@
     "description": "Títol del modal d'error de transmissió"
   },
   "streamErrorModalDescription": {
-    "message": "Hi ha hagut un error en iniciar la gravació. Reinicia el teu navegador i torna-ho a provar. Si el problema persisteix, si us plau, posa't en contacte amb nosaltres a support@ Slingui Recording.io.",
+    "message": "Hi ha hagut un error en iniciar la gravació. Reinicia el teu navegador i torna-ho a provar. Si el problema persisteix, si us plau, posa't en contacte amb nosaltres a support@screenity.io.",
     "description": "Descripció del modal d'error de transmissió"
   },
   "highestQuality": {
@@ -868,7 +912,7 @@
     "description": "Títol d'espai insuficient"
   },
   "notEnoughSpaceDescription": {
-    "message": " Slingui Recording necessita almenys 1 GB d'espai lliure per a la gravació. Si us plau, allibera espai i torna-ho a intentar.",
+    "message": "Screenity necessita almenys 1 GB d'espai lliure per a la gravació. Si us plau, allibera espai i torna-ho a intentar.",
     "description": "Descripció d'espai insuficient"
   },
   "clearSpaceButton": {
@@ -900,7 +944,7 @@
     "description": "Títol del modal de gravació en brut"
   },
   "rawRecordingModalDescription": {
-    "message": "L'arxiu de vídeo en brut és l'arxiu original enregistrat per  Slingui Recording. Aquest vídeo no ha estat processat ni editat, per la qual cosa pot ser molt gran i potser no es pot reproduir en tots els dispositius. Si tens problemes amb el vídeo processat, pots fer servir aquest arxiu per recuperar el teu vídeo.",
+    "message": "L'arxiu de vídeo en brut és l'arxiu original enregistrat per Screenity. Aquest vídeo no ha estat processat ni editat, per la qual cosa pot ser molt gran i potser no es pot reproduir en tots els dispositius. Si tens problemes amb el vídeo processat, pots fer servir aquest arxiu per recuperar el teu vídeo.",
     "description": "Descripció del modal de gravació en brut"
   },
   "rawRecordingModalButton": {
@@ -912,7 +956,7 @@
     "description": "Títol del modal de solució de problemes"
   },
   "troubleshootModalDescription": {
-    "message": "Després de la descàrrega, envia l'arxiu a support@ Slingui Recording.io amb qualsevol informació rellevant. Farem servir aquestes dades per ajudar-te a solucionar qualsevol problema que tinguis amb l'extensió i, si és possible, recuperar el teu vídeo.",
+    "message": "Després de la descàrrega, envia l'arxiu a support@screenity.io amb qualsevol informació rellevant. Farem servir aquestes dades per ajudar-te a solucionar qualsevol problema que tinguis amb l'extensió i, si és possible, recuperar el teu vídeo.",
     "description": "Descripció del modal de solució de problemes"
   },
   "troubleshootModalButton": {
@@ -924,11 +968,11 @@
     "description": "Títol del modal de límit superior a 5 minuts"
   },
   "overLimitModalDescription": {
-    "message": "Com que  Slingui Recording és completament privat i s'executa localment, està limitat pel maquinari del teu dispositiu. Processar un vídeo d'aquesta longitud trigarà massa temps i serà molt intensiu en recursos. No et preocupis, encara pots descarregar l'arxiu WEBM o la gravació en brut, però l'edició i l'exportació a MP4 no estan disponibles. Dicho això, encara pots intentar processar el vídeo de tota manera si entens els riscos.",
+    "message": "Com que Screenity és completament privat i s'executa localment, està limitat pel maquinari del teu dispositiu. Processar un vídeo d'aquesta longitud trigarà massa temps i serà molt intensiu en recursos. No et preocupis, encara pots descarregar l'arxiu WEBM o la gravació en brut, però l'edició i l'exportació a MP4 no estan disponibles. Dicho això, encara pots intentar processar el vídeo de tota manera si entens els riscos.",
     "description": "Descripció del modal de límit superior a 5 minuts"
   },
   "overLimitModalDescriptionFastPath": {
-    "message": "Com que  Slingui Recording és completament privat i s'executa localment, està limitat pel maquinari del teu dispositiu. Processar un vídeo d'aquesta longitud trigarà massa temps i serà molt intensiu en recursos. El teu MP4 ja està llest per descarregar, però l'edició al navegador no està disponible per a clips tan llargs. Dicho això, encara pots intentar processar el vídeo de tota manera si entens els riscos.",
+    "message": "Com que Screenity és completament privat i s'executa localment, està limitat pel maquinari del teu dispositiu. Processar un vídeo d'aquesta longitud trigarà massa temps i serà molt intensiu en recursos. El teu MP4 ja està llest per descarregar, però l'edició al navegador no està disponible per a clips tan llargs. Dicho això, encara pots intentar processar el vídeo de tota manera si entens els riscos.",
     "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
   },
   "overLimitModalButton": {
@@ -970,12 +1014,8 @@
     "description": "Títol d'extensió no compatible a la pestanya"
   },
   "extensionNotSupportedDescription": {
-    "message": " Slingui Recording no era compatible a la teva pestanya anterior. No obstant això, pots començar la gravació aquí i després canviar a la pestanya, però la teva càmera i la barra de ferramentes no seran visibles.",
+    "message": "Screenity no era compatible a la teva pestanya anterior. No obstant això, pots començar la gravació aquí i després canviar a la pestanya, però la teva càmera i la barra de ferramentes no seran visibles.",
     "description": "Descripció d'extensió no compatible a la pestanya"
-  },
-  "backupsTitle": {
-    "message": "Configura una còpia de seguretat local per a les teves gravacions de  Slingui Recording",
-    "description": "Títol de còpies de seguretat"
   },
   "backupsDescription1": {
     "message": "Mantingues una còpia de totes les gravacions que facis. Si no configures còpies de seguretat, les teves gravacions només es guardaran quan decideixis descarregar-les.",
@@ -984,54 +1024,6 @@
   "backupsDescription2": {
     "message": "Potser necessitaràs crear una nova carpeta primer si intents guardar-ho a Descàrregues o altres carpetes del sistema.",
     "description": "Descripció de còpies de seguretat"
-  },
-  "backupsSelectFolder": {
-    "message": "Selecciona una carpeta",
-    "description": "Botó Selecciona carpeta"
-  },
-  "backupsNotNow": {
-    "message": "Ara no",
-    "description": "Botó Ara no"
-  },
-  "backupsOnTitle": {
-    "message": "Les teves gravacions s'estan sincronitzant localment",
-    "description": "Títol de còpies de seguretat actives"
-  },
-  "backupsOnDescription": {
-    "message": "Per evitar sol·licitar permisos cada vegada que gravis, et recomanem deixar aquesta pestanya oberta.",
-    "description": "Descripció de còpies de seguretat actives"
-  },
-  "backupsClose": {
-    "message": "Tanca la pestanya de tota manera",
-    "description": "Botó Tanca la pestanya de tota manera"
-  },
-  "backupsStop": {
-    "message": "Atura les còpies de seguretat de totes les gravacions",
-    "description": "Botó Atura còpies de seguretat"
-  },
-  "backupsConfirmTitle": {
-    "message": "Per favor, torna a confirmar l'accés a la teva carpeta de còpies de seguretat local de  Slingui Recording",
-    "description": "Títol de confirmació de còpies de seguretat"
-  },
-  "backupsConfirmDescription": {
-    "message": "Ho sentim, però necessitem el teu permís una vegada més per continuar fent còpies locals de les teves gravacions. Desafortunadament, haurem de preguntar cada vegada que tanquis aquesta pestanya, el que pot passar si tanques el navegador o reinicies el teu ordinador.",
-    "description": "Descripció de confirmació de còpies de seguretat"
-  },
-  "backupsConfirmAllow": {
-    "message": "Permet a  Slingui Recording continuar fent còpies de seguretat de les gravacions",
-    "description": "Botó Permet en la confirmació de còpies de seguretat"
-  },
-  "backupsToggle": {
-    "message": "Fes còpies de seguretat de les gravacions",
-    "description": "Etiqueta d'alternar còpies de seguretat"
-  },
-  "backupPermissionFailTitle": {
-    "message": "Permís no atorgat per fer una còpia de seguretat de la gravació",
-    "description": "Títol de fallada de permís de còpia de seguretat"
-  },
-  "backupPermissionFailDescription": {
-    "message": "No has seleccionat cap carpeta per fer una còpia local de les gravacions. Depenent de la versió del teu navegador o sistema operatiu, potser se't demanarà seleccionar la carpeta cada vegada que comencis a gravar. Pots intentar-ho de nou o desactivar les còpies de seguretat per complet si prefereixes no atorgar permisos repetidament.",
-    "description": "Descripció de fallada de permís de còpia de seguretat"
   },
   "recordAudioWarningMacTitle": {
     "message": "Enregistra l'audio de l'ordinador",
@@ -1194,7 +1186,7 @@
     "description": "Button label to go to the dashboard in the popup"
   },
   "welcomePopupTitle": {
-    "message": "Benvingut a  Slingui Recording",
+    "message": "Benvingut a Screenity",
     "description": "Title for the welcome popup shown to new users"
   },
   "welcomePopupDescriptionTop": {
@@ -1254,7 +1246,7 @@
     "description": "Title shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionDescription": {
-    "message": "La teva subscripció a  Slingui Recording Pro està inactiva.",
+    "message": "La teva subscripció a Screenity Pro està inactiva.",
     "description": "Description shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionReactivation": {
@@ -1338,12 +1330,12 @@
     "description": "Title for the welcome Pro popup"
   },
   "welcomeProDescription": {
-    "message": "Inicia sessió per guardar els vídeos al núvol, compartir amb enllaç i accedir a funcions avançades d'edició.",
+    "message": "Comparteix les gravacions amb un enllaç net, desa-les al núvol i afegeix zooms, subtítols i dissenys, quan ho necessitis.",
     "description": "Description for the welcome Pro popup"
   },
   "welcomeProButton": {
-    "message": "Inicia sessió per desbloquejar funcions Pro",
-    "description": "Button to sign in to  Slingui Recording Pro"
+    "message": "Desbloqueja l'editor",
+    "description": "Button to sign in to Screenity Pro"
   },
   "welcomeProSupport": {
     "message": "Dona suport a la desenvolupadora independent!",
@@ -1362,7 +1354,7 @@
     "description": "Pro banner title in the editor"
   },
   "proBannerDescription": {
-    "message": " Slingui Recording sempre serà gratuït, de codi obert i sense anuncis. Pro ajuda a cobrir costos de núvol i infraestructura, i dona suport a una desenvolupadora independent! ❤️",
+    "message": "Screenity sempre serà gratuït, de codi obert i sense anuncis. Pro ajuda a cobrir costos de núvol i infraestructura, i dona suport a una desenvolupadora independent! ❤️",
     "description": "Pro banner description in the editor"
   },
   "proBannerAltButton": {
@@ -1394,15 +1386,15 @@
     "description": "Button to upgrade to Pro"
   },
   "hostBannerTitle": {
-    "message": "Gaudeixes de  Slingui Recording localment? Dona suport al seu futur!",
+    "message": "Gaudeixes de Screenity localment? Dona suport al seu futur!",
     "description": "Títol del bàner d'autoallotjament a l'editor"
   },
   "hostBannerDescription": {
-    "message": " Slingui Recording està creada per una desenvolupadora indie. Autoallotjar és gratuït, però si et resulta útil, considera donar-hi suport amb Pro ❤️",
+    "message": "Screenity està creada per una desenvolupadora indie. Autoallotjar és gratuït, però si et resulta útil, considera donar-hi suport amb Pro ❤️",
     "description": "Descripció del bàner d'autoallotjament a l'editor"
   },
   "welcomeBackPopupTitle": {
-    "message": "Benvingut de nou a  Slingui Recording",
+    "message": "Benvingut de nou a Screenity",
     "description": "Títol del popup de benvinguda mostrat als usuaris que tornen"
   },
   "welcomeBackProTitle": {
@@ -1410,15 +1402,15 @@
     "description": "Títol per a la funció d'emmagatzematge al núvol en el popup de benvinguda"
   },
   "welcomeBackProDescription": {
-    "message": " Slingui Recording Pro és una nova plataforma opcional per desar vídeos al núvol, compartir-los amb un enllaç i desbloquejar eines avançades d’edició, si i quan les necessitis.",
+    "message": "Screenity Pro és una nova plataforma opcional per desar vídeos al núvol, compartir-los amb un enllaç i desbloquejar eines avançades d’edició, si i quan les necessitis.",
     "description": "Descripció de la funció d'emmagatzematge al núvol en el popup de benvinguda"
   },
   "welcomeBackProCTA": {
-    "message": "Descobreix  Slingui Recording Pro",
+    "message": "Descobreix Screenity Pro",
     "description": "Botó de crida a l'acció per a la funció d'emmagatzematge al núvol en el popup de benvinguda"
   },
   "welcomeToProTitleModal": {
-    "message": "Benvingut a  Slingui Recording Pro",
+    "message": "Benvingut a Screenity Pro",
     "description": "Títol del modal de benvinguda a Pro"
   },
   "welcomeToProDescriptionModal": {
@@ -1438,7 +1430,7 @@
     "description": "WebCodecs failure auto-disable toast"
   },
   "proOnboardingWelcomeTitle": {
-    "message": "Benvingut/da a l'extensió  Slingui Recording Pro",
+    "message": "Benvingut/da a l'extensió Screenity Pro",
     "description": "Pro onboarding welcome step title"
   },
   "proOnboardingWelcomeDescription": {
@@ -1574,7 +1566,7 @@
     "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
   },
   "editorRecoveryToast": {
-    "message": "L'enregistrament s'ha desat. L'editor no s'ha obert. Fes clic a la icona de  Slingui Recording per tornar-ho a provar.",
+    "message": "L'enregistrament s'ha desat. L'editor no s'ha obert. Fes clic a la icona de Screenity per tornar-ho a provar.",
     "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
   },
   "stopAckTimeoutToast": {
@@ -1666,5 +1658,113 @@
   },
   "recordingCorruptToast": {
     "message": "Aquesta gravació no es pot reproduir. El fitxer pot estar incomplet o malmès. Descarrega el fitxer original des del menú Desar."
+  },
+  "storageFullRecordingError": {
+    "message": "No hi ha prou espai d'emmagatzematge per enregistrar. Allibera espai al disc i torna-ho a provar.",
+    "description": "Shown when the browser can't allocate enough local storage to start a recording"
+  },
+  "storageLowRecordingWarning": {
+    "message": "L'emmagatzematge del teu navegador està gairebé ple. Allibera espai al disc per no perdre aquest enregistrament.",
+    "description": "Shown when local storage is running low while a recording is in progress"
+  },
+  "screenStreamUnavailableError": {
+    "message": "No s'ha pogut accedir a la pantalla. Torna a iniciar l'enregistrament.",
+    "description": "Shown when the screen capture stream is missing after the user picked a source"
+  },
+  "tabStreamUnavailableError": {
+    "message": "No s'ha pogut accedir al vídeo d'aquesta pestanya. Torna a carregar-la i torna-ho a provar.",
+    "description": "Shown when Chrome won't return a tab capture stream for the chosen tab"
+  },
+  "streamingDataTimeoutError": {
+    "message": "L'enregistrament no s'ha iniciat a temps. Torna-ho a provar.",
+    "description": "Shown when the recorder tab never received streaming-data from the background script"
+  },
+  "unsupportedVideoCodecError": {
+    "message": "El teu navegador no admet els còdecs de vídeo necessaris. Actualitza Chrome i torna-ho a provar.",
+    "description": "Shown when no supported MediaRecorder mimeType is available"
+  },
+  "cancelLabel": {
+    "message": "Cancel·la",
+    "description": "Cancel button on the download-in-progress banner"
+  },
+  "webmSlowTitle": {
+    "message": "La conversió a WebM pot trigar una estona",
+    "description": "Title of the modal warning that MP4 to WebM conversion is slow"
+  },
+  "webmSlowDescription": {
+    "message": "Desar com a WebM torna a codificar tot el vídeo, de manera que pot trigar uns minuts en gravacions llargues. L'MP4 es desa a l'instant.",
+    "description": "Body of the slow-WebM warning modal"
+  },
+  "webmSlowMp4": {
+    "message": "Descarrega MP4 en lloc d'això",
+    "description": "Primary button: download MP4 instead of the slow WebM conversion"
+  },
+  "webmSlowContinue": {
+    "message": "Continua amb WebM",
+    "description": "Secondary button: proceed with the slow WebM conversion"
+  },
+  "downloadProcessingTitle": {
+    "message": "Preparant la teva descàrrega",
+    "description": "Title of the download-in-progress banner with the Cancel button"
+  },
+  "downloadProcessingDescription": {
+    "message": "Això pot trigar una estona en gravacions llargues.",
+    "description": "Body of the download-in-progress banner"
+  },
+  "cameraMicBlockedTitle": {
+    "message": "Càmera i micròfon no permesos",
+    "description": "Toast title shown when the current page's Permissions-Policy blocks the extension's camera and microphone"
+  },
+  "cameraMicBlockedDescription": {
+    "message": "Aquest lloc web bloqueja l'accés a la càmera i el micròfon. Encara pots gravar aquí, però la càmera no es veurà.",
+    "description": "Toast description shown when the current page's Permissions-Policy blocks the extension's camera and microphone"
+  },
+  "downloadFailedModalTitle": {
+    "message": "La descàrrega no s'ha completat",
+    "description": "Modal title when a download to disk times out or fails"
+  },
+  "downloadFailedModalDescription": {
+    "message": "Torna-ho a provar.",
+    "description": "Toast->modal description: what to do after a failed download"
+  },
+  "driveGenericModalTitle": {
+    "message": "No s'ha pogut desar a Google Drive",
+    "description": "Modal title for a generic Google Drive save failure"
+  },
+  "driveGenericModalDescription": {
+    "message": "Torna-ho a provar.",
+    "description": "Modal description for a generic Google Drive save failure"
+  },
+  "driveQuotaModalTitle": {
+    "message": "El teu Google Drive és ple",
+    "description": "Modal title when the Google Drive account is out of storage"
+  },
+  "driveQuotaModalDescription": {
+    "message": "Allibera espai i torna-ho a provar.",
+    "description": "Modal description when the Google Drive account is out of storage"
+  },
+  "driveTooLargeModalTitle": {
+    "message": "Gravació massa gran",
+    "description": "Modal title when a recording exceeds Google Drive limits"
+  },
+  "driveTooLargeModalDescription": {
+    "message": "Aquesta gravació és massa gran per desar-la a Google Drive.",
+    "description": "Modal description when a recording exceeds Google Drive limits"
+  },
+  "driveAuthModalTitle": {
+    "message": "No s'ha pogut accedir a Google Drive",
+    "description": "Modal title when Google Drive authentication expired or was revoked"
+  },
+  "driveAuthModalDescription": {
+    "message": "Torna a iniciar la sessió.",
+    "description": "Modal description when Google Drive authentication expired or was revoked"
+  },
+  "emptyRecordingTitle": {
+    "message": "Aquesta gravació és buida",
+    "description": "Modal title when the recording file contains no video"
+  },
+  "emptyRecordingDescription": {
+    "message": "No s'ha capturat cap vídeo. Torna a provar la gravació.",
+    "description": "Modal description when the recording file contains no video"
   }
 }

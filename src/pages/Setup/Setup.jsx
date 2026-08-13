@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import GradientBackground from "../Components/GradientBackground";
 
 const Setup = () => {
   const [setupComplete, setSetupComplete] = useState(false);
@@ -38,6 +39,7 @@ const Setup = () => {
 
   return (
     <div className="setupBackground">
+      <GradientBackground />
       {!setupComplete && (
         <div className="setupContainer">
           <div className="setupImage">
@@ -113,12 +115,6 @@ const Setup = () => {
 	padding: 0;
 	min-height: 100%;
 		background-color: #F6F7FB!important;
-		background: url('` +
-          chrome.runtime.getURL("assets/helper/pattern-svg.svg") +
-          `') repeat;
-		background-size: 62px 23.5px;
-		animation: moveBackground 138s linear infinite;
-		transform: rotate(0deg);
 				}
 
 				.setupInfo {
@@ -127,15 +123,6 @@ const Setup = () => {
 				a {
 					text-decoration: none!important;
 					color: #4C7DE2;
-				}
-				
-				@keyframes moveBackground {
-					0% {
-						background-position: 0 0;
-					}
-					100% {
-						background-position: 100% 0;
-					}
 				}
 
 
@@ -177,6 +164,7 @@ const Setup = () => {
 					display: flex;
 					justify-content: center;
 					align-items: center;
+					isolation: isolate;
 				}
 
 				.setupContainer {

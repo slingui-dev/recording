@@ -1,6 +1,50 @@
 {
+  "reviewAskTitle": {
+    "message": "Как вам Screenity?",
+    "description": "Review prompt step 1 question (sentiment check) in the editor"
+  },
+  "reviewAskGood": {
+    "message": "Всё отлично",
+    "description": "Review prompt positive sentiment button label / tooltip"
+  },
+  "reviewAskBad": {
+    "message": "Не очень",
+    "description": "Review prompt negative sentiment button label / tooltip"
+  },
+  "reviewThanksTitle": {
+    "message": "Вы сделали мой день!",
+    "description": "Review prompt happy-branch title in the editor"
+  },
+  "reviewThanksDescription": {
+    "message": "Я Alyssa, создательница Screenity, работаю в одиночку. Первую версию я создала ещё в 2020 году и до сих пор активно поддерживаю бесплатное расширение.\n\nЕсли Screenity вам помогло, короткий отзыв, это один из лучших способов его поддержать ❤️",
+    "description": "Review prompt happy-branch description (founder voice) in the editor. Paragraphs separated by a blank line."
+  },
+  "reviewThanksButton": {
+    "message": "Оставьте отзыв",
+    "description": "Review prompt button that opens the Chrome Web Store review page"
+  },
+  "reviewThanksLater": {
+    "message": "Может быть, позже",
+    "description": "Review prompt snooze button on the happy branch"
+  },
+  "reviewSorryTitle": {
+    "message": "Жаль это слышать",
+    "description": "Review prompt unhappy-branch title in the editor"
+  },
+  "reviewSorryDescription": {
+    "message": "Я Alyssa, создательница Screenity, и я сама читаю каждое сообщение. Напишите, что пошло не так, и я сделаю всё возможное, чтобы это исправить.",
+    "description": "Review prompt unhappy-branch description in the editor"
+  },
+  "reviewSorryButton": {
+    "message": "Отправить отзыв",
+    "description": "Review prompt button that opens the private feedback form"
+  },
+  "reviewSorryDismiss": {
+    "message": "Нет, спасибо",
+    "description": "Review prompt dismiss button on the unhappy branch"
+  },
   "extName": {
-    "message": "Slingui - Запись экрана & Аннотации",
+    "message": "Screenity - Запись экрана & Аннотации",
     "description": "Название расширения"
   },
   "extDesc": {
@@ -48,7 +92,7 @@
     "description": "Заголовок модального окна предупреждения о разрешениях для камеры / микрофона"
   },
   "permissionsModalDescription": {
-    "message": "Похоже,  Slingui Recording не может получить доступ к вашей камере или микрофону. Убедитесь, что разрешаете доступ, нажав на значок камеры в строке адреса.",
+    "message": "Похоже, Screenity не может получить доступ к вашей камере или микрофону. Убедитесь, что разрешаете доступ, нажав на значок камеры в строке адреса.",
     "description": "Описание модального окна предупреждения о разрешениях для камеры / микрофона"
   },
   "permissionsModalDismiss": {
@@ -680,11 +724,11 @@
     "description": "Заголовок всплывающего окна приостановленной записи"
   },
   "chromePermissionsModalTitle": {
-    "message": " Slingui Recording не имеет разрешения на запись вашего экрана",
+    "message": "Screenity не имеет разрешения на запись вашего экрана",
     "description": "Заголовок модального окна разрешения"
   },
   "chromePermissionsModalDescription": {
-    "message": "Для включения записи экрана вы должны предоставить разрешение на запись экрана при запросе от  Slingui Recording.",
+    "message": "Для включения записи экрана вы должны предоставить разрешение на запись экрана при запросе от Screenity.",
     "description": "Описание модального окна разрешения"
   },
   "chromePermissionsModalAction": {
@@ -712,7 +756,7 @@
     "description": "Отмена модального окна отключенного микрофона"
   },
   "setupTitle": {
-    "message": "Начните работу с  Slingui Recording в трех простых шагах:",
+    "message": "Начните работу с Screenity в трех простых шагах:",
     "description": "Заголовок шагов настройки"
   },
   "setupStep1Before": {
@@ -736,7 +780,7 @@
     "description": "Шаг 3 настройки, перед значком. Требуется пробел в конце."
   },
   "setupStep3After": {
-    "message": " значок  Slingui Recording для запуска",
+    "message": " значок Screenity для запуска",
     "description": "Шаг 3 настройки, после значка. Требуется пробел в начале."
   },
   "setupCompleteTitle": {
@@ -796,7 +840,7 @@
     "description": "Кнопка 'Остановить запись' на экране записи"
   },
   "updateAnnouncementTitle": {
-    "message": "Добро пожаловать в новый  Slingui Recording!",
+    "message": "Добро пожаловать в новый Screenity!",
     "description": "Заголовок объявления об обновлении для существующих пользователей"
   },
   "updateAnnouncementDescription": {
@@ -816,7 +860,7 @@
     "description": "Заголовок модального окна ошибки потока"
   },
   "streamErrorModalDescription": {
-    "message": "Похоже, произошла ошибка при запуске записи. Перезапустите браузер и попробуйте снова. Если проблема сохраняется, пожалуйста, свяжитесь с нами по адресу support@ Slingui Recording.io.",
+    "message": "Похоже, произошла ошибка при запуске записи. Перезапустите браузер и попробуйте снова. Если проблема сохраняется, пожалуйста, свяжитесь с нами по адресу support@screenity.io.",
     "description": "Описание модального окна ошибки потока"
   },
   "highestQuality": {
@@ -868,7 +912,7 @@
     "description": "Заголовок сообщения о нехватке места"
   },
   "notEnoughSpaceDescription": {
-    "message": "Для работы  Slingui Recording требуется как минимум 1 ГБ свободного места. Пожалуйста, освободите место на вашем устройстве и попробуйте снова.",
+    "message": "Для работы Screenity требуется как минимум 1 ГБ свободного места. Пожалуйста, освободите место на вашем устройстве и попробуйте снова.",
     "description": "Описание сообщения о нехватке места"
   },
   "clearSpaceButton": {
@@ -900,7 +944,7 @@
     "description": "Заголовок модального окна необработанной записи"
   },
   "rawRecordingModalDescription": {
-    "message": "Необработанный видеофайл - это оригинальный видеофайл, записанный  Slingui Recording. Этот видеофайл не обработан и не редактирован, поэтому он может быть очень большим и не всегда можно воспроизвести на всех устройствах. Если у вас возникли проблемы с обработанным видео, вы можете использовать этот файл для восстановления своего видео.",
+    "message": "Необработанный видеофайл - это оригинальный видеофайл, записанный Screenity. Этот видеофайл не обработан и не редактирован, поэтому он может быть очень большим и не всегда можно воспроизвести на всех устройствах. Если у вас возникли проблемы с обработанным видео, вы можете использовать этот файл для восстановления своего видео.",
     "description": "Описание модального окна необработанной записи"
   },
   "rawRecordingModalButton": {
@@ -912,7 +956,7 @@
     "description": "Заголовок модального окна Устранения неполадок"
   },
   "troubleshootModalDescription": {
-    "message": "После скачивания отправьте этот файл на support@ Slingui Recording.io вместе с любой актуальной информацией. Мы используем эти данные, чтобы помочь вам устранить любые проблемы с расширением и, при возможности, восстановить ваше видео.",
+    "message": "После скачивания отправьте этот файл на support@screenity.io вместе с любой актуальной информацией. Мы используем эти данные, чтобы помочь вам устранить любые проблемы с расширением и, при возможности, восстановить ваше видео.",
     "description": "Описание модального окна Устранения неполадок"
   },
   "troubleshootModalButton": {
@@ -924,11 +968,11 @@
     "description": "Заголовок модального окна ограничения более 5 минут"
   },
   "overLimitModalDescription": {
-    "message": "Поскольку  Slingui Recording полностью конфиденциален и работает локально, его возможности ограничены аппаратными ресурсами вашего устройства. Обработка видео такой длины займет слишком много времени и ресурсов. Но не волнуйтесь, вы всё равно можете скачать файл WEBM или оригинальную запись, но редактирование и экспорт в MP4 недоступны. Тем не менее, вы можете попробовать обработать видео, если осознаете риски.",
+    "message": "Поскольку Screenity полностью конфиденциален и работает локально, его возможности ограничены аппаратными ресурсами вашего устройства. Обработка видео такой длины займет слишком много времени и ресурсов. Но не волнуйтесь, вы всё равно можете скачать файл WEBM или оригинальную запись, но редактирование и экспорт в MP4 недоступны. Тем не менее, вы можете попробовать обработать видео, если осознаете риски.",
     "description": "Описание модального окна ограничения более 5 минут"
   },
   "overLimitModalDescriptionFastPath": {
-    "message": "Поскольку  Slingui Recording полностью конфиденциален и работает локально, его возможности ограничены аппаратными ресурсами вашего устройства. Обработка видео такой длины займет слишком много времени и ресурсов. Ваш файл MP4 готов к скачиванию, но редактирование в браузере недоступно для записей такой длины. Тем не менее, вы можете попробовать обработать видео, если осознаете риски.",
+    "message": "Поскольку Screenity полностью конфиденциален и работает локально, его возможности ограничены аппаратными ресурсами вашего устройства. Обработка видео такой длины займет слишком много времени и ресурсов. Ваш файл MP4 готов к скачиванию, но редактирование в браузере недоступно для записей такой длины. Тем не менее, вы можете попробовать обработать видео, если осознаете риски.",
     "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
   },
   "overLimitModalButton": {
@@ -970,12 +1014,8 @@
     "description": "Заголовок предупреждения о не поддерживаемом расширении на вкладке"
   },
   "extensionNotSupportedDescription": {
-    "message": " Slingui Recording не поддерживался на вашей предыдущей вкладке. Тем не менее, вы все равно можете начать запись здесь, а затем перейти на другую вкладку, но камера и панель инструментов не будут видны.",
+    "message": "Screenity не поддерживался на вашей предыдущей вкладке. Тем не менее, вы все равно можете начать запись здесь, а затем перейти на другую вкладку, но камера и панель инструментов не будут видны.",
     "description": "Описание предупреждения о не поддерживаемом расширении на вкладке"
-  },
-  "backupsTitle": {
-    "message": "Настройка локальных резервных копий для записей в  Slingui Recording",
-    "description": "Заголовок резервных копий"
   },
   "backupsDescription1": {
     "message": "Сохраняйте копии всех ваших записей. Если вы не настроите резервные копии, ваши записи будут сохранены только при скачивании.",
@@ -984,54 +1024,6 @@
   "backupsDescription2": {
     "message": "Вам может потребоваться создать новую папку сначала, если вы пытаетесь сохранить записи в папках, таких как 'Загрузки' или других системных папках.",
     "description": "Описание резервных копий"
-  },
-  "backupsSelectFolder": {
-    "message": "Выбрать папку",
-    "description": "Кнопка Выбрать папку"
-  },
-  "backupsNotNow": {
-    "message": "Не сейчас",
-    "description": "Кнопка Не сейчас"
-  },
-  "backupsOnTitle": {
-    "message": "Ваши записи локально синхронизированы",
-    "description": "Заголовок активированных резервных копий"
-  },
-  "backupsOnDescription": {
-    "message": "Для избежания запросов на разрешение при каждой записи рекомендуется оставить эту вкладку открытой.",
-    "description": "Описание активированных резервных копий"
-  },
-  "backupsClose": {
-    "message": "Закрыть вкладку в любом случае",
-    "description": "Кнопка Закрыть вкладку в любом случае"
-  },
-  "backupsStop": {
-    "message": "Остановить все резервные копии записей",
-    "description": "Кнопка Остановить резервные копии"
-  },
-  "backupsConfirmTitle": {
-    "message": "Пожалуйста, подтвердите доступ к вашей локальной папке резервных копий  Slingui Recording",
-    "description": "Заголовок подтверждения резервных копий"
-  },
-  "backupsConfirmDescription": {
-    "message": "Извините, но нам нужно ваше разрешение еще раз, чтобы продолжить создавать локальные копии ваших записей. К сожалению, нам придется спрашивать каждый раз, когда вы закроете эту вкладку, что может случиться, если вы закроете браузер или перезагрузите компьютер.",
-    "description": "Описание подтверждения резервных копий"
-  },
-  "backupsConfirmAllow": {
-    "message": "Разрешить  Slingui Recording продолжить создавать резервные копии записей",
-    "description": "Кнопка Разрешить в подтверждении резервных копий"
-  },
-  "backupsToggle": {
-    "message": "Создавать резервные копии записей",
-    "description": "Метка Переключить резервные копии"
-  },
-  "backupPermissionFailTitle": {
-    "message": "Отказано в разрешении на создание резервных копий записи",
-    "description": "Заголовок отказа в разрешении на резервное копирование"
-  },
-  "backupPermissionFailDescription": {
-    "message": "Вы не выбрали папку для создания локальных резервных копий записей. В зависимости от версии вашего браузера или операционной системы, вас могут попросить выбрать папку каждый раз, когда вы начнете запись. Вы можете попробовать снова или полностью отключить резервное копирование, если вы предпочтете не давать разрешения повторно.",
-    "description": "Описание отказа в разрешении на резервное копирование"
   },
   "recordAudioWarningMacTitle": {
     "message": "Запись аудио с компьютера",
@@ -1194,7 +1186,7 @@
     "description": "Button label to go to the dashboard in the popup"
   },
   "welcomePopupTitle": {
-    "message": "Добро пожаловать в  Slingui Recording",
+    "message": "Добро пожаловать в Screenity",
     "description": "Title for the welcome popup shown to new users"
   },
   "welcomePopupDescriptionTop": {
@@ -1254,7 +1246,7 @@
     "description": "Title shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionDescription": {
-    "message": "Ваша подписка  Slingui Recording Pro неактивна.",
+    "message": "Ваша подписка Screenity Pro неактивна.",
     "description": "Description shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionReactivation": {
@@ -1338,12 +1330,12 @@
     "description": "Title for the welcome Pro popup"
   },
   "welcomeProDescription": {
-    "message": "Войдите, чтобы сохранить видео в облако, делиться ссылкой и использовать расширенное редактирование.",
+    "message": "Делитесь записями по аккуратной ссылке, сохраняйте их в облаке и добавляйте зумы, субтитры и макеты, если и когда понадобится.",
     "description": "Description for the welcome Pro popup"
   },
   "welcomeProButton": {
-    "message": "Войти, чтобы открыть платные функции",
-    "description": "Button to sign in to  Slingui Recording Pro"
+    "message": "Разблокировать редактор",
+    "description": "Button to sign in to Screenity Pro"
   },
   "welcomeProSupport": {
     "message": "Поддержите разработку от инди-разработчицы",
@@ -1362,7 +1354,7 @@
     "description": "Pro banner title in the editor"
   },
   "proBannerDescription": {
-    "message": " Slingui Recording всегда будет бесплатным, с открытым кодом и без рекламы. Pro покрывает облачные и серверные расходы и поддерживает инди-разработку! ❤️",
+    "message": "Screenity всегда будет бесплатным, с открытым кодом и без рекламы. Pro покрывает облачные и серверные расходы и поддерживает инди-разработку! ❤️",
     "description": "Pro banner description in the editor"
   },
   "proBannerAltButton": {
@@ -1394,15 +1386,15 @@
     "description": "Button to upgrade to Pro"
   },
   "hostBannerTitle": {
-    "message": "Нравится пользоваться  Slingui Recording локально? Поддержите дальнейшую разработку!",
+    "message": "Нравится пользоваться Screenity локально? Поддержите дальнейшую разработку!",
     "description": "Заголовок баннера о самостоятельном хостинге в редакторе"
   },
   "hostBannerDescription": {
-    "message": " Slingui Recording разработана независимой разработчицей. Самостоятельный хостинг бесплатен, но если вам полезен этот инструмент, подумайте о поддержке через Pro ❤️",
+    "message": "Screenity разработана независимой разработчицей. Самостоятельный хостинг бесплатен, но если вам полезен этот инструмент, подумайте о поддержке через Pro ❤️",
     "description": "Описание баннера о самостоятельном хостинге в редакторе"
   },
   "welcomeBackPopupTitle": {
-    "message": "С возвращением в  Slingui Recording",
+    "message": "С возвращением в Screenity",
     "description": "Заголовок приветственного окна для возвращающихся пользователей"
   },
   "welcomeBackProTitle": {
@@ -1410,15 +1402,15 @@
     "description": "Заголовок для функции облачного хранилища в приветственном окне"
   },
   "welcomeBackProDescription": {
-    "message": " Slingui Recording Pro — это новая дополнительная платформа для сохранения видео в облаке, обмена по ссылке и использования расширенных инструментов редактирования — если и когда они вам понадобятся.",
+    "message": "Screenity Pro — это новая дополнительная платформа для сохранения видео в облаке, обмена по ссылке и использования расширенных инструментов редактирования — если и когда они вам понадобятся.",
     "description": "Описание функции облачного хранилища в приветственном окне"
   },
   "welcomeBackProCTA": {
-    "message": "Узнать больше о  Slingui Recording Pro",
+    "message": "Узнать больше о Screenity Pro",
     "description": "Кнопка призыва к действию для функции облачного хранилища в приветственном окне"
   },
   "welcomeToProTitleModal": {
-    "message": "Добро пожаловать в  Slingui Recording Pro",
+    "message": "Добро пожаловать в Screenity Pro",
     "description": "Заголовок приветственного окна Pro"
   },
   "welcomeToProDescriptionModal": {
@@ -1438,7 +1430,7 @@
     "description": "WebCodecs failure auto-disable toast"
   },
   "proOnboardingWelcomeTitle": {
-    "message": "Добро пожаловать в расширение  Slingui Recording Pro",
+    "message": "Добро пожаловать в расширение Screenity Pro",
     "description": "Pro onboarding welcome step title"
   },
   "proOnboardingWelcomeDescription": {
@@ -1574,7 +1566,7 @@
     "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
   },
   "editorRecoveryToast": {
-    "message": "Запись сохранена. Редактор не открылся. Нажмите на значок  Slingui Recording, чтобы попробовать снова.",
+    "message": "Запись сохранена. Редактор не открылся. Нажмите на значок Screenity, чтобы попробовать снова.",
     "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
   },
   "stopAckTimeoutToast": {
@@ -1666,5 +1658,113 @@
   },
   "recordingCorruptToast": {
     "message": "Эту запись невозможно воспроизвести. Возможно, файл повреждён или неполный. Попробуйте скачать исходный файл через меню Сохранить."
+  },
+  "storageFullRecordingError": {
+    "message": "Недостаточно места для записи. Освободите место на диске и попробуйте снова.",
+    "description": "Shown when the browser can't allocate enough local storage to start a recording"
+  },
+  "storageLowRecordingWarning": {
+    "message": "Хранилище браузера почти заполнено. Освободите место на диске, чтобы не потерять эту запись.",
+    "description": "Shown when local storage is running low while a recording is in progress"
+  },
+  "screenStreamUnavailableError": {
+    "message": "Не удалось получить доступ к экрану. Запустите запись снова.",
+    "description": "Shown when the screen capture stream is missing after the user picked a source"
+  },
+  "tabStreamUnavailableError": {
+    "message": "Не удалось получить доступ к видео этой вкладки. Перезагрузите вкладку и попробуйте снова.",
+    "description": "Shown when Chrome won't return a tab capture stream for the chosen tab"
+  },
+  "streamingDataTimeoutError": {
+    "message": "Запись не началась вовремя. Попробуйте снова.",
+    "description": "Shown when the recorder tab never received streaming-data from the background script"
+  },
+  "unsupportedVideoCodecError": {
+    "message": "Ваш браузер не поддерживает необходимые видеокодеки. Обновите Chrome и попробуйте снова.",
+    "description": "Shown when no supported MediaRecorder mimeType is available"
+  },
+  "cancelLabel": {
+    "message": "Отмена",
+    "description": "Cancel button on the download-in-progress banner"
+  },
+  "webmSlowTitle": {
+    "message": "Преобразование в WebM может занять некоторое время",
+    "description": "Title of the modal warning that MP4 to WebM conversion is slow"
+  },
+  "webmSlowDescription": {
+    "message": "При сохранении в WebM всё видео кодируется заново, поэтому для длинных записей это может занять несколько минут. MP4 сохраняется мгновенно.",
+    "description": "Body of the slow-WebM warning modal"
+  },
+  "webmSlowMp4": {
+    "message": "Скачать MP4 вместо этого",
+    "description": "Primary button: download MP4 instead of the slow WebM conversion"
+  },
+  "webmSlowContinue": {
+    "message": "Продолжить с WebM",
+    "description": "Secondary button: proceed with the slow WebM conversion"
+  },
+  "downloadProcessingTitle": {
+    "message": "Подготовка загрузки",
+    "description": "Title of the download-in-progress banner with the Cancel button"
+  },
+  "downloadProcessingDescription": {
+    "message": "Для длинных записей это может занять некоторое время.",
+    "description": "Body of the download-in-progress banner"
+  },
+  "cameraMicBlockedTitle": {
+    "message": "Камера и микрофон недоступны",
+    "description": "Toast title shown when the current page's Permissions-Policy blocks the extension's camera and microphone"
+  },
+  "cameraMicBlockedDescription": {
+    "message": "Этот сайт блокирует доступ к камере и микрофону. Вы всё равно можете записывать здесь, но ваша камера не будет видна.",
+    "description": "Toast description shown when the current page's Permissions-Policy blocks the extension's camera and microphone"
+  },
+  "downloadFailedModalTitle": {
+    "message": "Загрузка не завершилась",
+    "description": "Modal title when a download to disk times out or fails"
+  },
+  "downloadFailedModalDescription": {
+    "message": "Попробуйте снова.",
+    "description": "Toast->modal description: what to do after a failed download"
+  },
+  "driveGenericModalTitle": {
+    "message": "Не удалось сохранить на Google Диск",
+    "description": "Modal title for a generic Google Drive save failure"
+  },
+  "driveGenericModalDescription": {
+    "message": "Попробуйте снова.",
+    "description": "Modal description for a generic Google Drive save failure"
+  },
+  "driveQuotaModalTitle": {
+    "message": "На вашем Google Диске закончилось место",
+    "description": "Modal title when the Google Drive account is out of storage"
+  },
+  "driveQuotaModalDescription": {
+    "message": "Освободите место и попробуйте снова.",
+    "description": "Modal description when the Google Drive account is out of storage"
+  },
+  "driveTooLargeModalTitle": {
+    "message": "Запись слишком большая",
+    "description": "Modal title when a recording exceeds Google Drive limits"
+  },
+  "driveTooLargeModalDescription": {
+    "message": "Эта запись слишком большая, чтобы сохранить её на Google Диск.",
+    "description": "Modal description when a recording exceeds Google Drive limits"
+  },
+  "driveAuthModalTitle": {
+    "message": "Не удалось получить доступ к Google Диску",
+    "description": "Modal title when Google Drive authentication expired or was revoked"
+  },
+  "driveAuthModalDescription": {
+    "message": "Войдите снова.",
+    "description": "Modal description when Google Drive authentication expired or was revoked"
+  },
+  "emptyRecordingTitle": {
+    "message": "Эта запись пуста",
+    "description": "Modal title when the recording file contains no video"
+  },
+  "emptyRecordingDescription": {
+    "message": "Видео не записано. Попробуйте записать снова.",
+    "description": "Modal description when the recording file contains no video"
   }
 }

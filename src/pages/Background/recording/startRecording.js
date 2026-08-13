@@ -5,6 +5,7 @@ import { initDiagSession, diagEvent } from "../../utils/diagnosticLog";
 import { makeRecordingAttemptId } from "../../utils/errorCodes";
 import { lifecycle } from "../../utils/lifecycleLog";
 import { sweepRecorderTabs } from "./sweepRecorderTabs";
+import { emitRecordingTelemetry } from "./emitRecordingTelemetry";
 
 // `recording` flag isn't set until the recorder iframe inits (seconds later),
 // so countdown-finished + 8s fallback can both fire and open two recorder tabs
@@ -73,8 +74,68 @@ export const startRecording = async (caller = "unknown") => {
   }
 };
 
+// a real back-to-back always goes through the 3s countdown, so a countdown-
+// finished start landing sooner than this after stop is stale.
+const STALE_START_WINDOW_MS = 3000;
+
 const _startRecordingInner = async (caller) => {
   const recordingAttemptId = makeRecordingAttemptId();
+  // only gate countdown-finished; direct/fallback/restart don't share it.
+  try {
+    const {
+      recordingStoppedAt,
+      recording,
+      restarting,
+      countdownStartedAt,
+      countdownFinishedAt,
+    } = await chrome.storage.local.get([
+      "recordingStoppedAt",
+      "recording",
+      "restarting",
+      "countdownStartedAt",
+      "countdownFinishedAt",
+    ]);
+    const sinceStopMs =
+      typeof recordingStoppedAt === "number"
+        ? Date.now() - recordingStoppedAt
+        : null;
+    // Countdown after prior stop = fresh back-to-back, not stale dispatch.
+    const countdownIsFresh =
+      typeof recordingStoppedAt === "number" &&
+      ((typeof countdownStartedAt === "number" &&
+        countdownStartedAt > recordingStoppedAt) ||
+        (typeof countdownFinishedAt === "number" &&
+          countdownFinishedAt > recordingStoppedAt));
+    if (
+      caller === "countdown-finished" &&
+      sinceStopMs !== null &&
+      sinceStopMs < STALE_START_WINDOW_MS &&
+      !recording &&
+      !restarting &&
+      !countdownIsFresh
+    ) {
+      console.warn(
+        "[Screenity][BG] startRecording aborted: prior recording stopped",
+        sinceStopMs,
+        "ms ago, caller:",
+        caller,
+      );
+      try {
+        chrome.storage.local.set({
+          lastStartAborted: {
+            ts: Date.now(),
+            caller,
+            sinceStopMs,
+            reason: "rapid-restart-after-stop",
+          },
+          // clear so the start-in-flight guard stops shielding cleanup.
+          recordingStartingAt: null,
+          pendingRecording: false,
+        });
+      } catch {}
+      return;
+    }
+  } catch {}
   // Diagnostic-only snapshot of residual state; runs async so it
   // doesn't block the actual start path. ~17-key storage read can
   // cost 30-80ms on a contended SW and there's no consumer that
@@ -95,9 +156,6 @@ const _startRecordingInner = async (caller) => {
         "offscreen",
         "useWebCodecsRecorder_v2",
         "fastRecorderInUse",
-        "backup",
-        "backupSetup",
-        "backupTab",
         "memoryError",
       ]);
       lifecycle("BG.startRecording", "session-boundary", {
@@ -134,18 +192,11 @@ const _startRecordingInner = async (caller) => {
     "recordingType",
   ]);
 
-  // Close every prior editor tab. OPFS wipes the previous recording
-  // when a new one starts, so a stale editor on old backing data is
-  // worse than closing it. URL-based sweep (not cached `sandboxTab`)
-  // because sandboxTab only tracks the LAST editor; consecutive
-  // recordings would orphan earlier ones. recordingStartingAt above
-  // keeps the cascading close from sweeping the new recorder tab.
+  // Close every prior editor tab by URL (sandboxTab only tracks the last).
+  // OPFS wipes on new recording, so a stale editor would read missing data.
   try {
-    const editorUrls = [
-      chrome.runtime.getURL("editor.html"),
-      chrome.runtime.getURL("editorwebcodecs.html"),
-      chrome.runtime.getURL("editorviewer.html"),
-    ];
+    // editor.html covers viewer mode too (editor.html?view=1); startsWith match.
+    const editorUrls = [chrome.runtime.getURL("editor.html")];
     const allTabs = await chrome.tabs.query({});
     const editorTabs = allTabs.filter(
       (t) =>
@@ -181,6 +232,8 @@ const _startRecordingInner = async (caller) => {
     editorRecordingError: null,
     editorReadyAt: null,
     editorReadyPath: null,
+    // re-arm count is per-attempt; a leaked one would fail this recording early
+    firstChunkWatchdogState: null,
     // prior sandboxTab would route this attempt's errors to the wrong editor
     sandboxTab: null,
     // paused leak from a prior errored recording would mis-account duration
@@ -195,15 +248,12 @@ const _startRecordingInner = async (caller) => {
     lastRecordingFinalizedFileName: null,
     lastRecordingError: null,
     lastChunkSendFailure: null,
+    lastRecordingSalvaged: null,
     lastStartRecordingCaller: { caller, stack, ts: Date.now() },
   });
 
-  // Clear leaked sceneId from a prior standalone recording; the
-  // cloudrecorder reads storage at start and a stale value tags the
-  // new recording's telemetry. Only clear sceneId/sceneIdStatus, NOT
-  // pendingSceneIndex: it's an array with a `= []` destructuring
-  // default that only covers `undefined`; setting it null makes
-  // `.includes()` throw. Its own upsert/remove lifecycle owns it.
+  // Clear leaked sceneId so cloudrecorder doesn't tag new telemetry with it.
+  // pendingSceneIndex owns its own lifecycle; null would crash its .includes().
   const {
     recordingToScene,
     multiMode,
@@ -280,12 +330,11 @@ const _startRecordingInner = async (caller) => {
 
   chrome.storage.local.set({ lastRecordingType: recordingType || "screen" });
 
-  const { quality, systemAudio, audioInput, backup, offscreen, alarm, alarmTime, countdown } =
+  const { quality, systemAudio, audioInput, offscreen, alarm, alarmTime, countdown } =
     await chrome.storage.local.get([
       "quality",
       "systemAudio",
       "audioInput",
-      "backup",
       "offscreen",
       "alarm",
       "alarmTime",
@@ -293,12 +342,18 @@ const _startRecordingInner = async (caller) => {
     ]);
   await initDiagSession({
     recordingAttemptId,
+    // Chrome major pins each session to a version so the local diagnostic
+    // zip can be read against version-gated browser fixes.
+    browserMajor: (() => {
+      const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+      const m = ua.match(/Chrome\/([0-9]+)/);
+      return m ? parseInt(m[1], 10) : null;
+    })(),
     recordingType: recordingType || "screen",
     quality: quality || null,
     region: Boolean(customRegion),
     systemAudio: Boolean(systemAudio),
     audioInput: Boolean(audioInput),
-    backup: Boolean(backup),
     offscreen: Boolean(offscreen),
     alarm: Boolean(alarm),
     alarmTime: alarm ? (alarmTime || null) : null,
@@ -306,6 +361,57 @@ const _startRecordingInner = async (caller) => {
   });
   // sync log so the event flushes to storage before SW can be killed
   diagEvent("session-start", { region: Boolean(customRegion), caller });
+
+  // Fire-and-forget beacon before the recorder tab exists, so sessions
+  // that die early still leave a server-side breadcrumb. Skipped for
+  // anonymous users to avoid 401 spam.
+  void (async () => {
+    try {
+      const tokenSnap = await chrome.storage.local.get(["screenityToken"]);
+      if (!tokenSnap?.screenityToken) return;
+      const [extras, tabs, wins] = await Promise.all([
+        chrome.storage.local.get([
+          "screenityUser",
+          "qualityValue",
+          "fpsValue",
+          "cameraActive",
+          "micActive",
+          "recordedTabDomain",
+        ]),
+        chrome.tabs.query({}).catch(() => []),
+        chrome.windows.getAll({}).catch(() => []),
+      ]);
+      const userObj = extras?.screenityUser || null;
+      await emitRecordingTelemetry("recording_initiated_beacon", {
+        recordingSessionId: recordingAttemptId,
+        userIdHint: userObj?._id || userObj?.id || null,
+        userAgentFull:
+          typeof navigator !== "undefined" && navigator.userAgent
+            ? String(navigator.userAgent).slice(0, 256)
+            : null,
+        platformFull:
+          typeof navigator !== "undefined" && navigator.platform
+            ? String(navigator.platform).slice(0, 64)
+            : null,
+        hardwareConcurrency: Number.isFinite(navigator?.hardwareConcurrency)
+          ? navigator.hardwareConcurrency
+          : null,
+        recordingType: recordingType || "screen",
+        // Storage canonical key is qualityValue, not quality. `quality`
+        // is unset on this read path; reading it returned undefined and
+        // surfaced as null on every beacon.
+        qualityValue: extras?.qualityValue || null,
+        fpsValue: extras?.fpsValue || null,
+        cameraActive: Boolean(extras?.cameraActive),
+        micActive: Boolean(extras?.micActive),
+        systemAudio: Boolean(systemAudio),
+        multiMode: Boolean(multiMode),
+        tabsCount: Array.isArray(tabs) ? tabs.length : null,
+        windowsCount: Array.isArray(wins) ? wins.length : null,
+        recordedTabDomain: extras?.recordedTabDomain || null,
+      });
+    } catch {}
+  })();
 
   const { recordingTab: prevRecTab } = await chrome.storage.local.get([
     "recordingTab",

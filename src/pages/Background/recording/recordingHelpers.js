@@ -5,7 +5,7 @@ import {
   getCurrentTab,
 } from "../tabManagement";
 import { sendMessageRecord } from "./sendMessageRecord";
-import { stopRecording } from "./stopRecording";
+import { stopRecording, clearInMemoryEditorLock } from "./stopRecording";
 import { addAlarmListener } from "../alarms/addAlarmListener";
 import { getStreamingData } from "./getStreamingData";
 import { discardOffscreenDocuments } from "../offscreen/discardOffscreenDocuments";
@@ -18,27 +18,14 @@ import { sweepRecorderTabs } from "./sweepRecorderTabs";
 // Mirrors CloudRecorder.appendUploadTelemetryEvent so BG-side projectId mutations
 // land in the same `cloudUploadTelemetryEvents` storage key surfaced by
 // buildDiagnosticZip → upload-telemetry.json. Diagnostic-only; best-effort.
-const BG_UPLOAD_TELEMETRY_KEY = "cloudUploadTelemetryEvents";
-const BG_UPLOAD_TELEMETRY_MAX = 300;
+import { appendUploadTelemetryEventSerialized } from "../utils/serializedTelemetryStore";
+
 const appendBgUploadTelemetryEvent = async (payload) => {
-  try {
-    const existing = await chrome.storage.local.get([BG_UPLOAD_TELEMETRY_KEY]);
-    const current = Array.isArray(existing?.[BG_UPLOAD_TELEMETRY_KEY])
-      ? existing[BG_UPLOAD_TELEMETRY_KEY]
-      : [];
-    const eventPayload = {
-      ts: Date.now(),
-      uploaderType: "bg_recording",
-      ...payload,
-    };
-    const next = [...current, eventPayload].slice(-BG_UPLOAD_TELEMETRY_MAX);
-    await chrome.storage.local.set({
-      [BG_UPLOAD_TELEMETRY_KEY]: next,
-      lastUploadTelemetryEvent: eventPayload,
-    });
-  } catch {
-    // best-effort; telemetry must never break recording
-  }
+  await appendUploadTelemetryEventSerialized({
+    ts: Date.now(),
+    uploaderType: "bg_recording",
+    ...payload,
+  });
 };
 
 export const checkCapturePermissions = async ({ isLoggedIn, isSubscribed }) => {
@@ -184,12 +171,8 @@ export const handleRecordingError = async (request) => {
   ]);
   const preserveMultiProject =
     Boolean(multiMode) && Number(multiSceneCount) > 0;
-  // Clear sceneId/sceneIdStatus/pendingSceneIndex when projectId
-  // clears; a retry inheriting a stale sceneId reaches the
-  // cloudrecorder with projectId=null and sceneIdStatus="recording".
-  // pendingSceneIndex must clear to `[]`, not null: it's consumed
-  // via destructuring defaults that don't fire for null, and a null
-  // value crashes the next .includes() in CloudRecorder.
+  // Clear scene state when projectId clears so retries don't inherit it.
+  // pendingSceneIndex must be [], not null (defaults don't fire on null).
   const multiState = preserveMultiProject
     ? {}
     : {
@@ -205,6 +188,7 @@ export const handleRecordingError = async (request) => {
         pendingSceneIndex: [],
       };
 
+  clearInMemoryEditorLock();
   await chrome.storage.local.set({
     recording: false,
     // Clear pendingRecording at stop. countdownEverShown is per-tab
@@ -295,8 +279,6 @@ export const handleRecordingError = async (request) => {
     }
     if (request.error === "stream-error") {
       sendMessageTab(activeTab, { type: "stream-error", errorCode });
-    } else if (request.error === "backup-error") {
-      sendMessageTab(activeTab, { type: "backup-error", errorCode });
     }
   });
 
@@ -364,19 +346,34 @@ export const handleGetStreamingData = async () => {
 
 export const videoReady = async () => {
   perfMark("BG.recordingHelpers videoReady.enter");
-  const { backupTab, recordingDuration, recordingTab, lastRecordingBackendRef } =
-    await chrome.storage.local.get([
-      "backupTab",
-      "recordingDuration",
-      "recordingTab",
-      "lastRecordingBackendRef",
-    ]);
+  const {
+    recordingDuration,
+    recordingTab,
+    lastRecordingBackendRef,
+    recording,
+  } = await chrome.storage.local.get([
+    "recordingDuration",
+    "recordingTab",
+    "lastRecordingBackendRef",
+    "recording",
+  ]);
   diagEvent("sw-received-video-ready", {
     recordingDurationMs: Number(recordingDuration) || 0,
-    backupTabPresent: Boolean(backupTab),
   });
-  if (backupTab) {
-    sendMessageTab(backupTab, { type: "close-writable" });
+
+  // Writer sets this fire-and-forget, but the discard path below kills that
+  // context first (marker set, key nulled 11s later), so re-assert it here.
+  // Skipped while recording since the file isn't finalized yet.
+  if (
+    lastRecordingBackendRef?.backend === "opfs" &&
+    lastRecordingBackendRef?.fileName &&
+    !recording
+  ) {
+    try {
+      await chrome.storage.local.set({
+        lastRecordingFinalizedFileName: lastRecordingBackendRef.fileName,
+      });
+    } catch {}
   }
   chrome.runtime
     .sendMessage({
@@ -414,24 +411,4 @@ export const videoReady = async () => {
     }
   }
   await stopRecording();
-};
-
-export const writeFile = async (request) => {
-  const { backupTab } = await chrome.storage.local.get(["backupTab"]);
-
-  if (backupTab) {
-    sendMessageTab(
-      backupTab,
-      {
-        type: "write-file",
-        index: request.index,
-      },
-      null,
-      () => {
-        sendMessageRecord({ type: "stop-recording-tab" });
-      },
-    );
-  } else {
-    sendMessageRecord({ type: "stop-recording-tab" });
-  }
 };

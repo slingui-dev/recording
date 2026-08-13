@@ -8,6 +8,7 @@ import React, {
 } from "react";
 
 import { updateFromStorage } from "./utils/updateFromStorage";
+import { shouldResendCropTarget } from "./cropTargetGate";
 import { lifecycle } from "../../utils/lifecycleLog";
 import { perfMark, perfReset } from "../../utils/perfMarks";
 
@@ -25,20 +26,12 @@ import {
 import { triggerSupportDownload } from "../../utils/triggerSupportDownload";
 
 export const contentStateContext = createContext();
+// Split out of contentStateContext: the 1s clock tick was re-rendering every
+// consumer in the page's shadow tree. Now it only hits the toolbar clock.
+export const timerContext = createContext([0, () => {}]);
 export const contentStateRef = { current: null };
-export let setContentState = () => { };
-export let setTimer = () => { };
-
-const SCREENITY_MEETING_STATE_MESSAGE = "screenity-meeting-state";
-const SCREENITY_MEETING_ENDED_MESSAGE = "screenity-meeting-ended";
-
-const ENFORCED_RECORDING_PREFERENCES = {
-  recordingType: "region",
-  customRegion: false,
-  pushToTalk: false,
-  cameraActive: false,
-  backgroundEffectsActive: false,
-};
+export let setContentState = () => {};
+export let setTimer = () => {};
 
 const CURSOR_EFFECTS = ["target", "highlight", "spotlight"];
 
@@ -54,60 +47,37 @@ const deriveCursorMode = (effects, fallbackMode) => {
   return effects[0] || "none";
 };
 
-const normalizeMicrophoneLabel = (label) => {
-  if (typeof label !== "string") return "";
-  return label.trim().toLowerCase();
-};
-
-const resolveMeetingMicrophoneDevice = (meetingMicrophone, audioInputDevices) => {
-  if (!meetingMicrophone || !Array.isArray(audioInputDevices)) return null;
-
-  const availableDevices = audioInputDevices.filter(
-    (device) => device && device.deviceId && device.deviceId !== "none",
-  );
-
-  if (availableDevices.length === 0) return null;
-
-  const meetingDeviceId =
-    typeof meetingMicrophone.deviceId === "string"
-      ? meetingMicrophone.deviceId.trim()
-      : "";
-
-  if (meetingDeviceId) {
-    const deviceById = availableDevices.find(
-      (device) => device.deviceId === meetingDeviceId,
-    );
-
-    if (deviceById) return deviceById;
-  }
-
-  const meetingLabel = normalizeMicrophoneLabel(meetingMicrophone.label);
-
-  if (!meetingLabel) return null;
-
-  const labelMatches = availableDevices.filter(
-    (device) => normalizeMicrophoneLabel(device.label) === meetingLabel,
-  );
-
-  return labelMatches.length === 1 ? labelMatches[0] : null;
-};
+// Scope the recording toolbar + camera bubble to the recorded tab for
+// tab/region recordings (they leak into other tabs today). Computation errs
+// toward showing; setting this false restores the prior always-show behavior.
+const ENABLE_TAB_SCOPED_UI = true;
+// How long a stop beep claimed by one tab silences the others.
+const STOP_BEEP_DEDUPE_MS = 5000;
 
 const ContentState = (props) => {
   const [timer, setTimerInternal] = React.useState(0);
   const CLOUD_FEATURES_ENABLED =
     process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
   setTimer = setTimerInternal;
-  const [URL, setURL] = useState(
-    "https://docs.slingui.com/recording-help/getting-started/77KizPC8MHVGfpKpqdux9D/why-does-screenity-ask-for-permissions/9AAE8zJ6iiUtCAtjn4SUT1"
+  const [URL] = useState(
+    "https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/why-does-screenity-ask-for-permissions/9AAE8zJ6iiUtCAtjn4SUT1",
   );
-  const [URL2, setURL2] = useState(
-    "https://docs.slingui.com/recording-help/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9"
+  const [URL2] = useState(
+    "https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9",
   );
   const startBeepRef = useRef(null);
   const stopBeepRef = useRef(null);
   const prevRecordingRef = useRef(null);
   const hydratedRef = useRef(false);
   const suppressStopBeepRef = useRef(false);
+  // The ref only silences this tab. Stopping from a tab that isn't the
+  // recording-UI owner made both beep, so the claim has to be cross-tab.
+  const claimStopBeep = () => {
+    suppressStopBeepRef.current = true;
+    try {
+      chrome.storage.local.set({ stopBeepHandledAt: Date.now() });
+    } catch {}
+  };
   const suppressStartBeepRef = useRef(false);
   const tabIdRef = useRef(null);
   const activeTabRef = useRef(null);
@@ -125,7 +95,6 @@ const ContentState = (props) => {
   const lastBeepStartTimeRef = useRef(null);
   const recordingBeepTabIdRef = useRef(null);
   const verifyDebounceRef = useRef(null);
-  const hasAnnouncedScreenityPongRef = useRef(false);
 
   const isTargetTab = useCallback(() => {
     const tabId = tabIdRef.current;
@@ -145,9 +114,51 @@ const ContentState = (props) => {
     return true;
   }, []);
 
+  // Whether THIS tab may render the recording UI. For tab/region recordings the
+  // toolbar + camera belong to the recorded tab only; desktop/screen/camera-only
+  // and idle are unaffected (always allowed). Errs toward showing while the tab
+  // id is still unknown so the recorded tab never flashes blank on navigation.
+  // The render gate in Wrapper reads contentState.recordingUiAllowed.
+  const recomputeRecordingUiAllowed = useCallback(
+    (reason) => {
+      const s = contentStateRef.current;
+      const type = s?.recordingType;
+      const tabBoundFlow =
+        (type === "tab" || type === "region") &&
+        Boolean(
+          s?.recording ||
+            s?.countdownActive ||
+            s?.isCountdownVisible ||
+            s?.preparingRecording ||
+            s?.pendingRecording,
+        );
+      let allowed = true;
+      if (ENABLE_TAB_SCOPED_UI && tabBoundFlow && tabIdRef.current != null) {
+        allowed = isTargetTab();
+      }
+      if (s?.recordingUiAllowed !== allowed) {
+        lifecycle("Content.ContentState", "recording-ui-allowed", {
+          allowed,
+          reason,
+          tabId: tabIdRef.current,
+          tabRecordedID: tabRecordedIdRef.current,
+          recordingUiTabId: recordingUiTabRef.current,
+          recordingType: type,
+          tabBoundFlow,
+        });
+        setContentState((prev) => ({ ...prev, recordingUiAllowed: allowed }));
+      }
+    },
+    [isTargetTab],
+  );
+
   const verifyUser = useCallback(async () => {
     if (!CLOUD_FEATURES_ENABLED) return;
-    const result = await checkAuthStatus();
+    // Don't force a cookie-based re-login from the popup: a fresh install with
+    // no prior signals stays logged out (shows the welcome immediately) until
+    // the user explicitly clicks "Log in". Returning users still auto-verify
+    // via hasPriorSignals in loginWithWebsite.
+    const result = await checkAuthStatus({ force: false });
 
     setContentState((prev) => ({
       ...prev,
@@ -180,6 +191,7 @@ const ContentState = (props) => {
     chrome.runtime.sendMessage({ type: "get-tab-id" }, (response) => {
       if (response?.tabId !== undefined && response?.tabId !== null) {
         tabIdRef.current = response.tabId;
+        recomputeRecordingUiAllowed("tab-id");
       }
     });
 
@@ -198,42 +210,48 @@ const ContentState = (props) => {
         recordingUiTabRef.current = result.recordingUiTabId ?? null;
         recordingStartTimeRef.current = result.recordingStartTime ?? null;
         recordingBeepTabIdRef.current = result.recordingBeepTabId ?? null;
+        recomputeRecordingUiAllowed("storage-mount");
       },
     );
-  }, []);
+  }, [recomputeRecordingUiAllowed]);
 
-  // Permissions-Policy: camera=(), microphone=() on the host page disables
-  // those APIs in every iframe including ours, surfacing as NotAllowedError;
-  // distinguish from a real permission issue.
+  // Recompute the recording-UI scope on visibility/focus. Unlike
+  // reconcileOnVisible (which bails during active recording), this runs during
+  // recording too, so a tab the user switches to mid-recording re-scopes. Flow
+  // changes (recording/type/scoping) trigger a recompute from the storage
+  // onChanged listener below. Deps are the stable callback only; this effect
+  // runs before `contentState` is declared, so it must not reference it.
+  useEffect(() => {
+    recomputeRecordingUiAllowed("mount");
+    const onVisible = () => recomputeRecordingUiAllowed("visibility");
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [recomputeRecordingUiAllowed]);
+
+  // Permissions-Policy camera=()/microphone=() surfaces as NotAllowedError, not a
+  // real permission issue. This top-page probe misses feature=(self) (facebook.com);
+  // that's caught by the permissions.html iframe message. display-capture blocks only region.
   useEffect(() => {
     try {
       const pp = document.permissionsPolicy || document.featurePolicy;
       if (!pp || typeof pp.allowsFeature !== "function") return;
       const cameraBlocked = !pp.allowsFeature("camera");
       const micBlocked = !pp.allowsFeature("microphone");
-      if (cameraBlocked || micBlocked) {
+      const displayCaptureBlocked = !pp.allowsFeature("display-capture");
+      if (cameraBlocked || micBlocked || displayCaptureBlocked) {
         setContentState((prev) => ({
           ...prev,
-          sitePermissionsBlocked: true,
+          sitePermissionsBlocked:
+            prev.sitePermissionsBlocked || cameraBlocked || micBlocked,
+          siteDisplayCaptureBlocked:
+            prev.siteDisplayCaptureBlocked || displayCaptureBlocked,
         }));
       }
     } catch {}
-  }, []);
-
-  useEffect(() => {
-    const locale = chrome.i18n.getMessage("@@ui_locale");
-    if (!locale.includes("en")) {
-      setURL(
-        "https://translate.google.com/translate?sl=en&tl=" +
-        locale +
-        "&u=https://help.screenity.io/getting-started/77KizPC8MHVGfpKpqdux9D/why-does-screenity-ask-for-permissions/9AAE8zJ6iiUtCAtjn4SUT1",
-      );
-      setURL2(
-        "https://translate.google.com/translate?sl=en&tl=" +
-        locale +
-        "&u=https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/how-to-grant-screenity-permission-to-record-your-camera-and-microphone/x6U69TnrbMjy5CQ96Er2E9",
-      );
-    }
   }, []);
 
   const startRecording = useCallback(() => {
@@ -276,20 +294,14 @@ const ContentState = (props) => {
     chrome.storage.local.set({ restarting: false });
     traceStep("recordingStarted");
     setStartFlowOutcome("ok");
-
-    // This cannot be triggered from here because the user might not have the page focused
-    //chrome.runtime.sendMessage({ type: "start-recording" });
-    window.postMessage({ type: "recording-started" }, "*");
-
   }, []);
 
   const restartRecording = useCallback(() => {
     // Suppress the stop beep: restart transitions recording true→false briefly.
-    suppressStopBeepRef.current = true;
+    claimStopBeep();
     const sourceTabId = tabIdRef.current ?? activeTabRef.current ?? null;
     chrome.storage.local.set({ restarting: true });
     setTimeout(() => {
-      chrome.runtime.sendMessage({ type: "discard-backup-restart" });
       chrome.runtime.sendMessage({ type: "handle-restart", sourceTabId });
       if (contentStateRef.current.alarm) {
         setTimer(contentStateRef.current.alarmTime);
@@ -323,7 +335,7 @@ const ContentState = (props) => {
             height: 16,
           });
           realSupport = support.supported;
-        } catch { }
+        } catch {}
       }
 
       chrome.storage.local.set({ realWebCodecsSupport: realSupport });
@@ -331,6 +343,8 @@ const ContentState = (props) => {
   }, []);
 
   const stopRecording = useCallback(() => {
+    // re-entry guard: if a previous stop is still finalizing, ignore.
+    if (contentStateRef.current.finalizingRecording) return;
     chrome.runtime.sendMessage({ type: "clear-recording-alarm" });
     const isMulti = contentStateRef.current.multiMode;
     // Preserve the user's tool state in multi-mode so they keep their
@@ -382,24 +396,19 @@ const ContentState = (props) => {
     try {
       playBeep(stopBeepRef, "assets/sounds/beep.mp3");
     } catch {}
-    suppressStopBeepRef.current = true;
+    claimStopBeep();
     chrome.runtime.sendMessage(
       { type: "stop-recording-tab", reason: "content-toolbar-stop" },
       (res) => {
-        if (!res || res.ok !== true) {
-          // Play beep sound at 50% volume
-          const audio = new Audio(chrome.runtime.getURL("/assets/sounds/beep.mp3"));
-          audio.volume = 0.5;
-          audio.play();
-          window.postMessage({ type: "recording-stopped" }, "*");
-          console.warn("Stop command not acknowledged, retrying…");
-          setTimeout(() => {
-            chrome.runtime.sendMessage({
-              type: "stop-recording-tab",
-              reason: "content-toolbar-stop-retry",
-            });
-          }, 200);
-        }
+      if (!res || res.ok !== true) {
+        console.warn("Stop command not acknowledged, retrying…");
+        setTimeout(() => {
+          chrome.runtime.sendMessage({
+            type: "stop-recording-tab",
+            reason: "content-toolbar-stop-retry",
+          });
+        }, 200);
+      }
       },
     );
     // Watchdog: clear finalizing if BG never signals editor-open.
@@ -454,7 +463,7 @@ const ContentState = (props) => {
       if (!dismiss) {
         contentStateRef.current.openToast(
           chrome.i18n.getMessage("pausedRecordingToast"),
-          function () { },
+          function () {},
         );
       }
     }, 100);
@@ -483,7 +492,7 @@ const ContentState = (props) => {
 
   const dismissRecording = useCallback((reason = "user-dismiss") => {
     setStartFlowOutcome("cancelled");
-    suppressStopBeepRef.current = true;
+    claimStopBeep();
     chrome.runtime.sendMessage({ type: "clear-recording-alarm" });
     chrome.storage.local.set({
       restarting: false,
@@ -593,38 +602,19 @@ const ContentState = (props) => {
       return;
     }
 
-    const currentState = contentStateRef.current || {};
-    const selectedAudioInput = Array.isArray(currentState.audioInput)
-      ? currentState.audioInput.find(
-          (device) => device.deviceId === currentState.defaultAudioInput,
-        )
-      : null;
-    const hasConfiguredMicrophone = Boolean(
-      currentState.microphonePermission &&
-        currentState.micActive &&
-        currentState.defaultAudioInput !== "none" &&
-        selectedAudioInput,
-    );
-
-    if (!hasConfiguredMicrophone) {
-      currentState.openToast?.(
-        chrome.i18n.getMessage("noMicrophoneDropdownLabel") ||
-          "Select and enable a microphone before recording.",
+    // Region capture runs getDisplayMedia in our in-page iframe, so a host page
+    // that won't delegate display-capture (e.g. facebook.com) rejects it before any
+    // picker. The popup disables this, but the shortcut path doesn't, so backstop it.
+    if (
+      contentStateRef.current?.recordingType === "region" &&
+      contentStateRef.current?.siteDisplayCaptureBlocked
+    ) {
+      contentStateRef.current.openToast?.(
+        chrome.i18n.getMessage("tabRecordingDisabledToast"),
         4000,
       );
       return;
     }
-
-    const enforcedStartState = {
-      ...currentState,
-      ...ENFORCED_RECORDING_PREFERENCES,
-    };
-    contentStateRef.current = enforcedStartState;
-    chrome.storage.local.set(ENFORCED_RECORDING_PREFERENCES);
-    setContentState((prev) => ({
-      ...prev,
-      ...ENFORCED_RECORDING_PREFERENCES,
-    }));
 
     // Kick off synchronously: later awaits (initStartFlowTrace, Pro storage
     // quota) would consume the click's user-gesture before it reaches
@@ -636,7 +626,7 @@ const ContentState = (props) => {
 
     const attemptId = `ra-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     await initStartFlowTrace(attemptId, {
-      recordingType: ENFORCED_RECORDING_PREFERENCES.recordingType,
+      recordingType: contentStateRef.current.recordingType,
       isPro: Boolean(
         contentStateRef.current.isLoggedIn &&
         contentStateRef.current.isSubscribed &&
@@ -647,7 +637,7 @@ const ContentState = (props) => {
     traceStep("startStreaming");
     perfReset();
     perfMark("Content startStreaming.click", {
-      recordingType: ENFORCED_RECORDING_PREFERENCES.recordingType,
+      recordingType: contentStateRef.current.recordingType,
     });
 
     // Overlay non-blocking while pending; popup stays open until recorder tab
@@ -686,7 +676,7 @@ const ContentState = (props) => {
           () => {
             window.open(process.env.SCREENITY_APP_BASE, "_blank");
           },
-          () => { },
+          () => {},
         );
       } else if (!success) {
         const isSubError = error === "Subscription inactive";
@@ -719,7 +709,7 @@ const ContentState = (props) => {
           async () => {
             window.location.reload();
           },
-          () => { },
+          () => {},
         );
       }
 
@@ -755,7 +745,7 @@ const ContentState = (props) => {
           // Direct call so the click's gesture reaches the sync permission check.
           startStreaming();
         },
-        () => { },
+        () => {},
         null,
         chrome.i18n.getMessage("learnMoreDot"),
         URL,
@@ -780,17 +770,9 @@ const ContentState = (props) => {
     ) {
       if (typeof contentStateRef.current.openModal === "function") {
         let clear = null;
-        let clearAction = () => { };
-        const locale = chrome.i18n.getMessage("@@ui_locale");
-        let helpURL =
+        let clearAction = () => {};
+        const helpURL =
           "https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/what-does-%E2%80%9Cmemory-limit-reached%E2%80%9D-mean-when-recording/8WkwHbt3puuXunYqQnyPcb";
-
-        if (!locale.includes("en")) {
-          helpURL =
-            "https://translate.google.com/translate?sl=en&tl=" +
-            locale +
-            "&u=https://help.screenity.io/troubleshooting/9Jy5RGjNrBB42hqUdREQ7W/what-does-%E2%80%9Cmemory-limit-reached%E2%80%9D-mean-when-recording/8WkwHbt3puuXunYqQnyPcb";
-        }
 
         const response = await chrome.runtime.sendMessage({
           type: "check-restore",
@@ -808,7 +790,7 @@ const ContentState = (props) => {
           clear,
           chrome.i18n.getMessage("permissionsModalDismiss"),
           clearAction,
-          () => { },
+          () => {},
           null,
           chrome.i18n.getMessage("learnMoreDot"),
           helpURL,
@@ -838,20 +820,25 @@ const ContentState = (props) => {
       tabRecordedID: null,
     });
 
-    if (
-      contentStateRef.current.recordingType === "region" &&
-      contentStateRef.current.cropTarget
-    ) {
-      contentStateRef.current.regionCaptureRef.contentWindow.postMessage(
-        {
-          type: "crop-target",
-          target: contentStateRef.current.cropTarget,
-          width: contentStateRef.current.regionWidth,
-          height: contentStateRef.current.regionHeight,
-        },
-        "*",
-      );
-    }
+    // Sent only after the mic-muted modal is confirmed: this makes the recorder
+    // call getDisplayMedia, so sending it earlier pops the picker behind the modal.
+    const sendRegionCropTarget = () => {
+      if (
+        contentStateRef.current.recordingType === "region" &&
+        contentStateRef.current.cropTarget &&
+        contentStateRef.current.regionCaptureRef?.contentWindow
+      ) {
+        contentStateRef.current.regionCaptureRef.contentWindow.postMessage(
+          {
+            type: "crop-target",
+            target: contentStateRef.current.cropTarget,
+            width: contentStateRef.current.regionWidth,
+            height: contentStateRef.current.regionHeight,
+          },
+          "*",
+        );
+      }
+    };
 
     setContentState((prevContentState) => ({
       ...prevContentState,
@@ -868,12 +855,17 @@ const ContentState = (props) => {
         chrome.i18n.getMessage("micMutedModalAction"),
         chrome.i18n.getMessage("micMutedModalCancel"),
         () => {
+          // Crop target first (after the user confirmed mic-off): this flushes
+          // the recorder's deferred streaming-data and starts getDisplayMedia.
+          sendRegionCropTarget();
           chrome.runtime.sendMessage({
             type: "desktop-capture",
-            region: true,
-            customRegion: false,
+            region:
+              contentStateRef.current.recordingType === "region" ? true : false,
+            customRegion: contentStateRef.current.customRegion,
             offscreenRecording: contentStateRef.current.offscreenRecording,
-            camera: false,
+            camera:
+              contentStateRef.current.recordingType === "camera" ? true : false,
           });
           setContentState((prevContentState) => ({
             ...prevContentState,
@@ -905,20 +897,25 @@ const ContentState = (props) => {
         },
       );
     } else {
+      // Crop target first: flushes the recorder's deferred streaming-data and
+      // starts getDisplayMedia (no mic modal to gate behind in this branch).
+      sendRegionCropTarget();
       perfMark("Content desktop-capture.sent");
       // Sync recordingType to storage so the cloudrecorder tab reads
       // the current pick, not a stale value from a prior session.
       // Mismatch causes the CR dispatch to land in the null-tabID
       // branch and crash with REC_START_CANCEL.
       chrome.storage.local.set({
-        ...ENFORCED_RECORDING_PREFERENCES,
+        recordingType: contentStateRef.current.recordingType || "screen",
       });
       chrome.runtime.sendMessage({
         type: "desktop-capture",
-        region: true,
-        customRegion: false,
+        region:
+          contentStateRef.current.recordingType === "region" ? true : false,
+        customRegion: contentStateRef.current.customRegion,
         offscreenRecording: contentStateRef.current.offscreenRecording,
-        camera: false,
+        camera:
+          contentStateRef.current.recordingType === "camera" ? true : false,
       });
       traceStep("desktopCaptureSent");
       setContentState((prevContentState) => ({
@@ -987,13 +984,13 @@ const ContentState = (props) => {
 
       const audioInputById = Array.isArray(audioInput)
         ? Object.fromEntries(
-          audioInput.map((device) => [device.deviceId, device.label]),
-        )
+            audioInput.map((device) => [device.deviceId, device.label]),
+          )
         : {};
       const videoInputById = Array.isArray(videoInput)
         ? Object.fromEntries(
-          videoInput.map((device) => [device.deviceId, device.label]),
-        )
+            videoInput.map((device) => [device.deviceId, device.label]),
+          )
         : {};
 
       const defaultAudioInputLabel =
@@ -1042,12 +1039,12 @@ const ContentState = (props) => {
             ...prevContentState,
             defaultVideoInput: videoInput[0].deviceId,
             defaultVideoInputLabel: videoInput[0].label || "",
-            cameraActive: false,
+            cameraActive: true,
           }));
           chrome.storage.local.set({
             defaultVideoInput: videoInput[0].deviceId,
             defaultVideoInputLabel: videoInput[0].label || "",
-            cameraActive: false,
+            cameraActive: true,
           });
         }
         if (audioInput.length > 0 || videoInput.length > 0) {
@@ -1067,34 +1064,15 @@ const ContentState = (props) => {
         microphonePermission: false,
       }));
       if (contentStateRef.current.askForPermissions) {
-        contentStateRef.current.openModal(
-          chrome.i18n.getMessage("permissionsModalTitle"),
-          chrome.i18n.getMessage("permissionsModalDescription"),
-          chrome.i18n.getMessage("permissionsModalDismiss"),
-          chrome.i18n.getMessage("permissionsModalNoShowAgain"),
-          () => { },
-          () => {
-            noMorePermissions();
-          },
-          chrome.runtime.getURL("assets/helper/permissions.webp"),
-          chrome.i18n.getMessage("learnMoreDot"),
-          URL2,
-          true,
-          false,
-        );
         if (contentStateRef.current.sitePermissionsBlocked) {
-          contentStateRef.current.openModal(
-            chrome.i18n.getMessage("sitePermissionsBlockedTitle"),
-            chrome.i18n.getMessage("sitePermissionsBlockedDescription"),
-            null,
-            chrome.i18n.getMessage("permissionsModalDismiss"),
-            () => {},
-            () => {},
-            null,
-            chrome.i18n.getMessage("learnMoreDot"),
-            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Permissions-Policy",
-            true,
-            false,
+          // Site's Permissions-Policy blocks camera/mic; not user-grantable. Warn
+          // instead of the "check your permissions" modal that implies the user
+          // can fix it in the address bar.
+          contentStateRef.current.openWarning?.(
+            chrome.i18n.getMessage("cameraMicBlockedTitle"),
+            chrome.i18n.getMessage("cameraMicBlockedDescription"),
+            "VideoOffIcon",
+            10000,
           );
         } else {
           contentStateRef.current.openModal(
@@ -1125,6 +1103,39 @@ const ContentState = (props) => {
     chrome.storage.local.set({ askForPermissions: false });
   });
 
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.data.type === "screenity-permissions") {
+        handleDevicePermissions(event.data);
+      } else if (event.data.type === "screenity-permissions-loaded") {
+        setContentState((prevContentState) => ({
+          ...prevContentState,
+          permissionsLoaded: true,
+        }));
+      } else if (event.data.type === "screenity-site-policy") {
+        // Accurate host-page Permissions-Policy read from the cross-origin
+        // permissions.html iframe: feature=(self) (e.g. facebook.com) blocks
+        // our iframe even though the top-page probe above sees it as allowed.
+        const camMicBlocked =
+          event.data.cameraAllowed === false ||
+          event.data.microphoneAllowed === false;
+        const displayBlocked = event.data.displayCaptureAllowed === false;
+        setContentState((prevContentState) => ({
+          ...prevContentState,
+          sitePermissionsBlocked:
+            prevContentState.sitePermissionsBlocked || camMicBlocked,
+          siteDisplayCaptureBlocked:
+            prevContentState.siteDisplayCaptureBlocked || displayBlocked,
+        }));
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
 
   const [contentState, setContentStateInternal] = useState({
     color: "#4597F7",
@@ -1141,7 +1152,7 @@ const ContentState = (props) => {
     recording: false,
     // True between stop click and editor-open (or watchdog fire).
     // Drives the toolbar "Saving recording…" state during finalize.
-    // for 1–6s in the background.
+    // for 1-6s in the background.
     finalizingRecording: false,
     // True between restart click and next countdown / recording.
     // Drives the RecordingLoader during the restart gap. Cleared by
@@ -1168,8 +1179,12 @@ const ContentState = (props) => {
     openModal: null,
     openToast: null,
     // Page-level Permissions-Policy disallows camera/mic. Lets us show a
-    // site-specific modal instead of the misleading "check your permissions" one.
+    // site-specific warning instead of the misleading "check your permissions" one.
     sitePermissionsBlocked: false,
+    // Page-level Permissions-Policy disallows display-capture (e.g.
+    // facebook.com). Region capture runs getDisplayMedia in-page, so it can't
+    // start here; lets us disable the tab-area tab instead of failing silently.
+    siteDisplayCaptureBlocked: false,
     timeWarning: false,
     audioInput: [],
     videoInput: [],
@@ -1207,11 +1222,11 @@ const ContentState = (props) => {
     cameraFlipped: false,
     backgroundEffect: "blur",
     backgroundEffectsActive: false,
-    countdown: false,
+    countdown: true,
     showExtension: false,
     showPopup: false,
     blurMode: false,
-    recordingType: "region",
+    recordingType: "screen",
     customRegion: false,
     regionWidth: 800,
     surface: "default",
@@ -1240,6 +1255,9 @@ const ContentState = (props) => {
     pushToTalk: false,
     zoomEnabled: false,
     offscreenRecording: false,
+    // kill-switch for the offscreen recorder host (default ON); only false
+    // falls back to the legacy pinned recorder tab
+    useOffscreenCloud: true,
     isAddingImage: false,
     pipEnded: false,
     tabCaptureFrame: false,
@@ -1258,15 +1276,13 @@ const ContentState = (props) => {
     askDismiss: true,
     quality: "max",
     systemAudio: true,
-    backup: false,
-    backupSetup: false,
     openWarning: false,
     hasOpenedBefore: false,
-    qualityValue_v2: "720p",
-    fpsValue_v2: "24",
+    qualityValue: "1080p",
+    fpsValue: "30",
     fastRecorderBeta: null,
     fastRecorderStatus: null,
-    useWebCodecsRecorder_v2: true,
+    useWebCodecsRecorder: true,
     countdownActive: false,
     countdownCancelled: false,
     multiMode: false,
@@ -1293,7 +1309,7 @@ const ContentState = (props) => {
         recording: false,
         restarting: false,
       });
-      chrome.runtime.sendMessage({ type: "diag-countdown-cancelled" }).catch(() => { });
+      chrome.runtime.sendMessage({ type: "diag-countdown-cancelled" }).catch(() => {});
       setContentState((prev) => ({
         ...prev,
         countdownActive: false,
@@ -1329,154 +1345,20 @@ const ContentState = (props) => {
   });
   contentStateRef.current = contentState;
 
+  // Re-scope the recording UI when the recording flow changes (recording / type
+  // / countdown / preparing). Placed after `contentState` is declared so it can
+  // depend on it; recompute reads fresh state via contentStateRef.
   useEffect(() => {
-    if (!hasAnnouncedScreenityPongRef.current) {
-      hasAnnouncedScreenityPongRef.current = true;
-      window.postMessage({ type: "screenity-pong" }, "*");
-    }
-
-    const handleMessage = (event) => {
-      if (event.data.type === "screenity-permissions") {
-        handleDevicePermissions(event.data);
-      } else if (event.data.type === "screenity-permissions-loaded") {
-        setContentState((prevContentState) => ({
-          ...prevContentState,
-          permissionsLoaded: true,
-        }));
-      } else if (event.data.type === "ping-screenity") {
-        window.postMessage({ type: "screenity-pong" }, "*");
-      } else if (event.data.type === "open-screenity-popup") {
-        setContentState((prevContentState) => ({
-          ...prevContentState,
-          ...ENFORCED_RECORDING_PREFERENCES,
-          showExtension: !prevContentState.showExtension,
-          hasOpenedBefore: true,
-          micActive: true,
-          showPopup: true,
-        }));
-        chrome.storage.local.set({
-          ...ENFORCED_RECORDING_PREFERENCES,
-          micActive: true,
-        });
-      } else if (event.data.type === "mute-microphone") {
-        setContentState((prevContentState) => ({
-          ...prevContentState,
-          micActive: false,
-        }));
-        chrome.storage.local.set({ micActive: false });
-        chrome.runtime.sendMessage({
-          type: "set-mic-active-tab",
-          active: false,
-          defaultAudioInput: contentState.defaultAudioInput,
-        });
-      } else if (event.data.type === "unmute-microphone") {
-        setContentState((prevContentState) => ({
-          ...prevContentState,
-          micActive: true,
-        }));
-        chrome.storage.local.set({ micActive: true });
-        chrome.runtime.sendMessage({
-          type: "set-mic-active-tab",
-          active: true,
-          defaultAudioInput: contentState.defaultAudioInput,
-        });
-      } else if (event.data.type === SCREENITY_MEETING_STATE_MESSAGE) {
-        const nextMeetingState = {
-          ...event.data,
-          capturedAt: Date.now(),
-          pageUrl: window.location.href,
-        };
-        const meetingMicrophone = event.data?.microphone || null;
-        const availableAudioInputs = Array.isArray(
-          contentStateRef.current?.audioInput,
-        )
-          ? contentStateRef.current.audioInput
-          : Array.isArray(contentState.audioInput)
-            ? contentState.audioInput
-            : [];
-        const matchedMicrophone = resolveMeetingMicrophoneDevice(
-          meetingMicrophone,
-          availableAudioInputs,
-        );
-        const syncedMicrophoneState = matchedMicrophone
-          ? {
-              defaultAudioInput: matchedMicrophone.deviceId,
-              defaultAudioInputLabel:
-                matchedMicrophone.label || meetingMicrophone?.label || "",
-              micActive: true,
-            }
-          : null;
-
-        if (syncedMicrophoneState) {
-          contentStateRef.current = {
-            ...(contentStateRef.current || {}),
-            ...syncedMicrophoneState,
-          };
-          setContentState((prevContentState) => ({
-            ...prevContentState,
-            ...syncedMicrophoneState,
-          }));
-          chrome.runtime.sendMessage({
-            type: "set-mic-active-tab",
-            active: true,
-            defaultAudioInput: syncedMicrophoneState.defaultAudioInput,
-          });
-        }
-
-        console.groupCollapsed("[Screenity Meeting State][Content] received postMessage");
-        console.info("event.origin", event.origin);
-        console.info("window.location.href", window.location.href);
-        console.info("raw event.data", event.data);
-        console.info("meeting", event.data?.meeting || null);
-        console.info("classroom", event.data?.classroom || null);
-        console.info("participants", event.data?.participants || null);
-        console.info("localUser", event.data?.localUser || null);
-        console.info("microphone", meetingMicrophone);
-        console.info("matchedMicrophone", matchedMicrophone || null);
-        console.info("state being saved to chrome.storage.local", nextMeetingState);
-        console.groupEnd();
-
-        chrome.storage.local.set(
-          {
-            screenityMeetingState: nextMeetingState,
-            screenityMeetingEndedAt: null,
-            ...(syncedMicrophoneState || {}),
-          },
-          () => {
-            if (chrome.runtime.lastError) {
-              console.error(
-                "[Screenity Meeting State][Content] failed to save screenityMeetingState",
-                chrome.runtime.lastError,
-              );
-              return;
-            }
-
-            console.info("[Screenity Meeting State][Content] saved screenityMeetingState", {
-              meetingId: nextMeetingState?.meeting?.meetingId || nextMeetingState?.meetingId || null,
-              participantsIds: nextMeetingState?.participants?.ids || [],
-              participantsTotal: nextMeetingState?.participants?.total || 0,
-              capturedAt: nextMeetingState?.capturedAt,
-              syncedMicrophone: syncedMicrophoneState
-                ? syncedMicrophoneState.defaultAudioInputLabel ||
-                  syncedMicrophoneState.defaultAudioInput
-                : null,
-            });
-          },
-        );
-      } else if (event.data.type === SCREENITY_MEETING_ENDED_MESSAGE) {
-        chrome.storage.local.set({
-          screenityMeetingEndedAt:
-            event.data.timestamp || new Date().toISOString(),
-        });
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-
-    return () => {
-      window.removeEventListener("message", handleMessage);
-    };
-  }, [contentState]);
+    recomputeRecordingUiAllowed("flow");
+  }, [
+    recomputeRecordingUiAllowed,
+    contentState.recording,
+    contentState.recordingType,
+    contentState.countdownActive,
+    contentState.isCountdownVisible,
+    contentState.preparingRecording,
+    contentState.pendingRecording,
+  ]);
 
   setContentState = (updater) => {
     if (typeof updater === "function") {
@@ -1501,7 +1383,7 @@ const ContentState = (props) => {
     audio.volume = 0.5;
     try {
       audio.currentTime = 0;
-    } catch { }
+    } catch {}
     const playPromise = audio.play();
     if (playPromise?.then) {
       playPromise
@@ -1684,7 +1566,11 @@ const ContentState = (props) => {
       if (suppressStopBeepRef.current) {
         suppressStopBeepRef.current = false;
       } else {
-        playBeep(stopBeepRef, "assets/sounds/beep.mp3");
+        chrome.storage.local.get(["stopBeepHandledAt"], (r) => {
+          const at = Number(r?.stopBeepHandledAt) || 0;
+          if (Date.now() - at < STOP_BEEP_DEDUPE_MS) return;
+          playBeep(stopBeepRef, "assets/sounds/beep.mp3");
+        });
       }
     }
 
@@ -1721,6 +1607,9 @@ const ContentState = (props) => {
 
       if (
         !contentState.recording &&
+        // The capture is already live through the countdown, so re-opening here
+        // on a dep change would put the toast in the recording's first frames.
+        !contentState.countdownActive &&
         isMac &&
         warningList.some((el) => window.location.href.includes(el)) &&
         contentState.recordingType != "region" &&
@@ -1734,6 +1623,7 @@ const ContentState = (props) => {
           ),
           "AudioIcon",
           10000,
+          "bottom",
         );
       } else if (
         window.location.href.includes("playground.html") &&
@@ -1746,12 +1636,27 @@ const ContentState = (props) => {
           "NotSupportedIcon",
           10000,
         );
+      } else if (
+        !contentState.recording &&
+        contentState.sitePermissionsBlocked &&
+        contentState.recordingType === "camera"
+      ) {
+        // Host page's Permissions-Policy blocks camera/mic in our cross-origin iframe
+        // (e.g. facebook.com), which the viewer can't grant; warn instead of the modal.
+        // Only camera recordings touch in-page camera/mic; others route through the request flow.
+        contentState.openWarning(
+          chrome.i18n.getMessage("cameraMicBlockedTitle"),
+          chrome.i18n.getMessage("cameraMicBlockedDescription"),
+          "VideoOffIcon",
+          10000,
+        );
       }
     }
   }, [
     contentState.openWarning,
     contentState.recording,
     contentState.recordingType,
+    contentState.sitePermissionsBlocked,
   ]);
 
   useEffect(() => {
@@ -1910,21 +1815,7 @@ const ContentState = (props) => {
       // synchronously each tick. Keeps the visual tick correct even
       // when chrome.storage.local.get blocks on a contended IPC layer.
       if (changes.recording) {
-        const didStartRecording =
-          changes.recording.oldValue !== true &&
-          changes.recording.newValue === true;
-        const didStopRecording =
-          changes.recording.oldValue === true &&
-          changes.recording.newValue === false;
-
         recordingFlagRef.current = Boolean(changes.recording.newValue);
-        if (isTargetTab()) {
-          if (didStartRecording) {
-            window.postMessage({ type: "recording-started" }, "*");
-          } else if (didStopRecording) {
-            window.postMessage({ type: "recording-stopped" }, "*");
-          }
-        }
         // Clear the restart-wait loader as soon as the next
         // recording starts. Storage flip true → false would also
         // qualify but that's handled by the cleanup paths that fire
@@ -1937,23 +1828,20 @@ const ContentState = (props) => {
               : prev,
           );
         }
-        // Recording true → false: clear any local flow state that
-        // the sandboxTab listener might have missed on a hidden tab
-        // (Chrome suspends bg tabs; sandboxTab listener may not fire
-        // until the user returns). Prevents the stale "Preparing..."
-        // loader showing when the user reopens the popup.
+        // Recording true → false: clear start-side flow flags the
+        // sandboxTab listener might have missed on a hidden tab. Leave
+        // finalizingRecording alone so the toolbar stop button stays
+        // disabled until sandboxTab (or the 30s watchdog) lands.
         if (
           changes.recording.oldValue === true &&
           changes.recording.newValue === false
         ) {
           setContentState((prev) =>
-            prev.finalizingRecording ||
             prev.preparingRecording ||
             prev.pendingRecording ||
             prev.restartingRecording
               ? {
                   ...prev,
-                  finalizingRecording: false,
                   preparingRecording: false,
                   pendingRecording: false,
                   restartingRecording: false,
@@ -2025,23 +1913,28 @@ const ContentState = (props) => {
         shouldUpdateTimer = true;
       }
       if (changes.cameraActive && isTargetTab()) {
-        if (changes.cameraActive.newValue) {
-          chrome.storage.local.set({ cameraActive: false });
-        }
+        // CameraWrap renders off contentState.cameraActive; without this listener
+        // a storage toggle (from another tab's popup, automation seed) never reaches React.
         setContentState((prev) => ({
           ...prev,
-          cameraActive: false,
+          cameraActive: Boolean(changes.cameraActive.newValue),
         }));
       }
       // sandboxTab appearing means BG opened the editor tab and the
       // finalize handoff is done; tear down recording UI (toolbar,
       // camera, drawing/blur/cursor, preparing overlay). Storage-
-      // driven so it fires even on a non-recording tab. Only triggers
-      // for single-scene stop; multi-scene reuses the editor tab and
-      // cleans up via reopen-popup-multi.
+      // driven so it fires even on a non-recording tab. Covers free/local
+      // single-scene stop; multi-scene reuses the editor tab and cleans up
+      // via reopen-popup-multi.
       const sandboxTabAppeared =
         changes.sandboxTab && changes.sandboxTab.newValue != null;
-      if (sandboxTabAppeared) {
+      // Cloud single-scene has no sandboxTab (its app opens in a new tab),
+      // so the finalize toolbar would otherwise linger until the 30s
+      // watchdog. pendingEditorOpen is written when the upload finishes and
+      // the app opens, so treat it as the same handoff-done signal.
+      const cloudEditorOpening =
+        changes.pendingEditorOpen && changes.pendingEditorOpen.newValue != null;
+      if (sandboxTabAppeared || cloudEditorOpening) {
         const wasMulti = contentStateRef.current?.multiMode === true;
         setContentState((prev) =>
           prev.finalizingRecording || prev.recording
@@ -2242,10 +2135,10 @@ const ContentState = (props) => {
   // Each cleanup branch in startStreaming writes storage itself.
 
   useEffect(() => {
-    if (!contentState.qualityValue_v2) {
-      const suggested = "720p";
-      setContentState((prev) => ({ ...prev, qualityValue_v2: suggested }));
-      chrome.storage.local.set({ qualityValue_v2: suggested });
+    if (!contentState.qualityValue) {
+      const suggested = "1080p";
+      setContentState((prev) => ({ ...prev, qualityValue: suggested }));
+      chrome.storage.local.set({ qualityValue: suggested });
     }
   }, []);
 
@@ -2253,24 +2146,27 @@ const ContentState = (props) => {
     if (contentState.pushToTalk) {
       setContentState((prevContentState) => ({
         ...prevContentState,
-        pushToTalk: false,
+        micActive: false,
       }));
 
       chrome.storage.local.set({
-        pushToTalk: false,
+        micActive: false,
+      });
+
+      chrome.runtime.sendMessage({
+        type: "set-mic-active-tab",
+        active: false,
+        defaultAudioInput: contentState.defaultAudioInput,
       });
     }
   }, [contentState.pushToTalk]);
 
   useEffect(() => {
     if (contentState.backgroundEffectsActive) {
-      setContentState((prevContentState) => ({
-        ...prevContentState,
-        backgroundEffectsActive: false,
-      }));
-      chrome.storage.local.set({ backgroundEffectsActive: false });
+      chrome.runtime.sendMessage({ type: "background-effects-active" });
+    } else {
+      chrome.runtime.sendMessage({ type: "background-effects-inactive" });
     }
-    chrome.runtime.sendMessage({ type: "background-effects-inactive" });
   }, [contentState.backgroundEffectsActive]);
 
   useEffect(() => {
@@ -2281,47 +2177,6 @@ const ContentState = (props) => {
       });
     }
   }, [contentState.backgroundEffect, contentState.backgroundEffectsActive]);
-
-  useEffect(() => {
-    if (!contentState.parentRef) return;
-
-    const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-    if (isMac) return;
-
-    const parentDiv = contentState.parentRef;
-
-    const elements = parentDiv.querySelectorAll("*");
-    elements.forEach((element) => {
-      element.classList.add("screenity-scrollbar");
-    });
-
-    const observer = new MutationObserver((mutationsList) => {
-      for (const mutation of mutationsList) {
-        if (mutation.type === "childList") {
-          const addedNodes = Array.from(mutation.addedNodes);
-          const removedNodes = Array.from(mutation.removedNodes);
-
-          addedNodes.forEach((node) => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              node.classList.add("screenity-scrollbar");
-            }
-          });
-
-          removedNodes.forEach((node) => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              node.classList.remove("screenity-scrollbar");
-            }
-          });
-        }
-      }
-    });
-
-    observer.observe(parentDiv, { childList: true, subtree: true });
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [contentState.parentRef]);
 
   // Programmatically add custom scrollbars
   useEffect(() => {
@@ -2364,12 +2219,10 @@ const ContentState = (props) => {
     return () => {
       observer.disconnect();
     };
-  }, [
-    contentState.parentRef,
-    contentState.shadowRef,
-    contentState.bigTab,
-    contentState.recordingType,
-  ]);
+    // The observer already classes nodes as they're added, so re-running this
+    // on bigTab/recordingType only re-walked the whole shadow tree with
+    // querySelectorAll("*") on every popup tab switch to no effect.
+  }, [contentState.shadowRef]);
 
   useEffect(() => {
     if (!contentState.hideUI) {
@@ -2382,32 +2235,73 @@ const ContentState = (props) => {
     }
   }, [contentState.hideUI]);
 
+  // Recorder sets regionAwaitingCropTarget when its crop-target is missing; we
+  // re-send it over storage (postMessage can drop). Gated to an active start.
+  const cropTargetWantedRef = useRef(false);
+  const sendCropTargetToRecorder = useCallback(() => {
+    const s = contentStateRef.current;
+    // Hard gate (see cropTargetGate): only answer the recorder during an actual
+    // start, never on an idle region toggle/tweak.
+    if (!shouldResendCropTarget(s)) return;
+    const regionWin = s.regionCaptureRef?.contentWindow || null;
+    if (!regionWin) return;
+    regionWin.postMessage(
+      {
+        type: "crop-target",
+        target: s.cropTarget,
+        width: s.regionWidth,
+        height: s.regionHeight,
+      },
+      "*",
+    );
+  }, []);
+
+  useEffect(() => {
+    const onChanged = (changes, area) => {
+      if (area !== "local" || !changes.regionAwaitingCropTarget) return;
+      // Mirror the recorder's "waiting" flag: reset on clear so the re-send
+      // below can't fire on an idle region tweak and start outside a real one.
+      if (!changes.regionAwaitingCropTarget.newValue) {
+        cropTargetWantedRef.current = false;
+        return;
+      }
+      cropTargetWantedRef.current = true;
+      sendCropTargetToRecorder();
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, [sendCropTargetToRecorder]);
+
+  // The recorder can ask before the async derivation resolves; send once it
+  // does, but only while it is actually waiting (cropTargetWantedRef).
+  useEffect(() => {
+    if (!cropTargetWantedRef.current) return;
+    if (!contentState.cropTarget) return;
+    sendCropTargetToRecorder();
+  }, [contentState.cropTarget, sendCropTargetToRecorder]);
+
   useEffect(() => {
     updateFromStorage();
   }, []);
 
-  useEffect(() => {
-    if (contentState?.micActive) {
-      window.postMessage({ type: "microphone-unmuted" }, "*");
-    } else {
-      window.postMessage({ type: "microphone-muted" }, "*");
-    }
-  }, [contentState?.micActive]);
-
-  // (No storage fallback listener here; use direct messaging flow)
   // Memoize: a fresh array literal would re-render every consumer per parent update.
+  // Timer stays out of this on purpose, so the 1s tick doesn't invalidate it.
   const providerValue = useMemo(
-    () => [contentState, setContentState, timer, setTimer],
-    [contentState, timer],
+    () => [contentState, setContentState],
+    [contentState],
   );
+
+  const timerValue = useMemo(() => [timer, setTimer], [timer]);
 
   return (
     <contentStateContext.Provider value={providerValue}>
-      {props.children}
-      <Shortcuts shortcuts={contentState.shortcuts} />
-      {process.env.SCREENITY_DEV_MODE === "true" && (
-        <DevHUD contentStateRef={contentStateRef} setContentState={setContentState} />
-      )}
+      <timerContext.Provider value={timerValue}>
+        {props.children}
+        <Shortcuts shortcuts={contentState.shortcuts} />
+        {process.env.SCREENITY_DEV_MODE === "true" && (
+          <DevHUD contentStateRef={contentStateRef} setContentState={setContentState} />
+        )}
+      </timerContext.Provider>
     </contentStateContext.Provider>
   );
 };

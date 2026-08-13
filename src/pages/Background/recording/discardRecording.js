@@ -26,12 +26,18 @@ export const discardRecording = async ({
     } catch {}
   }
 
-  sendMessageRecord({ type: "dismiss-recording", reason, projectId });
+  // Swallow rejection: if the recorder tab is already dead, the promise
+  // rejects and MV3 treats unhandled rejections as SW health signals.
+  sendMessageRecord({ type: "dismiss-recording", reason, projectId }).catch(
+    () => {},
+  );
   chrome.action.setIcon({ path: "assets/icon-34.png" });
 
-  // await teardown before recording:false; otherwise handleAlarm fires against torn-down offscreen
+  // await teardown before recording:false; otherwise handleAlarm fires against torn-down offscreen.
+  // shouldFinalize:false so the recorder halts without a finalize that would
+  // emit video-ready and open the editor on the discarded take.
   try {
-    await discardOffscreenDocuments();
+    await discardOffscreenDocuments({ reason: "discard", shouldFinalize: false });
   } catch {}
   await resetWatchdogState();
 
@@ -78,21 +84,16 @@ export const discardRecording = async ({
     region: false,
     customRegion: false,
     memoryError: false,
-    backup: false,
-    backupSetup: false,
-    backupTab: null,
     ...multiState,
   });
   chrome.storage.local.set({ pipForceClose: Date.now() });
   chrome.storage.local.set({ recordingUiTabId: null });
   chrome.storage.local.remove(["recordingMeta"]);
 
-  chrome.runtime.sendMessage({ type: "discard-backup" });
   chrome.runtime.sendMessage({ type: "turn-off-pip" });
 };
 
 export const handleDismissRecordingTab = async (message = {}) => {
-  chrome.runtime.sendMessage({ type: "discard-backup" });
   discardRecording({
     reason: message?.reason || "dismiss-recording-tab",
     projectId: message?.projectId || null,

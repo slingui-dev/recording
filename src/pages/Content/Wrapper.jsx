@@ -120,10 +120,20 @@ const Wrapper = () => {
   const permissionsRef = useRef(null);
   const regionCaptureRef = useRef(null);
   const contentStateRef = useRef(contentState);
+  // Mount on first use, then keep it. Gating on drawingMode threw away the
+  // fabric instance (and its drawings) every time the toolbar closed; an
+  // unmounted canvas is already pointer-events:none, so staying mounted is free.
+  const [canvasEverOpened, setCanvasEverOpened] = useState(false);
 
   useEffect(() => {
     contentStateRef.current = contentState;
   }, [contentState]);
+
+  useEffect(() => {
+    if (contentState.drawingMode || contentState.blurMode) {
+      setCanvasEverOpened(true);
+    }
+  }, [contentState.drawingMode, contentState.blurMode]);
 
   // Delayed loader: only show after 800ms in a wait window
   // (pre-countdown setup or post-stop finalize), never during
@@ -132,6 +142,10 @@ const Wrapper = () => {
   const LOADER_DELAY_MS = 800;
   const inPreCountdownWait =
     Boolean(contentState.pendingRecording) &&
+    // Popup stays open showing "starting recording" until ready-to-record
+    // (stream acquired) closes it; that's the pre-acquisition feedback, so
+    // don't stack the loader on top. Only fill the post-popup → countdown gap.
+    !contentState.showPopup &&
     !contentState.countdownActive &&
     !contentState.isCountdownVisible &&
     !contentState.recording &&
@@ -150,7 +164,17 @@ const Wrapper = () => {
   // visibility-hidden gate below never fires. Without this flag the
   // toolbar would just freeze.
   const inRestartWait = Boolean(contentState.restartingRecording);
-  const waitActive = inPreCountdownWait || inPostStopWait || inRestartWait;
+  // The real "starting" gap is the preparing window between stream acquisition
+  // and countdown, where the popup is closed and no recorder tab exists, so the
+  // loader shows here. pendingRecording lasts ~10ms and can't drive it.
+  const inPreparingWait =
+    Boolean(contentState.preparingRecording) &&
+    !contentState.countdownActive &&
+    !contentState.isCountdownVisible &&
+    !contentState.recording &&
+    contentState.useOffscreenCloud !== false;
+  const waitActive =
+    inPreCountdownWait || inPostStopWait || inRestartWait || inPreparingWait;
   const [showLoader, setShowLoader] = useState(false);
   useEffect(() => {
     if (!waitActive) {
@@ -191,13 +215,18 @@ const Wrapper = () => {
     if (inRestartWait) {
       wasHiddenThisWait = true;
     }
+    // Preparing window (post-acquisition): no recorder tab steals focus, so
+    // skip the hide gate and let the loader show during the cloud-prep gap.
+    if (inPreparingWait) {
+      wasHiddenThisWait = true;
+    }
     armTimer();
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [waitActive, inPostStopWait, inRestartWait]);
+  }, [waitActive, inPostStopWait, inRestartWait, inPreparingWait]);
 
   useEffect(() => {
     if (!parentRef.current) return;
@@ -286,7 +315,7 @@ const Wrapper = () => {
           }}
           ref={permissionsRef}
           src={chrome.runtime.getURL("permissions.html")}
-          allow="camera *; microphone *"
+          allow="camera *; microphone *; display-capture *"
         ></iframe>
       )}
       {contentState.hasOpenedBefore && (
@@ -309,7 +338,8 @@ const Wrapper = () => {
 
       {contentState.zoomEnabled && <ZoomContainer />}
       <BlurTool />
-      {contentState.showExtension || contentState.recording ? (
+      {(contentState.showExtension || contentState.recording) &&
+      contentState.recordingUiAllowed !== false ? (
         <div>
           {!contentState.recording &&
             !contentState.drawingMode &&
@@ -366,10 +396,13 @@ const Wrapper = () => {
                 }}
               ></div>
             )}
-          {(contentState.drawingMode || contentState.blurMode) && (
+          {(canvasEverOpened ||
+            contentState.drawingMode ||
+            contentState.blurMode) && (
             // Key on multiSceneCount only: fresh fabric per scene,
             // but drawings persist through the pre-record → record
-            // transition within a scene.
+            // transition within a scene, and through the toolbar
+            // being closed and reopened.
             <Canvas key={`canvas-${contentState.multiSceneCount || 0}`} />
           )}
           <CursorModes />

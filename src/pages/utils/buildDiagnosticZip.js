@@ -70,7 +70,27 @@ const FAST_RECORDER_KEYS = [
   "lastStartRecordingCaller",
   "lastCountdownFinishedDecision",
   "lastStartAfterCountdown",
+  "lastSubscriptionLoss",
 ];
+
+// navigator.userAgent is reduced to Chrome/150.0.0.0; only the high-entropy
+// hints carry the real build.
+const readBrowserVersionDetail = async () => {
+  try {
+    const uaData = navigator.userAgentData;
+    if (!uaData?.getHighEntropyValues) return null;
+    const hints = await uaData.getHighEntropyValues([
+      "fullVersionList",
+      "platformVersion",
+    ]);
+    return {
+      fullVersionList: hints?.fullVersionList || null,
+      platformVersion: hints?.platformVersion || null,
+    };
+  } catch {
+    return null;
+  }
+};
 
 export const buildDiagnosticZip = async ({
   extraConfig = {},
@@ -137,6 +157,7 @@ export const buildDiagnosticZip = async ({
 
   files["environment.json"] = JSON.stringify({
     userAgent,
+    browserVersionDetail: await readBrowserVersionDetail(),
     platformInfo,
     screen: {
       width: window.screen.availWidth,
@@ -161,7 +182,7 @@ export const buildDiagnosticZip = async ({
         if (!session.events?.length) continue;
         const hints = [];
         const hasEditorOpen = session.events.some(
-          (ev) => ev.e === "editor-open" && ev.d?.type === "editorwebcodecs",
+          (ev) => ev.e === "editor-open" && ev.d?.type === "editor",
         );
         const hasEditorReady = session.events.some(
           (ev) => ev.e === "editor-load-ready",

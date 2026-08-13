@@ -77,26 +77,54 @@ const ensureWorker = () => {
   return worker;
 };
 
+chrome.runtime.onMessage.addListener((message) => {
+  if (!message || message.type !== "cancel-remux") return undefined;
+  // Editor cancelled the download: kill the worker so it stops encoding.
+  if (worker) {
+    try {
+      worker.terminate();
+    } catch {
+      // already gone
+    }
+    worker = null;
+  }
+  for (const [, entry] of pending) {
+    entry?.sendResponse?.({ ok: false, error: "cancelled" });
+  }
+  pending.clear();
+  return false;
+});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (!message || message.type !== "remux-start") return undefined;
-  const { requestId, inputFileName, outputFileName } = message;
+  const START_TYPES = {
+    "remux-start": "remux",
+    "webm-start": "webm",
+    "mp4x-start": "mp4x",
+  };
+  if (!message || !START_TYPES[message.type]) {
+    return undefined;
+  }
+  const { requestId, inputFileName, outputFileName, videoBitrate } = message;
   if (!requestId || !inputFileName || !outputFileName) {
     sendResponse({ ok: false, error: "invalid-remux-start-payload" });
     return false;
   }
+  const workerType = START_TYPES[message.type];
   try {
     const w = ensureWorker();
     devLog("remux-start-received", {
       requestId,
       inputFileName,
       outputFileName,
+      kind: workerType,
     });
     pending.set(requestId, { sendResponse });
     w.postMessage({
-      type: "remux",
+      type: workerType,
       requestId,
       inputFileName,
       outputFileName,
+      videoBitrate,
     });
   } catch (err) {
     pending.delete(requestId);

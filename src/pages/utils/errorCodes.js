@@ -57,13 +57,26 @@ const STREAM_PATTERNS = [
   "failed to setup streaming",
   "failed to get stream",
   "failed to access screen stream",
+  "the screen stream",
   "failed to access region stream",
   "no streams to record",
   "no screen video track",
   "no camera video track",
+  "no video data",
   "notreadableerror",
   "notfounderror",
   "overconstrainederror",
+];
+
+const MEMORY_PATTERNS = [
+  "memory",
+  "quota",
+  "indexeddb",
+  "local storage is blocked",
+  "local buffer",
+  "browser storage",
+  "out of storage",
+  "free up disk",
 ];
 
 const CODEC_PATTERNS = [
@@ -74,6 +87,8 @@ const CODEC_PATTERNS = [
   "mimeType",
   "mime type",
   "recording error:",
+  "video encoder",
+  "audio encoder",
 ];
 
 const TAB_PATTERNS = [
@@ -82,6 +97,7 @@ const TAB_PATTERNS = [
   "unable to resolve tab",
   "tab capture",
   "message routing",
+  "this tab's video",
 ];
 
 const TIMEOUT_PATTERNS = [
@@ -122,13 +138,23 @@ export const classifyError = (errorStr = "", errorType = "") => {
     return REC_START_PERM;
   }
 
-  if (lower.includes("streaming-data never arrived")) {
+  if (
+    lower.includes("streaming-data never arrived") ||
+    lower.includes("didn't start in time") ||
+    lower.includes("didnt start in time")
+  ) {
     return REC_START_NO_STREAM_MSG;
   }
 
   // Recorder tab discarded during countdown.
   if (lower.includes("recording not ready") || lower.includes("screen stream is missing")) {
     return REC_START_NOT_READY;
+  }
+
+  // Tab/region capture failures (often wrapped in a getUserMedia error). Match
+  // before STREAM so the user gets the actionable tab message, not a generic one.
+  if (lower.includes("tab capture") || lower.includes("this tab's video")) {
+    return REC_START_TAB;
   }
 
   if (STREAM_PATTERNS.some((p) => lower.includes(p))) {
@@ -155,13 +181,7 @@ export const classifyError = (errorStr = "", errorType = "") => {
     return REC_START_TAB;
   }
 
-  if (
-    lower.includes("memory") ||
-    lower.includes("quota") ||
-    lower.includes("indexeddb") ||
-    lower.includes("local storage is blocked") ||
-    lower.includes("local buffer")
-  ) {
+  if (MEMORY_PATTERNS.some((p) => lower.includes(p))) {
     return REC_RUN_MEMORY;
   }
 
@@ -171,7 +191,18 @@ export const classifyError = (errorStr = "", errorType = "") => {
     return REC_START_STREAM;
   }
 
-  return UNKNOWN;
+  // never a bare UNKNOWN: tag with the caller's errorType so it still names
+  // the subsystem (e.g. UNKNOWN_STREAM_ERROR).
+  return qualifyUnknown(errorType);
+};
+
+const qualifyUnknown = (errorType) => {
+  const tag = String(errorType || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return tag ? `${UNKNOWN}_${tag}` : UNKNOWN;
 };
 
 export const makeRecordingAttemptId = () => {

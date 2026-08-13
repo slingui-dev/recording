@@ -2,6 +2,7 @@
 // recording-state keys and logs them to lifecycleLog so we don't have
 // to instrument each BG call site. wired once at SW startup.
 import { lifecycle } from "../utils/lifecycleLog";
+import { handleTabActivation } from "./listeners/onTabActivatedListener";
 
 // Keys whose transitions we care about for cross-recording bug analysis.
 // `lifecycleLog` itself is excluded to avoid infinite recursion.
@@ -22,9 +23,6 @@ const TRACKED_KEYS = new Set([
   "fastRecorderDisabledForDevice",
   "memoryError",
   "lastRecordingBackendRef",
-  "backup",
-  "backupSetup",
-  "backupTab",
   "editorRecordingError",
 ]);
 
@@ -47,8 +45,21 @@ export const initLifecycleObserver = () => {
     for (const key of Object.keys(changes)) {
       if (!TRACKED_KEYS.has(key)) continue;
       const { oldValue, newValue } = changes[key];
-      // Skip no-op writes (same value).
+      // Skip no-op writes. `===` alone only catches primitives: storage hands
+      // back a fresh object each time, so object-valued keys (e.g.
+      // lastRecordingBackendRef) compared unequal on every rewrite and logged
+      // even when nothing changed.
       if (oldValue === newValue) continue;
+      if (
+        oldValue !== null &&
+        newValue !== null &&
+        typeof oldValue === "object" &&
+        typeof newValue === "object"
+      ) {
+        try {
+          if (JSON.stringify(oldValue) === JSON.stringify(newValue)) continue;
+        } catch {}
+      }
       lifecycle("BG.storage", "set", {
         key,
         from: summarizeValue(oldValue),
@@ -70,6 +81,19 @@ export const initLifecycleObserver = () => {
         });
       } catch (err) {
         console.warn("[Screenity][BG] reactive setIcon failed:", err);
+      }
+
+      // Hand the UI to the focused tab. onActivated has no branch for the
+      // countdown window, so a tab switched to mid-countdown never got it.
+      if (changes.recording.newValue === true) {
+        try {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tabId = tabs?.[0]?.id;
+            if (tabId) void handleTabActivation({ tabId });
+          });
+        } catch (err) {
+          console.warn("[Screenity][BG] recording-start UI handoff failed:", err);
+        }
       }
     }
   });

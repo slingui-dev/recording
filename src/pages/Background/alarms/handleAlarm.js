@@ -6,6 +6,8 @@ import { sweepRecorderTabs } from "../recording/sweepRecorderTabs.js";
 import { diagEvent } from "../../utils/diagnosticLog";
 import { lifecycle } from "../../utils/lifecycleLog";
 import { chunksStore } from "../recording/chunkHandler";
+import { openExistingChunksStore } from "../../CloudRecorder/recorderStorage/chooseChunksStore";
+import { destroySessionDir } from "../../CloudRecorder/recorderStorage/opfsKvStore";
 import { emitRecordingTelemetry } from "../recording/emitRecordingTelemetry";
 import { markFastRecorderFailure } from "../../../media/fastRecorderGate";
 import {
@@ -19,6 +21,12 @@ import {
 } from "./alarmConstants";
 
 export { FIRST_CHUNK_WATCHDOG_ALARM, RECORDER_KEEPALIVE_ALARM };
+
+// First alarm stays short to catch a dead capture fast; once there's evidence
+// of life it backs off to this. Bounded so a capture producing nothing still
+// ends in an error rather than an endless zero-byte recording.
+const FIRST_CHUNK_WATCHDOG_REARM_MS = 20_000;
+const FIRST_CHUNK_WATCHDOG_MAX_REARMS = 3;
 
 // WebCodecs muxer only finalizes inside the recorder tab; without this salvage
 // step the MP4 moov never gets written and chunks on disk are unplayable.
@@ -229,28 +237,16 @@ export const handleAlarm = async (alarm) => {
   }
 
   if (alarm.name === FIRST_CHUNK_WATCHDOG_ALARM) {
-    const { recording } = await chrome.storage.local.get(["recording"]);
+    const { recording, firstChunkWatchdogState: watchdogState } =
+      await chrome.storage.local.get([
+        "recording",
+        "firstChunkWatchdogState",
+      ]);
     if (recording) {
       diagEvent("error", { note: "first-chunk-watchdog-fired" });
-      // If the fast (WebCodecs) recorder was in use, a missing first chunk
-      // is almost always a silently-failed WebCodecs encoder (the
-      // "28-byte ftyp" stall). Sticky-disable it now so the user's retry
-      // falls back to MediaRecorder and succeeds, instead of hitting
-      // WebCodecs again and failing identically. (markFastRecorderFailure
-      // ignores transient stream errors via its own pattern list.)
-      try {
-        const { fastRecorderInUse } = await chrome.storage.local.get([
-          "fastRecorderInUse",
-        ]);
-        if (fastRecorderInUse) {
-          await markFastRecorderFailure("webcodecs-no-first-chunk", {
-            error: "WebCodecs produced no first chunk within 8s (watchdog)",
-          });
-        }
-      } catch (err) {
-        console.warn("[Screenity][BG] watchdog sticky-disable failed", err);
-      }
-      // 1500ms cap so a wedged tab can't delay the user-facing error
+      // Snapshot the recorder first (1500ms cap so a wedged tab can't delay the
+      // user-facing error) so the disable and stop decisions can read the
+      // capture track's state.
       let snapshot = null;
       let snapshotError = null;
       try {
@@ -276,15 +272,115 @@ export const handleAlarm = async (alarm) => {
           },
         });
       } catch {}
-      // handleRecordingError (not sendMessageRecord) so the editor gets notified
-      try {
-        await handleRecordingError({
-          error: "stream-error",
-          why: "Recording failed: no video data received within 8 seconds. The tab may have been throttled. Please try again.",
-          errorCode: "no-first-chunk",
+
+      const vt = snapshot?.stream?.videoTrack || null;
+      // Fail on missing frames, not a missing chunk. First-chunk latency is
+      // unbounded (cold start, keyframe cadence, slow disk); frame arrival
+      // isn't, so zero frames means capture is dead at 8s or at 80s. Slow
+      // encoding is the recorder's problem, and it has its own stall watchdog.
+      const progress = snapshot?.progress || null;
+      const counts = snapshot?.counts || null;
+      const flags = snapshot?.flags || null;
+      const bytesExist =
+        Boolean(counts) &&
+        (Number(counts.saved) > 0 ||
+          Number(counts.pendingBytes) > 0 ||
+          counts.hasChunks === true);
+      const framesArriving =
+        Boolean(progress) &&
+        (Number(progress.frameCount) > 0 ||
+          Number(progress.framesFromMSTP) > 0);
+      const rearmCount = Number(watchdogState?.rearms) || 0;
+      const canRearm = rearmCount < FIRST_CHUNK_WATCHDOG_MAX_REARMS;
+
+      const rearm = async (reason) => {
+        diagEvent("warning", {
+          note: "first-chunk-watchdog-rearm",
+          reason,
+          rearms: rearmCount + 1,
         });
-      } catch (err) {
-        console.warn("[Screenity][BG] first-chunk watchdog handler failed", err);
+        await chrome.storage.local.set({
+          firstChunkWatchdogState: { rearms: rearmCount + 1, at: Date.now() },
+        });
+        await chrome.alarms.create(FIRST_CHUNK_WATCHDOG_ALARM, {
+          delayInMinutes: FIRST_CHUNK_WATCHDOG_REARM_MS / 60000,
+        });
+      };
+
+      if (bytesExist) {
+        // Data is on disk; the cancel message is fire-and-forget and was lost.
+        diagEvent("warning", { note: "first-chunk-watchdog-bytes-exist" });
+        await chrome.alarms.clear(FIRST_CHUNK_WATCHDOG_ALARM);
+        return;
+      }
+      if (flags?.paused === true) {
+        // A long pause must never age into a failure, so this ignores the cap.
+        await rearm("paused");
+        return;
+      }
+      if (!snapshot && canRearm) {
+        // A recorder too busy to answer in 1500ms isn't a dead capture; this
+        // used to hard-fail.
+        await rearm("no-snapshot");
+        return;
+      }
+      if (flags?.isStarting === true && canRearm) {
+        await rearm("still-starting");
+        return;
+      }
+      if (framesArriving && canRearm) {
+        // Encoder is being fed and just hasn't emitted yet: a cold start.
+        await rearm("frames-arriving-no-chunk-yet");
+        return;
+      }
+      // MediaRecorder has no frame counter; a live track plus state
+      // "recording" is the best evidence of life it can offer.
+      if (
+        !progress &&
+        snapshot?.recorder?.state === "recording" &&
+        vt?.readyState === "live" &&
+        vt?.muted === false &&
+        canRearm
+      ) {
+        await rearm("mediarecorder-running-no-chunk-yet");
+        return;
+      }
+      if (vt && vt.readyState === "live" && vt.muted === true) {
+        // Capture track is live but muted: the recorded tab is backgrounded,
+        // focus was lost, or the display slept, so no frames are arriving. That
+        // is not an encoder defect, so don't disable WebCodecs and don't fail
+        // the recording. It keeps running and the first chunk cancels this
+        // watchdog once the user returns and frames resume.
+        diagEvent("warning", { note: "first-chunk-watchdog-capture-muted" });
+      } else {
+        // Sticky-disable WebCodecs for the device only when the capture track
+        // was live and unmuted yet produced no chunk (the genuine "28-byte
+        // ftyp" silent-encoder defect). An ended track or no snapshot is
+        // ambiguous: fail the recording but leave the fast path enabled.
+        try {
+          const { fastRecorderInUse } = await chrome.storage.local.get([
+            "fastRecorderInUse",
+          ]);
+          const realEncoderDefect =
+            Boolean(vt) && vt.readyState === "live" && vt.muted === false;
+          if (fastRecorderInUse && realEncoderDefect) {
+            await markFastRecorderFailure("webcodecs-no-first-chunk", {
+              error: "WebCodecs capture produced no frames (watchdog)",
+            });
+          }
+        } catch (err) {
+          console.warn("[Screenity][BG] watchdog sticky-disable failed", err);
+        }
+        // handleRecordingError (not sendMessageRecord) so the editor gets notified
+        try {
+          await handleRecordingError({
+            error: "stream-error",
+            why: "Recording failed: the capture produced no video frames. The tab may have been throttled. Please try again.",
+            errorCode: "no-first-chunk",
+          });
+        } catch (err) {
+          console.warn("[Screenity][BG] first-chunk watchdog handler failed", err);
+        }
       }
     }
     await chrome.alarms.clear(FIRST_CHUNK_WATCHDOG_ALARM);
@@ -329,13 +425,54 @@ export const handleAlarm = async (alarm) => {
       return;
     }
 
-    await chunksStore.clear().catch((err) => {
+    // Clearing IDB unconditionally left OPFS sessions on disk. Survivable at 250MB
+    // offers, a whole-recording leak now, so route to the backend the writer used.
+    const expiredStore =
+      localPlaybackOffer.storageBackend === "opfs" &&
+      localPlaybackOffer.opfsSessionId
+        ? openExistingChunksStore({
+            sessionId: localPlaybackOffer.opfsSessionId,
+            track: "screen",
+            backend: "opfs",
+          }).store
+        : chunksStore;
+    await expiredStore.clear().catch((err) => {
       console.warn(
-        "[Screenity][BG] Failed to clear chunksStore for local playback expiry",
+        "[Screenity][BG] Failed to clear chunk store for local playback expiry",
         err,
       );
     });
+    if (
+      localPlaybackOffer.storageBackend === "opfs" &&
+      localPlaybackOffer.opfsSessionId
+    ) {
+      await destroySessionDir(localPlaybackOffer.opfsSessionId).catch(() => {});
+    }
     await chrome.storage.local.remove([CLOUD_LOCAL_PLAYBACK_KEY]);
+    // Still "available" at TTL means the editor never collected it, the one
+    // outcome nothing else reports.
+    if (localPlaybackOffer.status !== "used") {
+      void emitRecordingTelemetry("local_playback_outcome", {
+        status: "expired",
+        reason: localPlaybackOffer.status || "available",
+        recordingSessionId: localPlaybackOffer.recordingSessionId || null,
+        projectId: localPlaybackOffer.projectId || null,
+        sceneId: localPlaybackOffer.sceneId || null,
+        mediaId: localPlaybackOffer.mediaId || null,
+        trackType: "screen",
+        offerId: localPlaybackOffer.offerId,
+        partial: Boolean(localPlaybackOffer.partial),
+        chunkCount: localPlaybackOffer.chunkCount || null,
+        availableBytes: localPlaybackOffer.estimatedBytes || null,
+        totalBytes: localPlaybackOffer.totalBytes || null,
+        elapsedMs: Number(localPlaybackOffer.createdAt)
+          ? Date.now() - Number(localPlaybackOffer.createdAt)
+          : null,
+        storageBackend: localPlaybackOffer.storageBackend || null,
+        container: localPlaybackOffer.container || null,
+        encoderKind: localPlaybackOffer.encoderKind || null,
+      });
+    }
     await chrome.storage.local.set({
       [CLOUD_LOCAL_PLAYBACK_EVENT_KEY]: {
         event: "offer-expired",

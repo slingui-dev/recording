@@ -7,6 +7,7 @@ import {
 import { sendMessageRecord } from "../recording/sendMessageRecord.js";
 import { loginWithWebsite } from "../auth/loginWithWebsite.js";
 import { tryResumePendingUploads } from "../recording/resumePendingUploads";
+import { clearInMemoryEditorLock } from "../recording/stopRecording";
 
 const CLOUD_FEATURES_ENABLED =
   process.env.SCREENITY_ENABLE_CLOUD_FEATURES === "true";
@@ -70,7 +71,7 @@ const openPlaygroundOrPopup = async (tab) => {
     });
 
     if (CLOUD_FEATURES_ENABLED) {
-      const result = await loginWithWebsite();
+      const result = await loginWithWebsite({ force: true });
 
       if (result?.authenticated) {
         await chrome.storage.local.set({
@@ -183,6 +184,17 @@ export const onActionButtonClickedListener = () => {
 
       const { recording, pendingRecording, restarting, recorderSession } = snap;
       const sessionRecording = recorderSession?.status === "recording";
+      // Whitelist of statuses that indicate a session may still have
+      // work in flight. Anything else — completed, cancelled, failed,
+      // crashed, stale-cleared, stopped, or any future addition — gets
+      // bypass treatment so stale pendingRecording/recordingTab flags
+      // can fall through to the reset+reopen path. Whitelisting is
+      // safer than blacklisting: forgetting to add a new terminal
+      // status would silently trap users.
+      const sessionInFlight =
+        recorderSession?.status === "recording" ||
+        recorderSession?.status === "restarting";
+      const sessionTerminal = Boolean(recorderSession?.status) && !sessionInFlight;
       const isRecordingActive = Boolean(
         recording || pendingRecording || restarting || sessionRecording,
       );
@@ -210,7 +222,7 @@ export const onActionButtonClickedListener = () => {
           }
         }
 
-        if (recordingTab && !hasActiveRecorder) {
+        if (recordingTab && !hasActiveRecorder && !sessionTerminal) {
           if (await doesTabExist(recordingTab)) {
             hasActiveRecorder = true;
           } else {
@@ -219,7 +231,7 @@ export const onActionButtonClickedListener = () => {
           }
         }
 
-        if (offscreen && !hasActiveRecorder) {
+        if (offscreen && !hasActiveRecorder && !sessionTerminal) {
           if (await isOffscreenAlive()) {
             hasActiveRecorder = true;
           } else {
@@ -233,6 +245,7 @@ export const onActionButtonClickedListener = () => {
             "[Screenity][ActionClick] branch: stale-reset-then-popup.",
             { recording, pendingRecording, restarting, sessionRecording, recordingTab, offscreen },
           );
+          clearInMemoryEditorLock();
           await chrome.storage.local.set({
             recording: false,
             pendingRecording: false,

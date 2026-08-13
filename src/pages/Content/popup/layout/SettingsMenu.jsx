@@ -16,6 +16,7 @@ import { contentStateContext } from "../../context/ContentState";
 import {
   probeFastRecorderSupport,
   shouldUseFastRecorder,
+  resolveFastRecorderUserSetting,
   getFastRecorderStickyState,
 } from "../../../../media/fastRecorderGate";
 import { resetOnboardingSeen } from "../onboarding/storage";
@@ -134,12 +135,9 @@ const SettingsMenu = (props) => {
 
   const runFastRecorderProbe = async (source = "auto") => {
     if (!contentState) return;
-    const userSetting =
-      contentState.useWebCodecsRecorder_v2 === true
-        ? true
-        : contentState.useWebCodecsRecorder_v2 === false
-        ? false
-        : null;
+    const userSetting = resolveFastRecorderUserSetting(
+      contentState.useWebCodecsRecorder,
+    );
     const sticky = await getFastRecorderStickyState();
     const probe = await probeFastRecorderSupport();
     const useFast = shouldUseFastRecorder(userSetting, probe, sticky);
@@ -260,7 +258,7 @@ const SettingsMenu = (props) => {
     return () => {
       canceled = true;
     };
-  }, [contentState?.useWebCodecsRecorder_v2]);
+  }, [contentState?.useWebCodecsRecorder]);
 
   return (
     <DropdownMenu.Root
@@ -477,7 +475,7 @@ const SettingsMenu = (props) => {
               <DropdownMenu.SubTrigger className="DropdownMenuItem">
                 {chrome.i18n.getMessage("maxResolutionLabel") +
                   " (" +
-                  contentState.qualityValue_v2 +
+                  contentState.qualityValue +
                   ")"}
                 <div className="ItemIndicatorArrow">
                   <img src={DropdownGroup} />
@@ -490,14 +488,14 @@ const SettingsMenu = (props) => {
                   alignOffset={-3}
                 >
                   <DropdownMenu.RadioGroup
-                    value={contentState.qualityValue_v2}
+                    value={contentState.qualityValue}
                     onValueChange={(value) => {
                       setContentState((prevContentState) => ({
                         ...prevContentState,
-                        qualityValue_v2: value,
+                        qualityValue: value,
                       }));
                       chrome.storage.local.set({
-                        qualityValue_v2: value,
+                        qualityValue: value,
                       });
                     }}
                   >
@@ -601,7 +599,7 @@ const SettingsMenu = (props) => {
               <DropdownMenu.SubTrigger className="DropdownMenuItem">
                 {chrome.i18n.getMessage("maxFPSLabel") +
                   " (" +
-                  contentState.fpsValue_v2 +
+                  contentState.fpsValue +
                   " fps)"}
                 <div className="ItemIndicatorArrow">
                   <img src={DropdownGroup} />
@@ -614,14 +612,14 @@ const SettingsMenu = (props) => {
                   alignOffset={-3}
                 >
                   <DropdownMenu.RadioGroup
-                    value={contentState.fpsValue_v2}
+                    value={contentState.fpsValue}
                     onValueChange={(value) => {
                       setContentState((prevContentState) => ({
                         ...prevContentState,
-                        fpsValue_v2: value,
+                        fpsValue: value,
                       }));
                       chrome.storage.local.set({
-                        fpsValue_v2: value,
+                        fpsValue: value,
                       });
                     }}
                   >
@@ -717,10 +715,10 @@ const SettingsMenu = (props) => {
                 onCheckedChange={(checked) => {
                   setContentState((prevContentState) => ({
                     ...prevContentState,
-                    useWebCodecsRecorder_v2: checked,
+                    useWebCodecsRecorder: checked,
                   }));
                   chrome.storage.local.set({
-                    useWebCodecsRecorder_v2: checked,
+                    useWebCodecsRecorder: checked,
                     ...(checked
                       ? {
                           lastWebCodecsFailureAt: null,
@@ -729,7 +727,7 @@ const SettingsMenu = (props) => {
                       : {}),
                   });
                 }}
-                checked={contentState.useWebCodecsRecorder_v2 !== false}
+                checked={contentState.useWebCodecsRecorder !== false}
               >
                 {chrome.i18n.getMessage("webcodecsToggleLabel")}
                 <DropdownMenu.ItemIndicator className="ItemIndicator">

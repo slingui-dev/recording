@@ -3,6 +3,8 @@
 // fragments come out as Blobs via ondataavailable.
 
 import { WebCodecsRecorder } from "../../Recorder/webcodecs/WebCodecsRecorder";
+import { closeActiveEncoderPrewarm } from "../../Recorder/encoderPrewarm";
+import { isWarmAdoptEnabled } from "../../Recorder/webcodecs/startupFlags";
 
 const dispatchError = (cb, err) => {
   if (typeof cb !== "function") return;
@@ -20,10 +22,17 @@ export class WebCodecsTrackRecorder {
     this.videoBitsPerSecond =
       options.videoBitsPerSecond || 16_000_000;
     this.audioBitsPerSecond = options.audioBitsPerSecond || 128_000;
+    // getSettings() can report 2 channels while the bus mixes mono, and a stereo
+    // encoder rejects mono AudioData (see WebCodecsRecorder).
+    this.audioChannels = options.audioChannels || null;
     this.enableAudio = options.enableAudio !== false; // default true
     // Used by cloud's camera path on macOS to force a software h264
     // encoder, sidestepping VideoToolbox's per-process HW-slot serialization.
     this.preferSoftware = Boolean(options.preferSoftware);
+    // Namespaces the decoderConfig sidecar so dual-track keys don't collide.
+    this.trackKind = options.trackKind || "default";
+    this.encodeStats = null;
+    this.audioDiag = null;
     // MediaRecorder-shape fields used by callers.
     this._state = "inactive";
     this.ondataavailable = null;
@@ -55,11 +64,36 @@ export class WebCodecsTrackRecorder {
     return this._recorder?.actualVideoCodec || null;
   }
 
+  // Falls back to the live recorder so a session that never finalized (stall,
+  // zero frames, failed start) still reports its counters.
+  getEncodeStats() {
+    try {
+      return this.encodeStats || this._recorder?.getEncodeStats?.() || null;
+    } catch {
+      return this.encodeStats || null;
+    }
+  }
+
+  getAudioDiag() {
+    try {
+      return this.audioDiag || this._recorder?.getAudioDiag?.() || null;
+    } catch {
+      return this.audioDiag || null;
+    }
+  }
+
+  // Diagnostic counters; safe to poll mid-recording and after stop.
+  // Returns null before the inner recorder is constructed.
+  getDiagSnapshot() {
+    try {
+      return this._recorder?.getDiagSnapshot?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
   start(_timeslice) {
-    // The timeslice arg is a no-op here; Mp4MuxerWrapper emits fragments
-    // on its own ~1s cadence, which is comparable to the 2000ms timeslice
-    // cloud uses with MediaRecorder. Timing differs slightly but the
-    // chunk-write contract (Blob events) is the same.
+    // timeslice is a no-op: Mp4MuxerWrapper emits on its own ~1s cadence.
     if (this._state !== "inactive") {
       throw new Error(
         `WebCodecsTrackRecorder: cannot start in state ${this._state}`,
@@ -85,7 +119,16 @@ export class WebCodecsTrackRecorder {
       }
     };
 
-    const handleFinalized = () => {
+    const handleFinalized = (payload) => {
+      // Keep the encoder's own numbers. onFinalized was called for its side
+      // effect and the payload dropped, so every prod session recorded
+      // encodeStats: null.
+      try {
+        this.encodeStats = this._recorder?.getEncodeStats?.() || null;
+      } catch {}
+      try {
+        this.audioDiag = this._recorder?.getAudioDiag?.() || null;
+      } catch {}
       if (this._finalizedResolved) return;
       this._finalizedResolved = true;
       this._state = "inactive";
@@ -98,17 +141,57 @@ export class WebCodecsTrackRecorder {
     const handleError = (err) => {
       // Sticky-disable handling for non-transient WebCodecs failures lives
       // outside this class (see chooseEncoder.js + CloudRecorder.jsx).
-      // Surface to the caller via the MediaRecorder-shape onerror.
+      // Preserves err.finalized so callers can skip sticky-disable on salvage.
       dispatchError(this.onerror, err);
     };
 
+    // Per-track sidecar (screen/camera/audio) so a future orphan-recovery
+    // path can rebuild moov from chunks. No reader exists yet; mediabunny's
+    // fragmented fastStart writes moov upfront, so this is reserved.
+    const handleDecoderConfig = (cfg) => {
+      try {
+        const desc = cfg?.description;
+        let descBase64 = null;
+        if (desc instanceof Uint8Array || desc instanceof ArrayBuffer) {
+          const u8 = desc instanceof ArrayBuffer ? new Uint8Array(desc) : desc;
+          let binary = "";
+          for (let i = 0; i < u8.length; i++) {
+            binary += String.fromCharCode(u8[i]);
+          }
+          descBase64 = btoa(binary);
+        }
+        chrome.storage.local.get(["cloudRecorderDecoderConfig"]).then((r) => {
+          const merged = {
+            ...(r?.cloudRecorderDecoderConfig || {}),
+            [this.trackKind]: {
+              codec: cfg?.codec || null,
+              container: cfg?.container || null,
+              width: cfg?.width || null,
+              height: cfg?.height || null,
+              description: descBase64,
+              at: Date.now(),
+            },
+          };
+          chrome.storage.local.set({ cloudRecorderDecoderConfig: merged });
+        });
+      } catch {}
+    };
+
+    // Screen only: the prewarm is sized and hardware-preferred for screen,
+    // and cloud's camera track is often forced to software anyway.
+    const adoptPrewarm =
+      isWarmAdoptEnabled() && this.trackKind === "screen" && !this.preferSoftware;
+
     this._recorder = new WebCodecsRecorder(this.stream, {
+      allowPrewarmAdopt: adoptPrewarm,
       onChunk: handleChunk,
       onFinalized: handleFinalized,
       onError: handleError,
+      onDecoderConfig: handleDecoderConfig,
       enableAudio: this.enableAudio,
       videoBitrate: this.videoBitsPerSecond,
       audioBitrate: this.audioBitsPerSecond,
+      audioChannels: this.audioChannels,
       preferSoftware: this.preferSoftware,
       // Cap at 1080p; retina captures exceed AVC L4.2 (~2.2MP) and
       // throw on first frame, leaving Bunny with the 28-byte init.
@@ -118,12 +201,18 @@ export class WebCodecsTrackRecorder {
     });
     this._state = "recording";
 
-    // underlying recorder.start() is async; dispatch and don't block,
-    // since MediaRecorder.start() is sync to the caller and startup
-    // errors flow through onerror.
-    Promise.resolve(this._recorder.start()).catch((err) => {
-      handleError(err);
-    });
+    // MediaRecorder.start() is sync to callers; dispatch and route errors
+    // via onerror. Release the prewarm HW slot first or VideoToolbox
+    // contends, unless this track adopts it. Camera never disposes it: that
+    // would race the screen track's claim.
+    const releasePrewarm = () => {
+      if (adoptPrewarm || this.trackKind !== "screen") return null;
+      return closeActiveEncoderPrewarm().catch(() => {});
+    };
+    Promise.resolve()
+      .then(releasePrewarm)
+      .then(() => this._recorder.start())
+      .catch((err) => handleError(err));
   }
 
   pause() {
@@ -148,10 +237,7 @@ export class WebCodecsTrackRecorder {
     this._state = "recording";
   }
 
-  // MediaRecorder.stop() is sync and queues a finalize that fires onstop
-  // on completion. mirror that shape: return undefined, callers await
-  // onstop. WebCodecsRecorder.stop() is async and resolves after finalize;
-  // we hook onFinalized to fire onstop at the right time.
+  // Mirror MediaRecorder.stop(): return undefined; callers await onstop.
   stop() {
     if (this._state === "inactive") return;
     this._state = "inactive";
@@ -162,10 +248,8 @@ export class WebCodecsTrackRecorder {
         } catch (err) {
           dispatchError(this.onerror, err);
         }
-        // if onFinalized never fires (rare: muxer hung past internal
-        // timeout), force the stop callback so the caller's drain doesn't
-        // deadlock. WebCodecsRecorder already has a 5s finalize timeout +
-        // flushPending fallback that emits chunks.
+        // Force the stop callback if onFinalized never fires, so the caller's
+        // drain doesn't deadlock on a hung muxer.
         if (!this._finalizedResolved) {
           this._finalizedResolved = true;
           this._onFinalizedResolve?.();

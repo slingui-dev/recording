@@ -6,12 +6,19 @@ import {
 } from "../../messaging/messageRouter";
 import { hydrateDiagnosticLog, diagEvent } from "../utils/diagnosticLog";
 import { initCountdownFallback } from "./recording/countdownFallback";
+import { initKeepAwake } from "./recording/keepAwake";
 import { initLifecycleObserver } from "./lifecycleObserver";
 import {
   listSessionDirs,
   destroySessionDir,
 } from "../CloudRecorder/recorderStorage/opfsKvStore";
 import { handleGetStreamingData } from "./recording/recordingHelpers";
+
+// Don't tear down an in-flight start on SW restart: a fresh start is
+// mid-setup (recorder tab not loaded yet), not dead. Mirrors the alarm
+// watchdog's recordingStartingAt window (handleAlarm.js).
+const ENABLE_START_GRACE_ON_INIT = true;
+const START_GRACE_MS = 30_000;
 
 // Must run before any message/alarm handler can bail on a stale lock.
 const clearStaleLocks = async () => {
@@ -24,8 +31,10 @@ const clearStaleLocks = async () => {
       pendingRecording,
       restarting,
       recordingTab,
+      offscreen,
       multiMode,
       region,
+      recordingStartingAt,
     } = await chrome.storage.local.get([
       "sendingChunks",
       "postStopEditorOpening",
@@ -34,8 +43,10 @@ const clearStaleLocks = async () => {
       "pendingRecording",
       "restarting",
       "recordingTab",
+      "offscreen",
       "multiMode",
       "region",
+      "recordingStartingAt",
     ]);
 
     const stale = {};
@@ -54,20 +65,51 @@ const clearStaleLocks = async () => {
 
     // SW died mid-dispatch or tab closed
     if (recording || pendingRecording || restarting) {
-      let tabAlive = false;
+      let recorderAlive = false;
       if (recordingTab) {
         try {
           await new Promise((resolve) => {
             chrome.tabs.get(recordingTab, (tab) => {
-              tabAlive = !chrome.runtime.lastError && Boolean(tab);
+              recorderAlive = !chrome.runtime.lastError && Boolean(tab);
               resolve();
             });
           });
         } catch {
-          tabAlive = false;
+          recorderAlive = false;
         }
       }
-      if (!tabAlive) {
+      // Offscreen recordings have no recordingTab; the recorder lives in the
+      // offscreen document. Pause idles the SW, which restarts and would
+      // otherwise tear down a perfectly alive (paused) offscreen recording.
+      // Treat the offscreen doc's existence as the recorder being alive.
+      if (!recorderAlive && offscreen) {
+        try {
+          const contexts = await chrome.runtime.getContexts({});
+          recorderAlive = (contexts || []).some(
+            (c) => c.contextType === "OFFSCREEN_DOCUMENT",
+          );
+        } catch {}
+      }
+      // A start younger than START_GRACE_MS is mid-setup, not dead: the SW
+      // restarted before the recorder tab came up. Wiping it here is what
+      // surfaces as REC_START_FAILED under SW instability. Leave it; the
+      // alarm watchdog (same window) and the recorder's 12s start gate
+      // still catch a genuinely dead start.
+      const startIsFresh =
+        ENABLE_START_GRACE_ON_INIT &&
+        typeof recordingStartingAt === "number" &&
+        Date.now() - recordingStartingAt < START_GRACE_MS;
+      if (!recorderAlive && startIsFresh) {
+        console.warn(
+          "[Screenity][BG] Stale-looking start on startup but within start grace, keeping",
+          { recordingStartingAt, ageMs: Date.now() - recordingStartingAt },
+        );
+        diagEvent("sw-init-start-grace-kept", {
+          ageMs: Date.now() - recordingStartingAt,
+          recordingTab: recordingTab || null,
+        });
+      }
+      if (!recorderAlive && !startIsFresh) {
         stale.recording = false;
         stale.pendingRecording = false;
         stale.restarting = false;
@@ -81,17 +123,14 @@ const clearStaleLocks = async () => {
         stale.memoryError = false;
         // keep editorRecordingError + sandboxTab; the editor reads them on mount
         // and onTabRemovedListener clears sandboxTab when the editor closes.
-        stale.backup = false;
-        stale.backupSetup = false;
-        stale.backupTab = null;
         stale.paused = false;
         stale.pausedAt = null;
         stale.totalPausedMs = 0;
         stale.tabRecordedID = null;
         stale.recordingUiTabId = null;
         console.warn(
-          "[Screenity][BG] Stale recording state on startup (no live recorderTab) - clearing",
-          { recording, pendingRecording, restarting, recordingTab },
+          "[Screenity][BG] Stale recording state on startup (no live recorder tab or offscreen doc) - clearing",
+          { recording, pendingRecording, restarting, recordingTab, offscreen },
         );
       }
     }
@@ -206,12 +245,11 @@ const recoverInFlightRecording = async () => {
       tabUrl: tab?.url,
       status: tab?.status,
     });
-    const { region, customRegion, tabRecordedID, backup, recordingType } =
+    const { region, customRegion, tabRecordedID, recordingType } =
       await chrome.storage.local.get([
         "region",
         "customRegion",
         "tabRecordedID",
-        "backup",
         "recordingType",
       ]);
     const isRegion = Boolean(region) && !customRegion;
@@ -219,7 +257,6 @@ const recoverInFlightRecording = async () => {
       await chrome.tabs.sendMessage(recordingTab, {
         type: "loaded",
         request: { recordingType, region, customRegion },
-        backup: Boolean(backup),
         tabPreferred: false,
         ...(isRegion && tabRecordedID
           ? { isTab: true, tabID: tabRecordedID }
@@ -293,6 +330,7 @@ messageRouter();
 initializeListeners();
 setupHandlers();
 initCountdownFallback();
+initKeepAwake();
 initLifecycleObserver();
 
 // Recovery must run AFTER clearStaleLocks: if the recorder tab died
@@ -377,3 +415,4 @@ try {
     chrome.storage.local.set({ swLastSeenAt: Date.now() }).catch(() => {});
   });
 } catch {}
+

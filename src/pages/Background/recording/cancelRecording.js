@@ -56,9 +56,6 @@ export const cancelRecording = async () => {
       restarting: false,
       offscreen: false,
       memoryError: false,
-      backup: false,
-      backupSetup: false,
-      backupTab: null,
     });
 
     // URL-guard so we never close a user tab by mistake
@@ -93,8 +90,10 @@ export const cancelRecording = async () => {
       sendMessageTab(id, { type: "stop-pending" }).catch(() => {});
     });
     focusTab(activeTab);
+    // shouldFinalize:false: cancel throws the take away, so the offscreen
+    // recorder must not finalize into a video-ready / editor open.
     try {
-      await discardOffscreenDocuments();
+      await discardOffscreenDocuments({ reason: "cancel", shouldFinalize: false });
     } catch {}
     await resetWatchdogState();
     chrome.runtime.sendMessage({ type: "turn-off-pip" });

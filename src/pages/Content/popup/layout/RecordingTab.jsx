@@ -3,74 +3,81 @@ import * as Tabs from "@radix-ui/react-tabs";
 
 import RecordingType from "./RecordingType";
 import {
+  ScreenTabOn,
+  ScreenTabOff,
   RegionTabOn,
   RegionTabOff,
+  MockupTabOn,
+  MockupTabOff,
+  CameraTabIconOn,
+  CameraTabIconOff,
   CheckWhiteIcon,
   CloseWhiteIcon,
 } from "../../images/popup/images";
 
+import { BaseSwitch } from "../components/Switch";
 import TooltipWrap from "../components/TooltipWrap";
 
 // Context
 import { contentStateContext } from "../../context/ContentState";
 
 const RecordingTab = (props) => {
-  const ACCOUNTS_URL = "https://accounts.slingui.com";
-  const openAccounts = (event) => {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-
-    window.open(ACCOUNTS_URL, "_blank", "noopener,noreferrer");
-  };
   const [contentState, setContentState] = useContext(contentStateContext);
 
   const [tabRecordingDisabled, setTabRecordingDisabled] = useState(false);
   const [showModalSoon, setShowModalSoon] = useState(false); // 👈 NEW
 
+  // On pages that can't do tab/region capture (chrome://, app pages),
+  // swap the visible selection to "screen" but don't persist; the
+  // user's stored preference rehydrates on the next mount elsewhere.
   useEffect(() => {
-    setContentState((prev) => ({
-      ...prev,
-      recordingType: "region",
-      cameraActive: false,
-      customRegion: false,
-      pushToTalk: false,
-    }));
-    chrome.storage.local.set({
-      recordingType: "region",
-      cameraActive: false,
-      customRegion: false,
-      pushToTalk: false,
-    });
-    chrome.runtime.sendMessage({ type: "screen-update" });
-  }, []);
+    if (tabRecordingDisabled && contentState.recordingType === "region") {
+      setContentState((prev) => ({
+        ...prev,
+        recordingType: "screen",
+      }));
+      contentState.openToast?.(
+        chrome.i18n.getMessage("tabRecordingDisabledToast"),
+        4000
+      );
+    }
+  }, [tabRecordingDisabled]);
 
   useEffect(() => {
     const currentUrl = window.location.href;
-    const isBlocked = currentUrl.includes(process.env.SCREENITY_APP_BASE);
+    // facebook.com and similar: Permissions-Policy won't delegate
+    // display-capture to our region iframe, so region capture can't start.
+    const isBlocked =
+      currentUrl.includes(process.env.SCREENITY_APP_BASE) ||
+      contentState.siteDisplayCaptureBlocked === true;
 
     setTabRecordingDisabled(isBlocked);
-  }, []);
+
+    if (isBlocked && contentState.recordingType === "region") {
+      setContentState((prev) => ({
+        ...prev,
+        recordingType: "screen",
+      }));
+      // Same rationale as above; no storage write, just content-state.
+      contentState.openToast?.(
+        chrome.i18n.getMessage("tabRecordingDisabledToast"),
+        4000
+      );
+    }
+  }, [contentState.recordingType, contentState.siteDisplayCaptureBlocked]);
 
   const onValueChange = (tab) => {
-    if (tab !== "region") return;
-
     setContentState((prevContentState) => ({
       ...prevContentState,
-      recordingType: "region",
-      cameraActive: false,
-      customRegion: false,
-      pushToTalk: false,
+      recordingType: tab,
     }));
-    chrome.storage.local.set({
-      recordingType: "region",
-      cameraActive: false,
-      customRegion: false,
-      pushToTalk: false,
-    });
+    chrome.storage.local.set({ recordingType: tab });
 
-    chrome.runtime.sendMessage({ type: "screen-update" });
+    if (tab === "camera") {
+      chrome.runtime.sendMessage({ type: "camera-only-update" });
+    } else {
+      chrome.runtime.sendMessage({ type: "screen-update" });
+    }
   };
 
   useEffect(() => {
@@ -85,9 +92,13 @@ const RecordingTab = (props) => {
     <div className="recording-ui">
       <Tabs.Root
         className="TabsRoot"
-        defaultValue="region"
+        defaultValue="screen"
         onValueChange={onValueChange}
-        value="region"
+        value={
+          contentState.recordingType === "tab"
+            ? "region"
+            : contentState.recordingType
+        }
       >
         {contentState.recordingToScene && (
           <div className="projectActiveBanner">
@@ -138,6 +149,20 @@ const RecordingTab = (props) => {
           aria-label="Manage your account"
           tabIndex={0}
         >
+          <Tabs.Trigger className="TabsTrigger" value="screen" tabIndex={0}>
+            <div className="TabsTriggerLabel">
+              <div className="TabsTriggerIcon">
+                <img
+                  src={
+                    contentState.recordingType === "screen"
+                      ? ScreenTabOn
+                      : ScreenTabOff
+                  }
+                />
+              </div>
+              <span>{chrome.i18n.getMessage("screenType")}</span>
+            </div>
+          </Tabs.Trigger>
           <TooltipWrap
             content={
               tabRecordingDisabled
@@ -166,12 +191,32 @@ const RecordingTab = (props) => {
             >
               <div className="TabsTriggerLabel">
                 <div className="TabsTriggerIcon">
-                  <img src={RegionTabOn || RegionTabOff} />
+                  <img
+                    src={
+                      contentState.recordingType === "region"
+                        ? RegionTabOn
+                        : RegionTabOff
+                    }
+                  />
                 </div>
                 <span>{chrome.i18n.getMessage("tabType")}</span>
               </div>
             </Tabs.Trigger>
           </TooltipWrap>
+          <Tabs.Trigger className="TabsTrigger" value="camera" tabIndex={0}>
+            <div className="TabsTriggerLabel">
+              <div className="TabsTriggerIcon">
+                <img
+                  src={
+                    contentState.recordingType === "camera"
+                      ? CameraTabIconOn
+                      : CameraTabIconOff
+                  }
+                />
+              </div>
+              <span>{chrome.i18n.getMessage("cameraType")}</span>
+            </div>
+          </Tabs.Trigger>
           <div className="TabsTriggerSpacer"></div>
           <div className="TabsTrigger">
             <TooltipWrap
@@ -185,21 +230,14 @@ const RecordingTab = (props) => {
               <div
                 className="TabsTriggerLabel"
                 style={{
-                  opacity: 1,
-                  cursor: "pointer",
+                  opacity: contentState.isLoggedIn ? 1 : 0.5,
+
+                  cursor: contentState.isLoggedIn ? "pointer" : "not-allowed",
                 }}
-                onClick={openAccounts}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    openAccounts(event);
+                onClick={() => {
+                  // If not logged in, show the modal instead of toggling
+                  if (!contentState.isLoggedIn) {
+                    setShowModalSoon(true);
                   }
                 }}
               >
@@ -208,7 +246,7 @@ const RecordingTab = (props) => {
                   style={{
                     width: "33px",
                     position: "relative", // For the badge positioning
-                    pointerEvents: "auto",
+                    pointerEvents: contentState.isLoggedIn ? "auto" : "none",
                   }}
                 >
                   {contentState.multiMode &&
@@ -231,7 +269,7 @@ const RecordingTab = (props) => {
                         cursor: "pointer",
                         width: "28px",
                         height: "28px",
-                        background: "#0a3b6e",
+                        background: "#3080F8",
                         borderRadius: "50%",
                         display: "flex",
                         alignItems: "center",
@@ -264,38 +302,64 @@ const RecordingTab = (props) => {
                       </div>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      aria-label="Go to Slingui accounts"
-                      onClick={openAccounts}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
+                    <BaseSwitch
+                      label={"Multi recording"}
+                      name="multiRecording"
+                      value="multiMode"
+                      checked={contentState.multiMode}
+                      onChange={(checked) => {
+                        setContentState((prevContentState) => ({
+                          ...prevContentState,
+                          multiMode: checked,
+                        }));
+                        chrome.storage.local.set({ multiMode: checked });
+
+                        if (checked) {
+                          chrome.storage.local
+                            .get(["hasSeenMultiRecordingInfo"])
+                            .then((res) => {
+                              if (!res.hasSeenMultiRecordingInfo) {
+                                contentState.openModal(
+                                  chrome.i18n.getMessage(
+                                    "multiRecordingModeTitle"
+                                  ) || "Multi-recording mode",
+                                  chrome.i18n.getMessage(
+                                    "multiRecordingModeDescription"
+                                  ) ||
+                                    "Record multiple scenes, like your screen, camera, or both, one after another. This is great for doing multiple takes, switching views, or breaking your recording into parts. When you’re done, click Finish to open the editor with all your scenes combined in one project.",
+                                  "Got it",
+                                  chrome.i18n.getMessage(
+                                    "permissionsModalDismiss"
+                                  ) || "Dismiss",
+                                  () => {},
+                                  () => {},
+                                  null,
+                                  "",
+                                  "",
+                                  true,
+                                  false
+                                );
+
+                                // Mark as seen
+                                chrome.storage.local.set({
+                                  hasSeenMultiRecordingInfo: true,
+                                });
+                              }
+                            });
+                          chrome.storage.local.set({ instantMode: false });
+                          setContentState((prevContentState) => ({
+                            ...prevContentState,
+                            instantMode: false,
+                          }));
+                        }
                       }}
-                      style={{
-                        width: "28px",
-                        height: "28px",
-                        borderRadius: "999px",
-                        border: "1px solid #D7DCE5",
-                        background: "#FFFFFF",
-                        color: "#0a3b6e",
-                        fontSize: "14px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: 0,
-                      }}
-                    >
-                      ↗
-                    </button>
+                    />
                   )}
                 </div>
                 <span>
                   {contentState.multiMode && contentState.multiSceneCount > 0
                     ? chrome.i18n.getMessage("finishLabelMulti") || "Finish"
-                    : "Slingui"}
+                    : chrome.i18n.getMessage("multiLabel") || "Multi"}
                 </span>
               </div>
             </TooltipWrap>
@@ -404,11 +468,14 @@ const RecordingTab = (props) => {
             </button>
           </div>
         )}
+        <Tabs.Content className="TabsContent" value="screen">
+          <RecordingType shadowRef={props.shadowRef} />
+        </Tabs.Content>
         <Tabs.Content className="TabsContent" value="region">
-          <RecordingType
-            shadowRef={props.shadowRef}
-            tabRecordingDisabled={tabRecordingDisabled}
-          />
+          <RecordingType shadowRef={props.shadowRef} />
+        </Tabs.Content>
+        <Tabs.Content className="TabsContent" value="camera">
+          <RecordingType shadowRef={props.shadowRef} />
         </Tabs.Content>
       </Tabs.Root>
     </div>

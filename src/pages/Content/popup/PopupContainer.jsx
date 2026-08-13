@@ -80,7 +80,7 @@ const PopupContainer = (props) => {
         showProSplash: nextShowProSplash,
       }));
     });
-  }, [setContentState]);
+  }, []);
 
   useEffect(() => {
     if (contentState.isLoggedIn) {
@@ -98,8 +98,6 @@ const PopupContainer = (props) => {
 
   useEffect(() => {
     const buildURL = async () => {
-      const locale = chrome.i18n.getMessage("@@ui_locale");
-
       let baseURL = "https://help.screenity.io/";
 
       if (contentState?.isLoggedIn && contentState?.screenityUser) {
@@ -112,15 +110,7 @@ const PopupContainer = (props) => {
         baseURL = `https://tally.so/r/310MNg?extension=true&${qs}`;
       }
 
-      if (!locale.includes("en")) {
-        setURL(
-          `https://translate.google.com/translate?sl=en&tl=${locale}&u=${encodeURIComponent(
-            baseURL
-          )}`
-        );
-      } else {
-        setURL(baseURL);
-      }
+      setURL(baseURL);
     };
     buildURL();
   }, [contentState]);
@@ -166,16 +156,32 @@ const PopupContainer = (props) => {
     tab,
   ]);
 
+  const previewWelcome = (() => {
+    try {
+      return (
+        new URLSearchParams(window.location.search).get("previewWelcome") ===
+        "1"
+      );
+    } catch {
+      return false;
+    }
+  })();
+
   const showWelcomeSplash = Boolean(
-    isCloudBuild &&
-      !contentState.isLoggedIn &&
+    (isCloudBuild &&
+      // Strict === false (not just falsy) so the splash stays hidden while the
+      // auth check is still in flight. Otherwise a reinstalled user who gets
+      // silently re-logged-in via their website cookie would briefly flash the
+      // paid welcome screen before isLoggedIn resolves to true.
+      contentState.isLoggedIn === false &&
       !contentState.wasLoggedIn &&
       (
         onboarding ||
         showProSplash ||
         contentState.onboarding ||
         contentState.showProSplash
-      ),
+      )) ||
+      (isCloudBuild && previewWelcome),
   );
 
   useLayoutEffect(() => {

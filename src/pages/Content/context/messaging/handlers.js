@@ -2,7 +2,7 @@ import {
   registerMessage,
   messageRouter,
 } from "../../../../messaging/messageRouter";
-import { setContentState, contentStateRef } from "../ContentState";
+import { setContentState, contentStateRef, setTimer } from "../ContentState";
 import { updateFromStorage } from "../utils/updateFromStorage";
 
 import { checkAuthStatus } from "../utils/checkAuthStatus";
@@ -20,7 +20,20 @@ export const setupHandlers = () => {
   let lastToggleDrawingAt = 0;
   const TOGGLE_DRAWING_COOLDOWN_MS = 400;
   let projectReadySeq = 0;
+  // Only bounds the fallback runtime copy. The bridge has no size limit.
   const LOCAL_PLAYBACK_MAX_BYTES = 250 * 1024 * 1024;
+  const BRIDGE_READY = "screenity-local-playback-bridge-ready";
+  const BRIDGE_REQUEST = "screenity-local-playback-bridge-request";
+  const BRIDGE_RESULT = "screenity-local-playback-bridge-result";
+  const BRIDGE_ORIGIN = (() => {
+    try {
+      return new URL(chrome.runtime.getURL("")).origin;
+    } catch {
+      return null;
+    }
+  })();
+  const BRIDGE_READY_TIMEOUT_MS = 5000;
+  const BRIDGE_BUILD_TIMEOUT_MS = 120000;
   let latestLocalPlaybackOffer = null;
   let latestLocalPlaybackProjectId = null;
   let latestLocalPlaybackSceneId = null;
@@ -111,29 +124,110 @@ export const setupHandlers = () => {
     } catch {}
   };
 
-  const fetchLocalPlaybackSourceFromExtension = async ({
-    offerId,
-    projectId,
-    sceneId,
-  }) => {
-    const offerRes = await chrome.runtime.sendMessage({
-      type: "cloud-local-playback-get-offer",
-      offerId,
-      projectId,
-      sceneId,
-    });
-    if (!offerRes?.ok || !offerRes.offer) {
-      throw new Error("local-playback-offer-unavailable");
+  // Preferred path: extension-origin iframe posts one Blob back by reference,
+  // O(1) in recording size. The base64 loop below copies every byte and is
+  // capped at LOCAL_PLAYBACK_MAX_BYTES.
+  let bridgeFrame = null;
+  let bridgeReady = null;
+  const bridgePending = new Map();
+
+  const ensureBridgeFrame = () => {
+    // Bridge only talks to the trusted app origin; fail fast into the runtime
+    // fallback instead of waiting out the ready timeout.
+    if (!BRIDGE_ORIGIN || !getProjectMessageTargetOrigin()) {
+      return Promise.reject(new Error("local-playback-bridge-untrusted-origin"));
     }
-    const offer = offerRes.offer;
+    if (bridgeReady) return bridgeReady;
+    bridgeReady = new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error("local-playback-bridge-timeout"));
+      }, BRIDGE_READY_TIMEOUT_MS);
+
+      const onReady = (event) => {
+        if (event.source !== bridgeFrame?.contentWindow) return;
+        if (event.data?.source !== BRIDGE_READY) return;
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        window.removeEventListener("message", onReady);
+        resolve(bridgeFrame);
+      };
+      window.addEventListener("message", onReady);
+
+      try {
+        bridgeFrame = document.createElement("iframe");
+        bridgeFrame.src = chrome.runtime.getURL("localplaybackbridge.html");
+        bridgeFrame.setAttribute("aria-hidden", "true");
+        bridgeFrame.style.cssText =
+          "position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none;left:-9999px;";
+        (document.body || document.documentElement).appendChild(bridgeFrame);
+      } catch (err) {
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      }
+    }).catch((err) => {
+      // Let a later attempt rebuild the frame rather than caching the failure.
+      bridgeReady = null;
+      teardownBridgeFrame();
+      throw err;
+    });
+    return bridgeReady;
+  };
+
+  const teardownBridgeFrame = () => {
+    try {
+      bridgeFrame?.remove();
+    } catch {}
+    bridgeFrame = null;
+  };
+
+  const onBridgeMessage = (event) => {
+    if (!bridgeFrame || event.source !== bridgeFrame.contentWindow) return;
+    if (event.data?.source !== BRIDGE_RESULT) return;
+    const pending = bridgePending.get(event.data.requestId);
+    if (!pending) return;
+    bridgePending.delete(event.data.requestId);
+    pending(event.data);
+  };
+  window.addEventListener("message", onBridgeMessage);
+
+  const fetchLocalPlaybackBlobViaBridge = async (offer) => {
+    const frame = await ensureBridgeFrame();
+    const requestId = `${offer.offerId}:${Date.now()}`;
+    const reply = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        bridgePending.delete(requestId);
+        reject(new Error("local-playback-bridge-build-timeout"));
+      }, BRIDGE_BUILD_TIMEOUT_MS);
+      bridgePending.set(requestId, (data) => {
+        clearTimeout(timer);
+        resolve(data);
+      });
+      frame.contentWindow.postMessage(
+        { source: BRIDGE_REQUEST, requestId, offer },
+        BRIDGE_ORIGIN,
+      );
+    });
+
+    if (!reply?.ok || !(reply.blob instanceof Blob)) {
+      throw new Error(reply?.error || "local-playback-bridge-no-blob");
+    }
+    return reply;
+  };
+
+  // Fallback for anything the bridge can't serve (frame blocked by page CSP, storage
+  // unreachable). Same output shape, but copies every byte and only works below the cap.
+  const fetchLocalPlaybackBlobViaRuntime = async (offer) => {
     if (
-      !offer.chunkCount ||
       !offer.estimatedBytes ||
       offer.estimatedBytes > LOCAL_PLAYBACK_MAX_BYTES
     ) {
       throw new Error("local-playback-offer-too-large-or-empty");
     }
-
     const parts = [];
     for (let i = 0; i < offer.chunkCount; i += 1) {
       // eslint-disable-next-line no-await-in-loop
@@ -155,17 +249,52 @@ export const setupHandlers = () => {
       const mimeType = chunkRes.chunk.mimeType || "video/webm";
       parts.push(new Blob([bytes], { type: mimeType }));
     }
+    const blob = new Blob(parts, { type: parts[0]?.type || "video/webm" });
+    return { blob, size: blob.size, mimeType: blob.type };
+  };
 
-    const blob = new Blob(parts, {
-      type: parts[0]?.type || "video/webm",
+  const fetchLocalPlaybackSourceFromExtension = async ({
+    offerId,
+    projectId,
+    sceneId,
+  }) => {
+    const offerRes = await chrome.runtime.sendMessage({
+      type: "cloud-local-playback-get-offer",
+      offerId,
+      projectId,
+      sceneId,
     });
+    if (!offerRes?.ok || !offerRes.offer) {
+      throw new Error("local-playback-offer-unavailable");
+    }
+    const offer = offerRes.offer;
+    if (!offer.chunkCount || !offer.estimatedBytes) {
+      throw new Error("local-playback-offer-empty");
+    }
+
+    let transport = "bridge";
+    let built;
+    try {
+      built = await fetchLocalPlaybackBlobViaBridge(offer);
+    } catch (bridgeErr) {
+      console.warn(
+        "[Screenity][Content] Local playback bridge unavailable, falling back to runtime copy",
+        { offerId: offer.offerId, error: bridgeErr?.message || bridgeErr },
+      );
+      transport = "runtime";
+      built = await fetchLocalPlaybackBlobViaRuntime(offer);
+    }
+
+    const blob = built.blob;
     const url = URL.createObjectURL(blob);
     return {
       offer,
       url,
+      blob,
+      transport,
       size: blob.size || 0,
       mimeType: blob.type || "video/webm",
-      chunkCount: parts.length,
+      chunkCount: offer.chunkCount,
     };
   };
 
@@ -215,6 +344,8 @@ export const setupHandlers = () => {
           projectId: source.offer.projectId || null,
           sceneId: source.offer.sceneId || null,
           usedBy: "app-editor",
+          localBytes: source.size || 0,
+          transport: source.transport || null,
         });
       } catch {}
 
@@ -250,6 +381,11 @@ export const setupHandlers = () => {
         offerId: offer?.offerId || null,
         chunkCount: offer?.chunkCount || 0,
         estimatedBytes: offer?.estimatedBytes || 0,
+        // Local source covers only the opening of the recording, so the editor
+        // swaps to the remote URL once that exists.
+        partial: Boolean(offer?.partial),
+        availableBytes: offer?.availableBytes || offer?.estimatedBytes || 0,
+        totalBytes: offer?.totalBytes || null,
         expiresAt: offer?.expiresAt || null,
         source: offer?.source || "indexeddb-screen-chunks",
         ready: Boolean(readySource?.url),
@@ -387,6 +523,9 @@ export const setupHandlers = () => {
             localBytes: readySource?.size || null,
             chunkCount: offer.chunkCount || 0,
             estimatedBytes: offer.estimatedBytes || 0,
+            partial: Boolean(offer.partial),
+            availableBytes: offer.availableBytes || offer.estimatedBytes || 0,
+            totalBytes: offer.totalBytes || null,
             expiresAt: offer.expiresAt || null,
             source: offer.source || "indexeddb-screen-chunks",
           },
@@ -497,16 +636,19 @@ export const setupHandlers = () => {
   });
 
   registerMessage("toggle-popup", async () => {
-    // Reconcile stale recording-flow state against storage before
-    // showing the popup. The tab may have been suspended during a
-    // recording handoff and missed the storage events that clear
-    // finalizingRecording / pendingRecording locally; without this,
-    // the post-stop loader briefly renders on reopen.
+    // Reconcile from storage: a suspended tab may have missed the events
+    // that clear finalizing/pending or sync multi-mode across tabs.
     let storageReconcile = null;
+    let multiReconcile = null;
     try {
       const snap = await chrome.storage.local.get([
         "recording",
         "restarting",
+        "multiMode",
+        "multiSceneCount",
+        "multiProjectId",
+        "multiLastSceneId",
+        "projectId",
       ]);
       if (!snap.recording && !snap.restarting) {
         storageReconcile = {
@@ -518,6 +660,12 @@ export const setupHandlers = () => {
         };
         chrome.storage.local.set({ pendingRecording: false }).catch(() => {});
       }
+      multiReconcile = {
+        multiMode: Boolean(snap.multiMode),
+        multiSceneCount: Number(snap.multiSceneCount) || 0,
+        multiProjectId: snap.multiProjectId || null,
+        multiLastSceneId: snap.multiLastSceneId || null,
+      };
     } catch {}
 
     setContentState((prev) => ({
@@ -526,6 +674,7 @@ export const setupHandlers = () => {
       hasOpenedBefore: true,
       showPopup: true,
       ...(storageReconcile || {}),
+      ...(multiReconcile || {}),
     }));
     setTimer(0);
     updateFromStorage();
@@ -558,11 +707,8 @@ export const setupHandlers = () => {
         countdownActive: true,
         isCountdownVisible: true,
         countdownCancelled: false,
-        // Latching gate: once the countdown is up, the pre-countdown
-        // loader can never re-show in this session (even during the
-        // brief countdown-end → recording=true storage flip window).
-        // Otherwise the loader bleeds into the captured frame for
-        // region/desktop captures where the stream is already live.
+        // Latch: the pre-countdown loader must never re-show, or it bleeds
+        // into the captured frame for region/desktop (stream already live).
         countdownEverShown: true,
       }));
       chrome.runtime.sendMessage({ type: "diag-countdown-started" }).catch(() => {});
@@ -578,6 +724,8 @@ export const setupHandlers = () => {
     state.stopRecording();
   });
 
+  // Used to nest a second registerMessage call inside the handler,
+  // which added a listener per fire and made the toggle fire N+1 times.
   registerMessage("toggle-drawing-mode", () => {
     const now = Date.now();
     if (now - lastToggleDrawingAt < TOGGLE_DRAWING_COOLDOWN_MS) {
@@ -594,26 +742,9 @@ export const setupHandlers = () => {
       drawingMode: nextDrawingMode,
       blurMode: nextDrawingMode ? false : prev.blurMode,
     }));
-
-    registerMessage("toggle-drawing-mode", () => {
-      const now = Date.now();
-      if (now - lastToggleDrawingAt < TOGGLE_DRAWING_COOLDOWN_MS) return;
-      lastToggleDrawingAt = now;
-      if (document.hidden || !document.hasFocus()) return;
-      if (contentStateRef.current.recordingType === "camera") return;
-
-      const nextDrawingMode = !contentStateRef.current.drawingMode;
-
-      setContentState((prev) => ({
-        ...prev,
-        drawingMode: nextDrawingMode,
-        blurMode: nextDrawingMode ? false : prev.blurMode,
-      }));
-
-      chrome.storage.local.set({
-        drawingMode: nextDrawingMode,
-        ...(nextDrawingMode ? { blurMode: false } : {}),
-      });
+    chrome.storage.local.set({
+      drawingMode: nextDrawingMode,
+      ...(nextDrawingMode ? { blurMode: false } : {}),
     });
   });
 
@@ -694,6 +825,38 @@ export const setupHandlers = () => {
     }
   });
 
+  registerMessage("finalize-failure", () => {
+    const state = getState();
+    if (state && typeof state.openModal === "function") {
+      state.openModal(
+        "Upload couldn't finish",
+        "Your recording is safe. Retry the upload, or export diagnostics to help us figure out what went wrong.",
+        "Retry upload",
+        "Dismiss",
+        () => {
+          chrome.runtime.sendMessage({ type: "retry-finalize" });
+          if (typeof state.openToast === "function") {
+            state.openToast("Retrying upload…", () => {}, 5000);
+          }
+        },
+        () => {},
+        null,
+        null,
+        null,
+        true,
+        "Export diagnostics",
+        () => {
+          chrome.runtime.sendMessage({ type: "export-finalize-diagnostics" });
+        },
+      );
+    }
+  });
+  registerMessage("finalize-recovered", () => {
+    const state = getState();
+    if (state && typeof state.openToast === "function") {
+      state.openToast("Upload complete.", () => {}, 4000);
+    }
+  });
   registerMessage("recording-error", () => {
     setStartFlowOutcome("error");
     setContentState((prev) => ({
@@ -900,35 +1063,27 @@ export const setupHandlers = () => {
     if (typeof state.openToast !== "function") return;
     state.openToast(message?.message || "", () => {}, message?.timeout || 5000);
   });
-
-  registerMessage("backup-error", () => {
+  // Offscreen recordings relay the system-audio guidance here so it shows in the
+  // dedicated Warning component (dark pill + audio icon), matching the in-page
+  // recorder, instead of a generic toast. i18n resolves natively in content.
+  registerMessage("show-audio-warning", (message) => {
     const state = getState();
-    state.openModal(
-      chrome.i18n.getMessage("backupPermissionFailTitle"),
-      chrome.i18n.getMessage("backupPermissionFailDescription"),
-      chrome.i18n.getMessage("permissionsModalDismiss"),
-      null,
-      () => {
-        state.dismissRecording("backup-error");
-      },
-      () => {
-        state.dismissRecording("backup-error");
-      },
-      null,
-      null,
-      null,
-      false,
-      chrome.i18n.getMessage("getHelpButton"),
-      () => {
-        triggerSupportDownload({ source: "backup-error" });
-        chrome.runtime.sendMessage({
-          type: "report-error",
-          source: "backup-error",
-          errorCode: "BACKUP_PERMISSION_FAILED",
-          zipBundled: true,
-        });
-      },
+    const isMac = message?.variant === "mac";
+    const title = chrome.i18n.getMessage(
+      isMac ? "recordAudioWarningMacTitle" : "recordAudioWarningOtherTitle",
     );
+    const description = chrome.i18n.getMessage(
+      isMac
+        ? "recordAudioWarningMacDescription"
+        : "recordAudioWarningOtherDescription",
+    );
+    if (!description) return;
+    const timeout = message?.timeout || 10000;
+    if (typeof state.openWarning === "function") {
+      state.openWarning(title, description, "AudioIcon", timeout, "bottom");
+    } else if (typeof state.openToast === "function") {
+      state.openToast(description, () => {}, timeout);
+    }
   });
 
   registerMessage("fast-recorder-hard-fail", async () => {
@@ -1079,12 +1234,8 @@ export const setupHandlers = () => {
   });
 
   registerMessage("reopen-popup-multi", async (message) => {
-    // Read multi-state from storage before setContentState so the
-    // popup renders with multiMode/multiSceneCount correct on first
-    // paint. The old fire-and-forget updateFromStorage() ran AFTER
-    // setContentState, which raced and could leave the popup
-    // showing the "Multi recording" switch instead of "Done" (stale
-    // for hundreds of ms, or persistent across tabs).
+    // Read multi-state from storage before setContentState so the popup's
+    // first paint is correct (a fire-and-forget read would race the render).
     let storedMulti = {};
     try {
       storedMulti = await chrome.storage.local.get([
@@ -1095,12 +1246,8 @@ export const setupHandlers = () => {
         "projectId",
       ]);
     } catch {}
-    // Multi-scene stop choreography. Scene-create is already done
-    // server-side by now. Order: clear loader + recording state
-    // (including finalizingRecording, or the loader sticks until the
-    // 30s watchdog), toast immediately, popup ~700ms later so the
-    // toast settles first. Read multi state from storage; contentState
-    // can be stale on a tab that didn't run the recording.
+    // Order: clear all recording state (incl. finalizingRecording, or the
+    // loader sticks for 30s), toast, then popup ~700ms later so toast settles.
     const isMulti = Boolean(storedMulti.multiMode);
     setContentState((prev) => ({
       ...prev,
@@ -1228,6 +1375,12 @@ export const setupHandlers = () => {
         localBytes: activeLocalPlaybackSource.size || null,
         chunkCount: latestLocalPlaybackOffer.chunkCount || 0,
         estimatedBytes: latestLocalPlaybackOffer.estimatedBytes || 0,
+        partial: Boolean(latestLocalPlaybackOffer.partial),
+        availableBytes:
+          latestLocalPlaybackOffer.availableBytes ||
+          latestLocalPlaybackOffer.estimatedBytes ||
+          0,
+        totalBytes: latestLocalPlaybackOffer.totalBytes || null,
         expiresAt: latestLocalPlaybackOffer.expiresAt || null,
       };
     }

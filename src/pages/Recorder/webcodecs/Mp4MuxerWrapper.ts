@@ -57,6 +57,11 @@ export class Mp4MuxerWrapper {
   private _pendingFlush: Promise<void> = Promise.resolve();
   private _closed = false;
 
+  // Bytes streamed to onChunk. When the file ends up empty, near-zero blames the
+  // encoder (header only); large here means the loss is in the OPFS write/close path.
+  private _totalEmittedBytes = 0;
+  private _emitCount = 0;
+
   private debug: boolean;
   private log: (...args: any[]) => void;
   private warn: (...args: any[]) => void;
@@ -201,6 +206,14 @@ export class Mp4MuxerWrapper {
     await this._pendingFlush;
   }
 
+  // Read at stop to blame an empty file on the encoder (near-zero) vs the write path.
+  getStats() {
+    return {
+      totalEmittedBytes: this._totalEmittedBytes,
+      emitCount: this._emitCount,
+    };
+  }
+
   // No-op: WebCodecsRecorder already subtracts paused time; double-subtract
   // would break monotonicity. Kept for API compat.
   setPausedOffset(_offsetUs: number) {}
@@ -210,6 +223,8 @@ export class Mp4MuxerWrapper {
   }
 
   private emitChunk(chunk: Uint8Array, timestampUs: number | null) {
+    this._totalEmittedBytes += chunk.byteLength;
+    this._emitCount += 1;
     try {
       const res = this.options.onChunk?.(chunk, timestampUs ?? null);
       if (res instanceof Promise) {
@@ -247,6 +262,27 @@ export class Mp4MuxerWrapper {
       const next = last + durationUs;
       (this as any)[key] = next;
       this.log(`[MUX] audio ts +${durationUs} => ${next}`);
+      // AAC chunk.duration is unreliable (w3c/webcodecs#624), so our accumulated
+      // ts can drift from chunk.ts. Log when drift exceeds 100ms, once per ~30s.
+      if (
+        typeof timestampUs === "number" &&
+        timestampUs > 0 &&
+        !(this as any)._audioFirstTimestampUs
+      ) {
+        (this as any)._audioFirstTimestampUs = timestampUs;
+      }
+      const firstTs = (this as any)._audioFirstTimestampUs || 0;
+      if (firstTs && typeof timestampUs === "number") {
+        const expectedAccum = timestampUs - firstTs;
+        const drift = Math.abs(next - expectedAccum);
+        if (
+          drift > 100_000 &&
+          next - ((this as any)._audioDriftLogAt || 0) > 30_000_000
+        ) {
+          (this as any)._audioDriftLogAt = next;
+          this.warn(`[MUX] audio ts drift accum=${next} vs chunk.ts=${expectedAccum} (delta=${drift}us)`);
+        }
+      }
       return next;
     }
 

@@ -1,6 +1,50 @@
 {
+  "reviewAskTitle": {
+    "message": "Wie läuft es bei dir mit Screenity?",
+    "description": "Review prompt step 1 question (sentiment check) in the editor"
+  },
+  "reviewAskGood": {
+    "message": "Läuft gut",
+    "description": "Review prompt positive sentiment button label / tooltip"
+  },
+  "reviewAskBad": {
+    "message": "Nicht so gut",
+    "description": "Review prompt negative sentiment button label / tooltip"
+  },
+  "reviewThanksTitle": {
+    "message": "Du hast mir gerade den Tag gerettet!",
+    "description": "Review prompt happy-branch title in the editor"
+  },
+  "reviewThanksDescription": {
+    "message": "Ich bin Alyssa, die alleinige Macherin hinter Screenity. Ich habe die erste Version 2020 gebaut und pflege die kostenlose Erweiterung bis heute aktiv.\n\nWenn Screenity dir geholfen hat, ist eine kurze Bewertung eine der besten Möglichkeiten, das Projekt zu unterstützen ❤️",
+    "description": "Review prompt happy-branch description (founder voice) in the editor. Paragraphs separated by a blank line."
+  },
+  "reviewThanksButton": {
+    "message": "Bewertung hinterlassen",
+    "description": "Review prompt button that opens the Chrome Web Store review page"
+  },
+  "reviewThanksLater": {
+    "message": "Vielleicht später",
+    "description": "Review prompt snooze button on the happy branch"
+  },
+  "reviewSorryTitle": {
+    "message": "Das tut mir leid zu hören",
+    "description": "Review prompt unhappy-branch title in the editor"
+  },
+  "reviewSorryDescription": {
+    "message": "Ich bin Alyssa, die Macherin von Screenity, und ich lese jede Nachricht selbst. Sag mir, was schiefgelaufen ist, und ich gebe mein Bestes, es zu beheben.",
+    "description": "Review prompt unhappy-branch description in the editor"
+  },
+  "reviewSorryButton": {
+    "message": "Feedback senden",
+    "description": "Review prompt button that opens the private feedback form"
+  },
+  "reviewSorryDismiss": {
+    "message": "Nein danke",
+    "description": "Review prompt dismiss button on the unhappy branch"
+  },
   "extName": {
-    "message": "Slingui - Bildschirmaufnahme & Beschriftung",
+    "message": "Screenity - Bildschirmaufnahme & Beschriftung",
     "description": "Erweiterungsname"
   },
   "extDesc": {
@@ -48,7 +92,7 @@
     "description": "Titel des Modals für Kamera- / Mikrofonberechtigungen"
   },
   "permissionsModalDescription": {
-    "message": "Es scheint, dass  Slingui Recording keinen Zugriff auf Ihre Kamera oder Ihr Mikrofon hat. Stellen Sie sicher, dass Sie den Zugriff zulassen, indem Sie auf das Kamera-Symbol in der Adressleiste klicken.",
+    "message": "Es scheint, dass Screenity keinen Zugriff auf Ihre Kamera oder Ihr Mikrofon hat. Stellen Sie sicher, dass Sie den Zugriff zulassen, indem Sie auf das Kamera-Symbol in der Adressleiste klicken.",
     "description": "Beschreibung des Modals für Kamera- / Mikrofonberechtigungen"
   },
   "permissionsModalDismiss": {
@@ -680,11 +724,11 @@
     "description": "Titel des Pop-ups 'Aufnahme pausiert'"
   },
   "chromePermissionsModalTitle": {
-    "message": " Slingui Recording hat keine Berechtigung zur Bildschirmaufnahme",
+    "message": "Screenity hat keine Berechtigung zur Bildschirmaufnahme",
     "description": "Titel des Berechtigungspop-ups"
   },
   "chromePermissionsModalDescription": {
-    "message": "Um die Bildschirmaufnahme zu aktivieren, müssen Sie  Slingui Recording die Berechtigung zum Erfassen Ihres Bildschirms erteilen, wenn Sie dazu aufgefordert werden.",
+    "message": "Um die Bildschirmaufnahme zu aktivieren, müssen Sie Screenity die Berechtigung zum Erfassen Ihres Bildschirms erteilen, wenn Sie dazu aufgefordert werden.",
     "description": "Beschreibung des Berechtigungspop-ups"
   },
   "chromePermissionsModalAction": {
@@ -712,7 +756,7 @@
     "description": "Abbrechen der Mikrofon-Stummschaltungsmodalität"
   },
   "setupTitle": {
-    "message": "So starten Sie mit  Slingui Recording in drei einfachen Schritten:",
+    "message": "So starten Sie mit Screenity in drei einfachen Schritten:",
     "description": "Titel der Einrichtungsschritte"
   },
   "setupStep1Before": {
@@ -736,7 +780,7 @@
     "description": "Einrichtungsschritt 3, vor dem Symbol. Es benötigt ein Leerzeichen am Ende."
   },
   "setupStep3After": {
-    "message": "  Slingui Recording-Symbol, um zu starten",
+    "message": " Screenity-Symbol, um zu starten",
     "description": "Einrichtungsschritt 3, nach dem Symbol. Es benötigt ein Leerzeichen am Anfang."
   },
   "setupCompleteTitle": {
@@ -796,7 +840,7 @@
     "description": "Schaltfläche 'Aufnahme beenden' im Aufnahmescreen"
   },
   "updateAnnouncementTitle": {
-    "message": "Willkommen beim neuen  Slingui Recording!",
+    "message": "Willkommen beim neuen Screenity!",
     "description": "Titel der Update-Ankündigung für bestehende Benutzer"
   },
   "updateAnnouncementDescription": {
@@ -816,7 +860,7 @@
     "description": "Titel des Stream-Fehlermodals"
   },
   "streamErrorModalDescription": {
-    "message": "Es sieht so aus, als ob beim Starten der Aufnahme ein Fehler aufgetreten ist. Starten Sie Ihren Browser neu und versuchen Sie es erneut. Wenn das Problem weiterhin besteht, kontaktieren Sie uns bitte unter support@ Slingui Recording.io.",
+    "message": "Es sieht so aus, als ob beim Starten der Aufnahme ein Fehler aufgetreten ist. Starten Sie Ihren Browser neu und versuchen Sie es erneut. Wenn das Problem weiterhin besteht, kontaktieren Sie uns bitte unter support@screenity.io.",
     "description": "Beschreibung des Stream-Fehlermodals"
   },
   "highestQuality": {
@@ -868,7 +912,7 @@
     "description": "Titel für nicht genügend Speicherplatz"
   },
   "notEnoughSpaceDescription": {
-    "message": " Slingui Recording benötigt mindestens 1 GB freien Speicherplatz für die Aufnahme. Bitte schaffen Sie Speicherplatz frei und versuchen Sie es erneut.",
+    "message": "Screenity benötigt mindestens 1 GB freien Speicherplatz für die Aufnahme. Bitte schaffen Sie Speicherplatz frei und versuchen Sie es erneut.",
     "description": "Beschreibung für nicht genügend Speicherplatz"
   },
   "clearSpaceButton": {
@@ -900,7 +944,7 @@
     "description": "Titel des Modals für das Rohvideo"
   },
   "rawRecordingModalDescription": {
-    "message": "Das Rohvideo ist das Originalvideo, das von  Slingui Recording aufgenommen wurde. Dieses Video wurde nicht bearbeitet oder verändert und kann daher sehr groß sein und auf allen Geräten möglicherweise nicht abspielbar sein. Wenn Sie Probleme mit dem bearbeiteten Video haben, können Sie diese Datei verwenden, um Ihr Video wiederherzustellen.",
+    "message": "Das Rohvideo ist das Originalvideo, das von Screenity aufgenommen wurde. Dieses Video wurde nicht bearbeitet oder verändert und kann daher sehr groß sein und auf allen Geräten möglicherweise nicht abspielbar sein. Wenn Sie Probleme mit dem bearbeiteten Video haben, können Sie diese Datei verwenden, um Ihr Video wiederherzustellen.",
     "description": "Beschreibung des Modals für das Rohvideo"
   },
   "rawRecordingModalButton": {
@@ -912,7 +956,7 @@
     "description": "Titel des Modals zur Problembehandlung"
   },
   "troubleshootModalDescription": {
-    "message": "Nach dem Herunterladen senden Sie die Datei an support@ Slingui Recording.io mit allen relevanten Informationen. Wir verwenden diese Daten, um Ihnen bei der Fehlerbehebung von Problemen mit der Erweiterung zu helfen und Ihr Video gegebenenfalls wiederherzustellen.",
+    "message": "Nach dem Herunterladen senden Sie die Datei an support@screenity.io mit allen relevanten Informationen. Wir verwenden diese Daten, um Ihnen bei der Fehlerbehebung von Problemen mit der Erweiterung zu helfen und Ihr Video gegebenenfalls wiederherzustellen.",
     "description": "Beschreibung des Modals zur Problembehandlung"
   },
   "troubleshootModalButton": {
@@ -924,11 +968,11 @@
     "description": "Titel des Modals für die 5-Minuten-Limitierung"
   },
   "overLimitModalDescription": {
-    "message": "Da  Slingui Recording komplett privat ist und lokal ausgeführt wird, ist es von der Hardware Ihres Geräts begrenzt. Die Verarbeitung eines Videos dieser Länge würde zu lange dauern und sehr ressourcenintensiv sein. Keine Sorge, Sie können immer noch die WEBM-Datei oder die Rohaufnahme herunterladen, aber Bearbeitung und MP4-Export sind nicht verfügbar. Sie können das Video dennoch versuchen zu verarbeiten, wenn Sie die Risiken verstehen.",
+    "message": "Da Screenity komplett privat ist und lokal ausgeführt wird, ist es von der Hardware Ihres Geräts begrenzt. Die Verarbeitung eines Videos dieser Länge würde zu lange dauern und sehr ressourcenintensiv sein. Keine Sorge, Sie können immer noch die WEBM-Datei oder die Rohaufnahme herunterladen, aber Bearbeitung und MP4-Export sind nicht verfügbar. Sie können das Video dennoch versuchen zu verarbeiten, wenn Sie die Risiken verstehen.",
     "description": "Beschreibung des Modals für die 5-Minuten-Limitierung"
   },
   "overLimitModalDescriptionFastPath": {
-    "message": "Da  Slingui Recording komplett privat ist und lokal ausgeführt wird, ist es von der Hardware Ihres Geräts begrenzt. Die Verarbeitung eines Videos dieser Länge würde zu lange dauern und sehr ressourcenintensiv sein. Ihr MP4 ist bereit zum Herunterladen, aber die Bearbeitung im Browser ist für Clips dieser Länge nicht verfügbar. Sie können das Video dennoch versuchen zu verarbeiten, wenn Sie die Risiken verstehen.",
+    "message": "Da Screenity komplett privat ist und lokal ausgeführt wird, ist es von der Hardware Ihres Geräts begrenzt. Die Verarbeitung eines Videos dieser Länge würde zu lange dauern und sehr ressourcenintensiv sein. Ihr MP4 ist bereit zum Herunterladen, aber die Bearbeitung im Browser ist für Clips dieser Länge nicht verfügbar. Sie können das Video dennoch versuchen zu verarbeiten, wenn Sie die Risiken verstehen.",
     "description": "Over 5 minutes limit modal description when the recording is a native MP4 (fast recorder / WebCodecs)"
   },
   "overLimitModalButton": {
@@ -970,12 +1014,8 @@
     "description": "Titel der Erweiterung nicht auf Tab unterstützt"
   },
   "extensionNotSupportedDescription": {
-    "message": " Slingui Recording wurde in Ihrem vorherigen Tab nicht unterstützt. Sie können Ihre Aufnahme hier dennoch starten und dann zum Tab wechseln, aber Ihre Kamera und Symbolleiste werden nicht sichtbar sein.",
+    "message": "Screenity wurde in Ihrem vorherigen Tab nicht unterstützt. Sie können Ihre Aufnahme hier dennoch starten und dann zum Tab wechseln, aber Ihre Kamera und Symbolleiste werden nicht sichtbar sein.",
     "description": "Beschreibung der Erweiterung nicht auf Tab unterstützt"
-  },
-  "backupsTitle": {
-    "message": "Lokales Backup für Ihre  Slingui Recording-Aufnahmen einrichten",
-    "description": "Titel des Backups"
   },
   "backupsDescription1": {
     "message": "Bewahren Sie eine Kopie aller Ihrer Aufnahmen auf. Wenn Sie keine Backups einrichten, werden Ihre Aufnahmen nur gespeichert, wenn Sie sich entscheiden, sie herunterzuladen.",
@@ -984,54 +1024,6 @@
   "backupsDescription2": {
     "message": "Es könnte erforderlich sein, zuerst einen neuen Ordner zu erstellen, wenn Sie versuchen, in Downloads oder andere Systemordner zu speichern.",
     "description": "Beschreibung des Backups"
-  },
-  "backupsSelectFolder": {
-    "message": "Ordner auswählen",
-    "description": "Schaltfläche „Ordner auswählen“"
-  },
-  "backupsNotNow": {
-    "message": "Jetzt nicht",
-    "description": "Schaltfläche „Jetzt nicht“"
-  },
-  "backupsOnTitle": {
-    "message": "Ihre Aufnahmen werden lokal gesichert",
-    "description": "Titel der aktiven Backups"
-  },
-  "backupsOnDescription": {
-    "message": "Um zu verhindern, dass Sie jedes Mal um Berechtigungen gebeten werden, wenn Sie aufzeichnen, empfehlen wir Ihnen, diesen Tab geöffnet zu lassen.",
-    "description": "Beschreibung der aktiven Backups"
-  },
-  "backupsClose": {
-    "message": "Tab dennoch schließen",
-    "description": "Schaltfläche „Tab dennoch schließen“"
-  },
-  "backupsStop": {
-    "message": "Sicherung aller Aufnahmen beenden",
-    "description": "Schaltfläche „Backups beenden“"
-  },
-  "backupsConfirmTitle": {
-    "message": "Bitte bestätigen Sie erneut den Zugriff auf Ihren lokalen  Slingui Recording-Backup-Ordner",
-    "description": "Titel der Backup-Bestätigung"
-  },
-  "backupsConfirmDescription": {
-    "message": "Es tut uns leid, aber wir benötigen noch einmal Ihre Zustimmung, um Ihre Aufnahmen weiterhin lokal zu sichern. Leider müssen wir jedes Mal fragen, wenn Sie diesen Tab schließen, was passieren kann, wenn Sie den Browser schließen oder Ihren Computer neu starten.",
-    "description": "Beschreibung der Backup-Bestätigung"
-  },
-  "backupsConfirmAllow": {
-    "message": "Erlauben Sie  Slingui Recording, Aufnahmen weiterhin zu sichern",
-    "description": "Schaltfläche „Erlauben“ in der Backup-Bestätigung"
-  },
-  "backupsToggle": {
-    "message": "Aufnahmen sichern",
-    "description": "Beschriftung für die Backup-Option"
-  },
-  "backupPermissionFailTitle": {
-    "message": "Berechtigung zur Sicherung der Aufnahme nicht erteilt",
-    "description": "Titel des Backup-Berechtigungsfehlers"
-  },
-  "backupPermissionFailDescription": {
-    "message": "Sie haben keinen Ordner für die lokale Sicherung Ihrer Aufnahmen ausgewählt. Je nach Browser-Version oder Betriebssystem kann es erforderlich sein, den Ordner jedes Mal auszuwählen, wenn Sie mit der Aufzeichnung beginnen. Sie können es erneut versuchen oder Backups ganz deaktivieren, wenn Sie wiederholte Berechtigungsanfragen vermeiden möchten.",
-    "description": "Beschreibung des Backup-Berechtigungsfehlers"
   },
   "recordAudioWarningMacTitle": {
     "message": "Computer-Audio aufzeichnen",
@@ -1194,7 +1186,7 @@
     "description": "Button label to go to the dashboard in the popup"
   },
   "welcomePopupTitle": {
-    "message": "Willkommen bei  Slingui Recording",
+    "message": "Willkommen bei Screenity",
     "description": "Title for the welcome popup shown to new users"
   },
   "welcomePopupDescriptionTop": {
@@ -1254,7 +1246,7 @@
     "description": "Title shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionDescription": {
-    "message": "Dein  Slingui Recording Pro-Abo ist inaktiv.",
+    "message": "Dein Screenity Pro-Abo ist inaktiv.",
     "description": "Description shown when the user's subscription is inactive"
   },
   "inactiveSubscriptionReactivation": {
@@ -1338,12 +1330,12 @@
     "description": "Title for the welcome Pro popup"
   },
   "welcomeProDescription": {
-    "message": "Melde dich an, um Videos in der Cloud zu speichern, per Link zu teilen und auf erweiterte Bearbeitung zuzugreifen.",
+    "message": "Teile Aufnahmen per sauberem Link, speichere sie in der Cloud und füge Zooms, Untertitel und Layouts hinzu, wann immer du es brauchst.",
     "description": "Description for the welcome Pro popup"
   },
   "welcomeProButton": {
-    "message": "Anmelden, um Pro-Funktionen freizuschalten",
-    "description": "Button to sign in to  Slingui Recording Pro"
+    "message": "Editor freischalten",
+    "description": "Button to sign in to Screenity Pro"
   },
   "welcomeProSupport": {
     "message": "Unterstütze die Entwicklung durch eine Indie-Macherin",
@@ -1362,7 +1354,7 @@
     "description": "Pro banner title in the editor"
   },
   "proBannerDescription": {
-    "message": " Slingui Recording bleibt immer kostenlos, quelloffen und werbefrei. Pro deckt Cloud- und Infrastrukturkosten und unterstützt die Entwicklung durch eine Indie-Entwicklerin! ❤️",
+    "message": "Screenity bleibt immer kostenlos, quelloffen und werbefrei. Pro deckt Cloud- und Infrastrukturkosten und unterstützt die Entwicklung durch eine Indie-Entwicklerin! ❤️",
     "description": "Pro banner description in the editor"
   },
   "proBannerAltButton": {
@@ -1394,15 +1386,15 @@
     "description": "Button to upgrade to Pro"
   },
   "hostBannerTitle": {
-    "message": "Du nutzt  Slingui Recording lokal? Hilf mit, die Weiterentwicklung zu unterstützen!",
+    "message": "Du nutzt Screenity lokal? Hilf mit, die Weiterentwicklung zu unterstützen!",
     "description": "Titel des Banners für Self-Hosting im Editor"
   },
   "hostBannerDescription": {
-    "message": " Slingui Recording wird von einer Indie-Entwicklerin gebaut. Self-Hosting ist kostenlos – wenn es dir hilft, unterstütze sie gerne mit Pro ❤️",
+    "message": "Screenity wird von einer Indie-Entwicklerin gebaut. Self-Hosting ist kostenlos – wenn es dir hilft, unterstütze sie gerne mit Pro ❤️",
     "description": "Beschreibung des Banners für Self-Hosting im Editor"
   },
   "welcomeBackPopupTitle": {
-    "message": "Willkommen zurück bei  Slingui Recording",
+    "message": "Willkommen zurück bei Screenity",
     "description": "Titel für das Begrüßungs-Popup für zurückkehrende Nutzer"
   },
   "welcomeBackProTitle": {
@@ -1410,15 +1402,15 @@
     "description": "Titel für die Cloud-Speicher-Funktion im Begrüßungs-Popup"
   },
   "welcomeBackProDescription": {
-    "message": " Slingui Recording Pro ist eine neue, optionale Plattform, mit der du Videos in der Cloud speichern, per Link teilen und erweiterte Bearbeitungsfunktionen freischalten kannst – wenn du sie brauchst.",
+    "message": "Screenity Pro ist eine neue, optionale Plattform, mit der du Videos in der Cloud speichern, per Link teilen und erweiterte Bearbeitungsfunktionen freischalten kannst – wenn du sie brauchst.",
     "description": "Beschreibung der Cloud-Speicher-Funktion im Begrüßungs-Popup"
   },
   "welcomeBackProCTA": {
-    "message": "Mehr über  Slingui Recording Pro erfahren",
+    "message": "Mehr über Screenity Pro erfahren",
     "description": "Call-to-Action-Button für die Cloud-Funktion im Begrüßungs-Popup"
   },
   "welcomeToProTitleModal": {
-    "message": "Willkommen bei  Slingui Recording Pro",
+    "message": "Willkommen bei Screenity Pro",
     "description": "Titel des Willkommensmodals für Pro"
   },
   "welcomeToProDescriptionModal": {
@@ -1438,7 +1430,7 @@
     "description": "WebCodecs failure auto-disable toast"
   },
   "proOnboardingWelcomeTitle": {
-    "message": "Willkommen bei der  Slingui Recording Pro-Erweiterung",
+    "message": "Willkommen bei der Screenity Pro-Erweiterung",
     "description": "Pro onboarding welcome step title"
   },
   "proOnboardingWelcomeDescription": {
@@ -1574,7 +1566,7 @@
     "description": "Toast shown when the audio track ends mid-recording (e.g. mic unplugged, permission revoked)"
   },
   "editorRecoveryToast": {
-    "message": "Aufnahme gespeichert. Der Editor konnte nicht geöffnet werden. Klicke auf das  Slingui Recording-Symbol, um es erneut zu versuchen.",
+    "message": "Aufnahme gespeichert. Der Editor konnte nicht geöffnet werden. Klicke auf das Screenity-Symbol, um es erneut zu versuchen.",
     "description": "Toast shown on the active tab when the post-recording editor tab fails to open"
   },
   "stopAckTimeoutToast": {
@@ -1666,5 +1658,113 @@
   },
   "recordingCorruptToast": {
     "message": "Diese Aufnahme kann nicht abgespielt werden. Die Datei ist möglicherweise unvollständig oder beschädigt. Versuchen Sie, die Rohdatei über das Speichern-Menü herunterzuladen."
+  },
+  "storageFullRecordingError": {
+    "message": "Nicht genügend Speicher für die Aufnahme. Gib Speicherplatz frei und versuche es erneut.",
+    "description": "Shown when the browser can't allocate enough local storage to start a recording"
+  },
+  "storageLowRecordingWarning": {
+    "message": "Der Speicher deines Browsers ist fast voll. Gib Speicherplatz frei, damit diese Aufnahme nicht verloren geht.",
+    "description": "Shown when local storage is running low while a recording is in progress"
+  },
+  "screenStreamUnavailableError": {
+    "message": "Auf den Bildschirm konnte nicht zugegriffen werden. Starte die Aufnahme erneut.",
+    "description": "Shown when the screen capture stream is missing after the user picked a source"
+  },
+  "tabStreamUnavailableError": {
+    "message": "Auf das Video dieses Tabs konnte nicht zugegriffen werden. Lade den Tab neu und versuche es erneut.",
+    "description": "Shown when Chrome won't return a tab capture stream for the chosen tab"
+  },
+  "streamingDataTimeoutError": {
+    "message": "Die Aufnahme konnte nicht rechtzeitig gestartet werden. Bitte versuche es erneut.",
+    "description": "Shown when the recorder tab never received streaming-data from the background script"
+  },
+  "unsupportedVideoCodecError": {
+    "message": "Dein Browser unterstützt die benötigten Video-Codecs nicht. Aktualisiere Chrome und versuche es erneut.",
+    "description": "Shown when no supported MediaRecorder mimeType is available"
+  },
+  "cancelLabel": {
+    "message": "Abbrechen",
+    "description": "Cancel button on the download-in-progress banner"
+  },
+  "webmSlowTitle": {
+    "message": "Die Konvertierung in WebM kann eine Weile dauern",
+    "description": "Title of the modal warning that MP4 to WebM conversion is slow"
+  },
+  "webmSlowDescription": {
+    "message": "Beim Speichern als WebM wird das gesamte Video neu codiert, was bei langen Aufnahmen einige Minuten dauern kann. MP4 wird sofort gespeichert.",
+    "description": "Body of the slow-WebM warning modal"
+  },
+  "webmSlowMp4": {
+    "message": "Stattdessen MP4 herunterladen",
+    "description": "Primary button: download MP4 instead of the slow WebM conversion"
+  },
+  "webmSlowContinue": {
+    "message": "Mit WebM fortfahren",
+    "description": "Secondary button: proceed with the slow WebM conversion"
+  },
+  "downloadProcessingTitle": {
+    "message": "Download wird vorbereitet",
+    "description": "Title of the download-in-progress banner with the Cancel button"
+  },
+  "downloadProcessingDescription": {
+    "message": "Bei langen Aufnahmen kann dies eine Weile dauern.",
+    "description": "Body of the download-in-progress banner"
+  },
+  "cameraMicBlockedTitle": {
+    "message": "Kamera und Mikrofon nicht erlaubt",
+    "description": "Toast title shown when the current page's Permissions-Policy blocks the extension's camera and microphone"
+  },
+  "cameraMicBlockedDescription": {
+    "message": "Diese Website blockiert den Zugriff auf Kamera und Mikrofon. Du kannst hier trotzdem aufnehmen, aber deine Kamera ist nicht sichtbar.",
+    "description": "Toast description shown when the current page's Permissions-Policy blocks the extension's camera and microphone"
+  },
+  "downloadFailedModalTitle": {
+    "message": "Der Download wurde nicht abgeschlossen",
+    "description": "Modal title when a download to disk times out or fails"
+  },
+  "downloadFailedModalDescription": {
+    "message": "Bitte versuchen Sie es erneut.",
+    "description": "Toast->modal description: what to do after a failed download"
+  },
+  "driveGenericModalTitle": {
+    "message": "Speichern in Google Drive fehlgeschlagen",
+    "description": "Modal title for a generic Google Drive save failure"
+  },
+  "driveGenericModalDescription": {
+    "message": "Bitte versuchen Sie es erneut.",
+    "description": "Modal description for a generic Google Drive save failure"
+  },
+  "driveQuotaModalTitle": {
+    "message": "Ihr Google Drive ist voll",
+    "description": "Modal title when the Google Drive account is out of storage"
+  },
+  "driveQuotaModalDescription": {
+    "message": "Geben Sie Speicherplatz frei und versuchen Sie es erneut.",
+    "description": "Modal description when the Google Drive account is out of storage"
+  },
+  "driveTooLargeModalTitle": {
+    "message": "Aufnahme zu groß",
+    "description": "Modal title when a recording exceeds Google Drive limits"
+  },
+  "driveTooLargeModalDescription": {
+    "message": "Diese Aufnahme ist zu groß, um in Google Drive gespeichert zu werden.",
+    "description": "Modal description when a recording exceeds Google Drive limits"
+  },
+  "driveAuthModalTitle": {
+    "message": "Kein Zugriff auf Google Drive",
+    "description": "Modal title when Google Drive authentication expired or was revoked"
+  },
+  "driveAuthModalDescription": {
+    "message": "Bitte melden Sie sich erneut an.",
+    "description": "Modal description when Google Drive authentication expired or was revoked"
+  },
+  "emptyRecordingTitle": {
+    "message": "Diese Aufnahme ist leer",
+    "description": "Modal title when the recording file contains no video"
+  },
+  "emptyRecordingDescription": {
+    "message": "Es wurde kein Video aufgezeichnet. Bitte versuchen Sie die Aufnahme erneut.",
+    "description": "Modal description when the recording file contains no video"
   }
 }

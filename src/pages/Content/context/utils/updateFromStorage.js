@@ -50,6 +50,7 @@ export const updateFromStorage = (check = true, id = null) => {
       "pushToTalk",
       "askMicrophone",
       "offscreenRecording",
+      "useOffscreenCloud",
       "zoomEnabled",
       "setDevices",
       "popupPosition",
@@ -64,13 +65,11 @@ export const updateFromStorage = (check = true, id = null) => {
       "strokeWidth",
       "quality",
       "systemAudio",
-      "backup",
-      "backupSetup",
-      "qualityValue_v2",
-      "fpsValue_v2",
+      "qualityValue",
+      "fpsValue",
       "fastRecorderBeta",
       "fastRecorderStatus",
-      "useWebCodecsRecorder_v2",
+      "useWebCodecsRecorder",
       "multiMode",
       "multiSceneCount",
       "sortBy",
@@ -80,13 +79,6 @@ export const updateFromStorage = (check = true, id = null) => {
       "hasSubscribedBefore",
     ],
     (result) => {
-      const enforcedRecordingPreferences = {
-        recordingType: "region",
-        customRegion: false,
-        pushToTalk: false,
-        cameraActive: false,
-        backgroundEffectsActive: false,
-      };
       const storedEffects = normalizeCursorEffects(result.cursorEffects);
       const hasStoredEffects = Array.isArray(result.cursorEffects);
       const legacyMode =
@@ -139,7 +131,10 @@ export const updateFromStorage = (check = true, id = null) => {
           result.cameraFlipped !== undefined && result.cameraFlipped !== null
             ? result.cameraFlipped
             : prevContentState.cameraFlipped,
-        cameraActive: enforcedRecordingPreferences.cameraActive,
+        cameraActive:
+          result.cameraActive !== undefined && result.cameraActive !== null
+            ? result.cameraActive
+            : prevContentState.cameraActive,
         micActive:
           result.micActive !== undefined && result.micActive !== null
             ? result.micActive
@@ -150,7 +145,10 @@ export const updateFromStorage = (check = true, id = null) => {
             ? result.backgroundEffect
             : prevContentState.backgroundEffect,
         backgroundEffectsActive:
-          enforcedRecordingPreferences.backgroundEffectsActive,
+          result.backgroundEffectsActive !== undefined &&
+          result.backgroundEffectsActive !== null
+            ? result.backgroundEffectsActive
+            : prevContentState.backgroundEffectsActive,
         toolbarPosition:
           result.toolbarPosition !== undefined &&
           result.toolbarPosition !== null
@@ -168,8 +166,14 @@ export const updateFromStorage = (check = true, id = null) => {
           result.paused !== undefined && result.paused !== null
             ? result.paused
             : prevContentState.paused,
-        recordingType: enforcedRecordingPreferences.recordingType,
-        customRegion: enforcedRecordingPreferences.customRegion,
+        recordingType:
+          result.recordingType !== undefined && result.recordingType !== null
+            ? result.recordingType
+            : prevContentState.recordingType,
+        customRegion:
+          result.customRegion !== undefined && result.customRegion !== null
+            ? result.customRegion
+            : prevContentState.customRegion,
         regionWidth:
           result.regionWidth !== undefined && result.regionWidth !== null
             ? result.regionWidth
@@ -213,7 +217,10 @@ export const updateFromStorage = (check = true, id = null) => {
           cursorEffects.length > 0 || hasStoredEffects
             ? cursorEffects
             : prevContentState.cursorEffects,
-        pushToTalk: enforcedRecordingPreferences.pushToTalk,
+        pushToTalk:
+          result.pushToTalk !== undefined && result.pushToTalk !== null
+            ? result.pushToTalk
+            : prevContentState.pushToTalk,
         zoomEnabled:
           result.zoomEnabled !== undefined && result.zoomEnabled !== null
             ? result.zoomEnabled
@@ -227,6 +234,11 @@ export const updateFromStorage = (check = true, id = null) => {
           result.offscreenRecording !== null
             ? result.offscreenRecording
             : prevContentState.offscreenRecording,
+        useOffscreenCloud:
+          result.useOffscreenCloud !== undefined &&
+          result.useOffscreenCloud !== null
+            ? result.useOffscreenCloud
+            : prevContentState.useOffscreenCloud,
         setDevices:
           result.setDevices !== undefined && result.setDevices !== null
             ? result.setDevices
@@ -279,22 +291,14 @@ export const updateFromStorage = (check = true, id = null) => {
           result.systemAudio !== undefined && result.systemAudio !== null
             ? result.systemAudio
             : prevContentState.systemAudio,
-        backup:
-          result.backup !== undefined && result.backup !== null
-            ? result.backup
-            : prevContentState.backup,
-        backupSetup:
-          result.backupSetup !== undefined && result.backupSetup !== null
-            ? result.backupSetup
-            : prevContentState.backupSetup,
-        qualityValue_v2:
-          result.qualityValue_v2 !== undefined && result.qualityValue_v2 !== null
-            ? result.qualityValue_v2
-            : prevContentState.qualityValue_v2,
-        fpsValue_v2:
-          result.fpsValue_v2 !== undefined && result.fpsValue_v2 !== null
-            ? result.fpsValue_v2
-            : prevContentState.fpsValue_v2,
+        qualityValue:
+          result.qualityValue !== undefined && result.qualityValue !== null
+            ? result.qualityValue
+            : prevContentState.qualityValue,
+        fpsValue:
+          result.fpsValue !== undefined && result.fpsValue !== null
+            ? result.fpsValue
+            : prevContentState.fpsValue,
         fastRecorderBeta:
           result.fastRecorderBeta !== undefined &&
           result.fastRecorderBeta !== null
@@ -305,11 +309,11 @@ export const updateFromStorage = (check = true, id = null) => {
           result.fastRecorderStatus !== null
             ? result.fastRecorderStatus
             : prevContentState.fastRecorderStatus,
-        useWebCodecsRecorder_v2:
-          result.useWebCodecsRecorder_v2 !== undefined &&
-          result.useWebCodecsRecorder_v2 !== null
-            ? result.useWebCodecsRecorder_v2
-            : prevContentState.useWebCodecsRecorder_v2,
+        useWebCodecsRecorder:
+          result.useWebCodecsRecorder !== undefined &&
+          result.useWebCodecsRecorder !== null
+            ? result.useWebCodecsRecorder
+            : prevContentState.useWebCodecsRecorder,
         multiMode: result.multiMode || false,
         multiSceneCount: result.multiSceneCount || 0,
         wasLoggedIn: result.wasLoggedIn || false,
@@ -320,8 +324,6 @@ export const updateFromStorage = (check = true, id = null) => {
         hasSubscribedBefore: result.hasSubscribedBefore || false,
         showProSplash: result.showProSplash || false,
       }));
-
-      chrome.storage.local.set(enforcedRecordingPreferences);
 
       if (result.systemAudio === undefined || result.systemAudio === null) {
         chrome.storage.local.set({ systemAudio: true });
@@ -334,16 +336,8 @@ export const updateFromStorage = (check = true, id = null) => {
         chrome.storage.local.set({ backgroundEffect: "blur" });
       }
 
-      if (result.backup === undefined || result.backup === null) {
-        chrome.storage.local.set({ backup: false });
-      }
-
       if (result.countdown === undefined || result.countdown === null) {
-        chrome.storage.local.set({ countdown: false });
-      }
-
-      if (result.backupSetup === undefined || result.backupSetup === null) {
-        chrome.storage.local.set({ backupSetup: false });
+        chrome.storage.local.set({ countdown: true });
       }
 
       if (!hasStoredEffects && legacyMode) {
@@ -351,6 +345,10 @@ export const updateFromStorage = (check = true, id = null) => {
           cursorEffects: cursorEffects,
           cursorMode: cursorMode,
         });
+      }
+
+      if (result.backgroundEffectsActive) {
+        chrome.runtime.sendMessage({ type: "backgroundEffectsActive" });
       }
 
       if (check) {

@@ -46,7 +46,7 @@ const Dropdown = (props) => {
     } else {
       if (
         contentState.defaultAudioInput === "none" ||
-        !contentState.micActive
+        (!contentState.micActive && !contentState.pushToTalk)
       ) {
         setLabel(chrome.i18n.getMessage("noMicrophoneDropdownLabel"));
       } else {
@@ -88,15 +88,43 @@ const Dropdown = (props) => {
     e.stopPropagation();
     setOpen(false);
     if (props.type === "camera") {
-      setContentState((prevContentState) => ({
-        ...prevContentState,
-        cameraActive: false,
-      }));
-      chrome.storage.local.set({
-        cameraActive: false,
-      });
-      setLabel(chrome.i18n.getMessage("noCameraDropdownLabel"));
-      return;
+      if (contentState.cameraActive) {
+        setContentState((prevContentState) => ({
+          ...prevContentState,
+          cameraActive: false,
+        }));
+        chrome.storage.local.set({
+          cameraActive: false,
+        });
+        setLabel(chrome.i18n.getMessage("noCameraDropdownLabel"));
+      } else {
+        // Toggling on left the device at "none" and the label unset. Adopt the
+        // first camera here, same as the permission grant does.
+        const devices = contentState.videoInput || [];
+        const selected =
+          devices.find(
+            (device) => device.deviceId === contentState.defaultVideoInput
+          ) ||
+          devices[0] ||
+          null;
+        const patch = selected
+          ? {
+              cameraActive: true,
+              defaultVideoInput: selected.deviceId,
+              defaultVideoInputLabel: selected.label || "",
+            }
+          : { cameraActive: true };
+        setContentState((prevContentState) => ({
+          ...prevContentState,
+          ...patch,
+        }));
+        chrome.storage.local.set(patch);
+        setLabel(
+          selected
+            ? selected.label
+            : chrome.i18n.getMessage("noCameraDropdownLabel")
+        );
+      }
     } else {
       if (contentState.micActive) {
         setContentState((prevContentState) => ({
@@ -108,32 +136,30 @@ const Dropdown = (props) => {
         });
         setLabel(chrome.i18n.getMessage("noMicrophoneDropdownLabel"));
       } else {
-        const selectedAudioInput = Array.isArray(contentState.audioInput)
-          ? contentState.audioInput.find(
-              (device) => device.deviceId === contentState.defaultAudioInput
-            )
-          : null;
-
-        if (!selectedAudioInput || contentState.defaultAudioInput === "none") {
-          setContentState((prevContentState) => ({
-            ...prevContentState,
-            micActive: false,
-          }));
-          chrome.storage.local.set({
-            micActive: false,
-          });
-          setLabel(chrome.i18n.getMessage("noMicrophoneDropdownLabel"));
-          return;
-        }
-
+        const devices = contentState.audioInput || [];
+        const selected =
+          devices.find(
+            (device) => device.deviceId === contentState.defaultAudioInput
+          ) ||
+          devices[0] ||
+          null;
+        const patch = selected
+          ? {
+              micActive: true,
+              defaultAudioInput: selected.deviceId,
+              defaultAudioInputLabel: selected.label || "",
+            }
+          : { micActive: true };
         setContentState((prevContentState) => ({
           ...prevContentState,
-          micActive: true,
+          ...patch,
         }));
-        chrome.storage.local.set({
-          micActive: true,
-        });
-        setLabel(selectedAudioInput.label);
+        chrome.storage.local.set(patch);
+        setLabel(
+          selected
+            ? selected.label
+            : chrome.i18n.getMessage("noMicrophoneDropdownLabel")
+        );
       }
     }
   };
@@ -152,7 +178,8 @@ const Dropdown = (props) => {
           ? contentState.defaultVideoInput
           : props.type === "camera" && !contentState.cameraActive
           ? "none"
-          : props.type === "mic" && contentState.micActive
+          : props.type === "mic" &&
+            (contentState.micActive || contentState.pushToTalk)
           ? contentState.defaultAudioInput
           : props.type === "mic" && !contentState.micActive
           ? "none"
@@ -160,15 +187,37 @@ const Dropdown = (props) => {
       }
       onValueChange={(newValue) => {
         if (props.type === "camera") {
-          setContentState((prevContentState) => ({
-            ...prevContentState,
-            cameraActive: false,
-          }));
-          chrome.storage.local.set({
-            cameraActive: false,
-          });
-          setLabel(chrome.i18n.getMessage("noCameraDropdownLabel"));
-          return;
+          if (newValue === "none") {
+            setContentState((prevContentState) => ({
+              ...prevContentState,
+              cameraActive: false,
+            }));
+            chrome.storage.local.set({
+              cameraActive: false,
+            });
+            setLabel(chrome.i18n.getMessage("noCameraDropdownLabel"));
+          } else {
+            const selectedLabel =
+              contentState.videoInput.find(
+                (device) => device.deviceId === newValue
+              )?.label || "";
+            setContentState((prevContentState) => ({
+              ...prevContentState,
+              defaultVideoInput: newValue,
+              defaultVideoInputLabel: selectedLabel,
+              cameraActive: true,
+            }));
+            chrome.storage.local.set({
+              defaultVideoInput: newValue,
+              defaultVideoInputLabel: selectedLabel,
+              cameraActive: true,
+            });
+            chrome.runtime.sendMessage({
+              type: "switch-camera",
+              id: newValue,
+            });
+            setLabel(selectedLabel);
+          }
         } else {
           if (newValue === "none") {
             setContentState((prevContentState) => ({
@@ -285,7 +334,7 @@ const Dropdown = (props) => {
           )}
         {props.type == "mic" &&
           (contentState.defaultAudioInput == "none" ||
-            !contentState.micActive) && (
+            (!contentState.micActive && !contentState.pushToTalk)) && (
             <div className="SelectOff">
               {chrome.i18n.getMessage("offLabel")}
             </div>

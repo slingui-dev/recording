@@ -92,6 +92,17 @@ writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + "\n");
 writeFileSync(PACKAGE_PATH, JSON.stringify(pkg, null, 2) + "\n");
 console.log("Wrote manifest.json + package.json.\n");
 
+console.log("Running source hygiene check...");
+try {
+  sh("node scripts/check-source-hygiene.mjs");
+} catch {
+  console.error(
+    "\nControl bytes in source. Those files are undiffable in git, so changes ship unreviewed. Fix before release.",
+  );
+  process.exit(1);
+}
+console.log("");
+
 console.log("Running i18n drift check...");
 try {
   sh("node scripts/check-i18n.mjs");
@@ -109,6 +120,10 @@ console.log("");
 
 console.log("Verifying build/ for secret leaks...");
 sh("node scripts/verify-no-secrets.mjs");
+console.log("");
+
+console.log("Verifying build/ has no dev-server references...");
+sh("node scripts/assert-no-dev-env.mjs");
 console.log("");
 
 console.log("Creating build.zip...");

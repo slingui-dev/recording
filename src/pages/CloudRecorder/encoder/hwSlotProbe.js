@@ -5,15 +5,11 @@
 // 4 Mbps baseline; real encoder uses the configured bitrate later.
 const PROBE_BITRATE = 4_000_000;
 
-// Candidates ordered High → Baseline so machines without the top
-// profile still probe successfully.
-//   64002A = High L4.2, 4D0028 = Main L4.0,
-//   4D401F = Main L3.1,  42E01E = Baseline L3.0
+// 64002A = High L4.2, 42E028 = Baseline L4.0 (Main 4D... omitted: silent-no-output
+// bug on Chromium's Windows MFT wrapper, accepts encode() but emits no chunks).
 const CODEC_CANDIDATES = [
   "avc1.64002A",
-  "avc1.4D0028",
-  "avc1.4D401F",
-  "avc1.42E01E",
+  "avc1.42E028",
 ];
 
 const HW_OPTIONS = ["prefer-hardware", "no-preference"];
@@ -83,6 +79,10 @@ const probeOne = async (label, { width, height, framerate }) => {
 // buffering hides asymmetry until ~500ms in). 2s cap, memoized.
 const CONCURRENT_FRAME_COUNT = 30;
 const CONCURRENT_TIMEOUT_MS = 2500;
+// Windows D3D11 HW encoder (crbug 1504122) crashes when frames pile into
+// encode() without awaiting. Cap queue depth and yield so it can drain.
+const CONCURRENT_QUEUE_YIELD_EVERY = 5;
+const CONCURRENT_MAX_QUEUE_DEPTH = 16;
 
 const probeConcurrentHw = async ({ codec, framerate }) => {
   if (
@@ -152,6 +152,8 @@ const probeConcurrentHw = async ({ codec, framerate }) => {
   }
   const started =
     typeof performance !== "undefined" ? performance.now() : Date.now();
+  let queueOverflow = false;
+  let framesSubmitted = 0;
   for (let i = 0; i < CONCURRENT_FRAME_COUNT; i++) {
     ctx.fillStyle = `hsl(${(i * 31) % 360}, 50%, 40%)`;
     ctx.fillRect(0, 0, width, height);
@@ -173,6 +175,26 @@ const probeConcurrentHw = async ({ codec, framerate }) => {
       b.encoder.encode(frameB, { keyFrame: i === 0 });
       frameB.close();
     } catch {}
+    framesSubmitted = i + 1;
+
+    // Yield every N frames so the encoder can drain. If either queue runs past
+    // the cap, HW is starved: bail and let the caller treat it as not-concurrent.
+    if (i % CONCURRENT_QUEUE_YIELD_EVERY === CONCURRENT_QUEUE_YIELD_EVERY - 1) {
+      await new Promise((r) => setTimeout(r, 0));
+      let qa = 0;
+      let qb = 0;
+      try {
+        qa = a.encoder?.encodeQueueSize ?? 0;
+        qb = b.encoder?.encodeQueueSize ?? 0;
+      } catch {}
+      if (
+        qa > CONCURRENT_MAX_QUEUE_DEPTH ||
+        qb > CONCURRENT_MAX_QUEUE_DEPTH
+      ) {
+        queueOverflow = true;
+        break;
+      }
+    }
   }
   try {
     await Promise.race([
@@ -191,8 +213,10 @@ const probeConcurrentHw = async ({ codec, framerate }) => {
   // We require at least 4 chunks from each (allowing for encoder
   // buffering of the last keyframe close-out). A 2x ratio is the
   // tripwire: anything worse means the second encoder is starved.
+  // Queue overflow is itself a not-concurrent signal: HW couldn't drain.
   const minPerEncoder = 4;
   const concurrent =
+    !queueOverflow &&
     aChunks >= minPerEncoder &&
     bChunks >= minPerEncoder &&
     Math.max(aChunks, bChunks) / Math.max(1, Math.min(aChunks, bChunks)) < 2;
@@ -201,8 +225,124 @@ const probeConcurrentHw = async ({ codec, framerate }) => {
     concurrent,
     aChunks,
     bChunks,
+    framesSubmitted,
+    queueOverflow,
     elapsedMs: Math.round(elapsed),
   };
+};
+
+// Output-liveness probe for screen-only recordings, which skip the concurrent
+// probe and pick an encoder on isConfigSupported alone: that misses a HW encoder
+// that configures cleanly but emits zero chunks (the "28-byte empty recording" bug).
+const SINGLE_FRAME_COUNT = 30;
+const SINGLE_TIMEOUT_MS = 2500;
+const SINGLE_MIN_CHUNKS = 4;
+
+const probeSingleHw = async ({ codec, framerate }) => {
+  if (
+    typeof VideoEncoder === "undefined" ||
+    typeof VideoFrame === "undefined" ||
+    typeof OffscreenCanvas === "undefined"
+  ) {
+    return { ran: false, reason: "no-webcodecs" };
+  }
+  const width = 1280;
+  const height = 720;
+  const config = {
+    codec,
+    width,
+    height,
+    bitrate: PROBE_BITRATE,
+    framerate,
+    bitrateMode: "constant",
+    latencyMode: "realtime",
+    hardwareAcceleration: "prefer-hardware",
+  };
+  let chunks = 0;
+  let error = null;
+  let encoder = null;
+  try {
+    encoder = new VideoEncoder({
+      output: () => {
+        chunks += 1;
+      },
+      error: (err) => {
+        error = String(err?.message || err);
+      },
+    });
+    encoder.configure(config);
+  } catch (err) {
+    try {
+      encoder?.close();
+    } catch {}
+    return { ran: false, reason: "configure-failed" };
+  }
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    try {
+      encoder.close();
+    } catch {}
+    return { ran: false, reason: "no-2d-context" };
+  }
+  for (let i = 0; i < SINGLE_FRAME_COUNT; i++) {
+    ctx.fillStyle = `hsl(${(i * 31) % 360}, 50%, 40%)`;
+    ctx.fillRect(0, 0, width, height);
+    const ts = Math.round((i * 1_000_000) / framerate);
+    const dur = Math.round(1_000_000 / framerate);
+    try {
+      const frame = new VideoFrame(canvas, { timestamp: ts, duration: dur });
+      encoder.encode(frame, { keyFrame: i === 0 });
+      frame.close();
+    } catch {}
+    // Same D3D11-crash guard as the concurrent probe: yield so encode() drains.
+    if (i % CONCURRENT_QUEUE_YIELD_EVERY === CONCURRENT_QUEUE_YIELD_EVERY - 1) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+  try {
+    await Promise.race([
+      encoder.flush(),
+      new Promise((r) => setTimeout(r, SINGLE_TIMEOUT_MS)),
+    ]);
+  } catch {}
+  // Output (and error) callbacks can land AFTER flush() resolves on some
+  // Chrome versions (crbug 529852980, fixed only ~M149); a too-tight read
+  // would undercount a healthy encoder's chunks and false-flag it dead.
+  await new Promise((r) => setTimeout(r, 150));
+  const emitted = chunks;
+  try {
+    encoder.close();
+  } catch {}
+  return {
+    ran: true,
+    alive: emitted >= SINGLE_MIN_CHUNKS,
+    chunks: emitted,
+    error,
+  };
+};
+
+// MP4 carries AAC audio. probeOne only verifies the H.264 *video* encoder, so
+// a build that encodes H.264 but not AAC (some Chromium builds without
+// proprietary codecs) would pick the WebCodecs MP4 path and then silently drop
+// audio. AAC support is device-global, so probe it once; when missing,
+// chooseEncoder routes video tracks to MediaRecorder (VP9-WebM), which records
+// audio natively. isConfigSupported-only, matching the video probe's style.
+const AAC_PROBE_CONFIG = {
+  codec: "mp4a.40.2",
+  sampleRate: 48000,
+  numberOfChannels: 2,
+  bitrate: 128000,
+};
+
+const probeAacSupported = async () => {
+  if (typeof AudioEncoder === "undefined") return false;
+  try {
+    const support = await AudioEncoder.isConfigSupported(AAC_PROBE_CONFIG);
+    return Boolean(support?.supported);
+  } catch {
+    return false;
+  }
 };
 
 export const probeHwSlots = async ({
@@ -239,6 +379,40 @@ export const probeHwSlots = async ({
     }
   }
 
+  // Screen HW output-liveness, gated behind screenHwOutputProbe (default off).
+  // If the screen encoder emits no real chunks, record with software H.264 (same
+  // MP4 container) instead of an empty file.
+  let screenPreferSoftware = false;
+  let screenProbe2 = null;
+  if (screenProbe.supported) {
+    let enableScreenProbe = false;
+    try {
+      const s =
+        typeof chrome !== "undefined" && chrome.storage && chrome.storage.local
+          ? await chrome.storage.local.get(["screenHwOutputProbe"])
+          : {};
+      enableScreenProbe = Boolean(s.screenHwOutputProbe);
+    } catch {}
+    if (enableScreenProbe) {
+      // Fresh probe rather than reusing the concurrent probe's count: that count
+      // was taken under camera contention, but at record time the camera runs
+      // software (below), so the screen encoder has the HW slot to itself.
+      const screenCodec =
+        screenProbe.configResolved?.codec || CODEC_CANDIDATES[0];
+      try {
+        screenProbe2 = await probeSingleHw({
+          codec: screenCodec,
+          framerate,
+        });
+      } catch {
+        screenProbe2 = { ran: false, reason: "exception" };
+      }
+      screenPreferSoftware = Boolean(
+        screenProbe2?.ran && screenProbe2.alive === false,
+      );
+    }
+  }
+
   // macOS VideoToolbox h264 serializes per process; a second concurrent
   // prefer-hardware silently falls back to SW at unpredictable fps.
   // Route camera to explicit SW (below) to avoid contending the slot.
@@ -263,16 +437,21 @@ export const probeHwSlots = async ({
   // rejected every codec candidate at the individual probe step.
   const cameraHwViable = cameraProbe.supported;
 
+  const aacSupported = await probeAacSupported();
+
   return {
     screen: screenProbe,
     camera: cameraProbe,
     concurrentProbe,
+    screenProbe2,
     summary: {
       screenHw: screenProbe.supported,
       cameraHw: cameraHwViable,
+      aacSupported,
       cameraHwAvailable,
       cameraHwAdvertised: cameraProbe.supported,
       cameraPreferSoftware,
+      screenPreferSoftware,
       concurrent: concurrentProbe?.concurrent ?? null,
       concurrentRan: Boolean(concurrentProbe?.ran),
       isMacUA,

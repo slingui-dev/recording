@@ -10,11 +10,57 @@ import {
 } from "../../../media/fastRecorderGate";
 import { WebCodecsTrackRecorder } from "./WebCodecsTrackRecorder";
 import { probeHwSlots } from "./hwSlotProbe";
+import { canStartMp4Recorder } from "../../utils/recorderCodec";
 
-// Mirrors WebCodecsRecorder's resize-canvas math. Cloud uploaders
-// and scene.{screen,camera} need encoded dims, not the source
-// track's native (retina-scale on macOS while encode caps at 1080p).
-// MediaRecorder records native, so callers skip this for it.
+// Prefer H.264/MP4 fallback (Chrome/Edge 126+, not Firefox); VP9-WebM breaks
+// downstream (Bunny drops frames, node-av SIGSEGVs). false = VP9-WebM.
+const PREFER_MP4_MEDIARECORDER = true;
+
+// H.264 Baseline + AAC-LC. Video-only variant for audioless tracks;
+// isTypeSupported answers differently for the two, so probe both.
+const MP4_MR_WITH_AUDIO = "video/mp4;codecs=avc1.42E01E,mp4a.40.2";
+const MP4_MR_VIDEO_ONLY = "video/mp4;codecs=avc1.42E01E";
+
+let _mp4MrSupport = null;
+const probeMp4MediaRecorder = () => {
+  if (_mp4MrSupport !== null) return _mp4MrSupport;
+  const supported = (mime) => {
+    try {
+      return (
+        typeof MediaRecorder !== "undefined" &&
+        typeof MediaRecorder.isTypeSupported === "function" &&
+        MediaRecorder.isTypeSupported(mime)
+      );
+    } catch {
+      return false;
+    }
+  };
+  _mp4MrSupport = PREFER_MP4_MEDIARECORDER
+    ? {
+        withAudio: supported(MP4_MR_WITH_AUDIO),
+        videoOnly: supported(MP4_MR_VIDEO_ONLY),
+      }
+    : { withAudio: false, videoOnly: false };
+  return _mp4MrSupport;
+};
+
+// Only claim MP4 when both variants record: the container is fixed before we
+// know whether this track carries audio.
+const mediaRecorderVideoPlan = () => {
+  const s = probeMp4MediaRecorder();
+  return s.withAudio && s.videoOnly
+    ? { container: "video/mp4", codec: "avc1.42E01E" }
+    : { container: "video/webm", codec: "vp9" };
+};
+
+// Null for WebM: callers pass their existing mime through unchanged.
+export const mediaRecorderMimeFor = ({ container, enableAudio }) => {
+  if (container !== "video/mp4") return null;
+  return enableAudio ? MP4_MR_WITH_AUDIO : MP4_MR_VIDEO_ONLY;
+};
+
+// Encoded dims (capped at 1080p), not source-native. WebCodecs only;
+// MediaRecorder records native, so it skips this.
 export const WEBCODECS_CAP_WIDTH = 1920;
 export const WEBCODECS_CAP_HEIGHT = 1080;
 const HARD_CAP = 3840;
@@ -93,8 +139,7 @@ export const inspectTrackPlan = async ({ track, probeOptions }) => {
   if (sticky?.disabled) {
     return {
       kind: "mediarecorder",
-      container: "video/webm",
-      codec: "vp9",
+      ...mediaRecorderVideoPlan(),
       hwSlots: hwSlots.summary,
       reason: "fastRecorderGate-sticky-disabled",
     };
@@ -103,17 +148,29 @@ export const inspectTrackPlan = async ({ track, probeOptions }) => {
   if (!trackHw?.supported) {
     return {
       kind: "mediarecorder",
-      container: "video/webm",
-      codec: "vp9",
+      ...mediaRecorderVideoPlan(),
       hwSlots: hwSlots.summary,
       reason: `hw-probe-${track}-unsupported`,
+    };
+  }
+  // MP4/WebCodecs can't carry audio without AAC. When AAC encode is missing
+  // (rare: Chromium with H.264 but no proprietary AAC) the WebCodecs path
+  // would produce a silent MP4, so route video tracks to MediaRecorder
+  // (VP9-WebM), which records audio natively. AAC support is device-global, so
+  // both inspectTrackPlan callers (TUS filetype hint and recorder) agree.
+  // `=== false` so an older cached probe without the field fails open.
+  if (hwSlots.summary.aacSupported === false) {
+    return {
+      kind: "mediarecorder",
+      ...mediaRecorderVideoPlan(),
+      hwSlots: hwSlots.summary,
+      reason: "aac-unsupported",
     };
   }
   if (track === "camera" && hwSlots.summary.mode === "screen-hw-camera-mr") {
     return {
       kind: "mediarecorder",
-      container: "video/webm",
-      codec: "vp9",
+      ...mediaRecorderVideoPlan(),
       hwSlots: hwSlots.summary,
       reason: "screen-hw-camera-mr-mode",
     };
@@ -124,13 +181,24 @@ export const inspectTrackPlan = async ({ track, probeOptions }) => {
   const cameraPreferSoftware =
     track === "camera" &&
     hwSlots.summary.mode === "dual-webcodecs-camera-sw";
+  // HW encoder failed the output-liveness probe: use software H.264 (same MP4)
+  // rather than risk a silent zero-chunk recording. Off until the probe ships.
+  const screenPreferSoftware =
+    track === "screen" && Boolean(hwSlots.summary.screenPreferSoftware);
   return {
     kind: "webcodecs",
     container: "video/mp4",
-    codec: "avc1.4D0028",
+    // Container/codec hint for Bunny's TUS Upload-Metadata. The real codec
+    // is picked at configure time by chooseVideoEncoderConfig.
+    codec: "avc1.64002A",
     hwSlots: hwSlots.summary,
     cameraPreferSoftware,
-    reason: cameraPreferSoftware ? "dual-webcodecs-camera-sw-mode" : "ok",
+    screenPreferSoftware,
+    reason: cameraPreferSoftware
+      ? "dual-webcodecs-camera-sw-mode"
+      : screenPreferSoftware
+        ? "screen-hw-no-output-sw"
+        : "ok",
   };
 };
 
@@ -140,6 +208,7 @@ export const chooseTrackEncoder = async ({
   mimeType,
   videoBitsPerSecond,
   audioBitsPerSecond,
+  audioChannels,
   enableAudio,
   createMediaRecorder,
   onDataAvailable,
@@ -148,20 +217,55 @@ export const chooseTrackEncoder = async ({
   const plan = await inspectTrackPlan({ track, probeOptions });
 
   if (plan.kind === "mediarecorder") {
+    // Use the plan's mime so bytes match the container we already reported (TUS
+    // filetype / editor blob type). Null = WebM: pass the caller's mime unchanged.
+    let planMime = mediaRecorderMimeFor({
+      container: plan.container,
+      enableAudio,
+    });
+    // isTypeSupported can advertise MP4 on boxes whose MediaRecorder throws from
+    // start(). Probe the real stream and fall back to WebM rather than lose the
+    // recording; plan.container follows so the reported filetype stays truthful.
+    if (planMime && !canStartMp4Recorder(stream, planMime)) {
+      planMime = null;
+      plan.container = "video/webm";
+      plan.codec = "vp9";
+      plan.reason = `${plan.reason}+mp4-start-probe-failed`;
+    }
     return {
       ...plan,
-      recorder: createMediaRecorder(stream, { mimeType }, onDataAvailable),
+      recorder: createMediaRecorder(
+        stream,
+        { mimeType: planMime || mimeType },
+        onDataAvailable,
+        track,
+      ),
     };
   }
 
   // WebCodecs path. The MP4 mime type is always video/mp4, regardless of
   // whether audio is included (AAC fits inside MP4 alongside H.264).
+  // forceSoftwareEncoder storage flag biases the encoder candidate list
+  // toward prefer-software. Playwright Chromium 1217 hits a documented
+  // "encode() accepts, no chunks emit" HW silent-fail (see Windows MFT
+  // note in WebCodecsRecorder.js:chooseVideoEncoderConfig) on macOS
+  // auto-select-desktop-capture streams; SW H.264 encodes them cleanly.
+  let forceSoftware = false;
+  try {
+    const s = await chrome.storage.local.get(["forceSoftwareEncoder"]);
+    forceSoftware = Boolean(s.forceSoftwareEncoder);
+  } catch {}
   const recorder = new WebCodecsTrackRecorder(stream, {
     mimeType: "video/mp4",
     videoBitsPerSecond,
     audioBitsPerSecond,
+    audioChannels,
     enableAudio,
-    preferSoftware: Boolean(plan.cameraPreferSoftware),
+    preferSoftware:
+      forceSoftware ||
+      Boolean(plan.cameraPreferSoftware) ||
+      Boolean(plan.screenPreferSoftware),
+    trackKind: track,
   });
   recorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) {
@@ -181,12 +285,16 @@ export const chooseTrackEncoder = async ({
   };
   recorder.onerror = (event) => {
     const err = event?.error;
+    // Salvage stop() already ran; don't sticky-disable or double-report.
+    if (err && err.finalized === true) {
+      return;
+    }
     console.error(
       `[chooseEncoder] WebCodecs ${track} runtime error:`,
       err,
     );
-    // Sticky-disable on hard failures, leave transient ones alone. The
-    // gate's marker function distinguishes via its own pattern list.
+    // Pro marks failures per-session (in-memory) instead of persisting
+    // useWebCodecsRecorder=false; fresh HW probes run each session.
     void markFastRecorderFailure(`cloud-${track}-runtime`, {
       error: String(err?.message || err),
       detail: err?.detail || null,
