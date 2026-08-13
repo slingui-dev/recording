@@ -1263,7 +1263,9 @@ const ContentState = (props) => {
               ) {
                 setContentState((prevState) => ({
                   ...prevState,
+                  blob: fixedWebm,
                   webm: fixedWebm,
+                  mp4ready: true,
                   ready: true,
                   isFfmpegRunning: false,
                 }));
@@ -1297,7 +1299,9 @@ const ContentState = (props) => {
           ) {
             setContentState((prevState) => ({
               ...prevState,
+              blob: fixedWebm,
               webm: fixedWebm,
+              mp4ready: true,
               ready: true,
               isFfmpegRunning: false,
             }));
@@ -1329,7 +1333,9 @@ const ContentState = (props) => {
         ) {
           setContentState((prevState) => ({
             ...prevState,
+            blob,
             webm: blob,
+            mp4ready: true,
             ready: true,
             isFfmpegRunning: false,
           }));
@@ -1355,7 +1361,9 @@ const ContentState = (props) => {
       );
       setContentState((prevState) => ({
         ...prevState,
+        blob,
         webm: blob,
+        mp4ready: true,
         ready: true,
         isFfmpegRunning: false,
       }));
@@ -1374,7 +1382,9 @@ const ContentState = (props) => {
           if (prev.ready) return prev;
           return {
             ...prev,
+            blob: prev.blob || prev.webm || prev.rawBlob || withBlob,
             webm: prev.webm || prev.rawBlob || withBlob,
+            mp4ready: true,
             ready: true,
             noffmpeg: true,
             isFfmpegRunning: false,
