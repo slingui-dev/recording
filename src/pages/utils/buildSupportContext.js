@@ -70,15 +70,6 @@ export const buildSupportContext = async (opts = {}) => {
     ctx.cores = String(navigator.hardwareConcurrency);
   }
 
-  // Coarse device class, to see if stuck-recording reports cluster on low-RAM
-  // or low-core devices. Both are already exposed to every page, no PII.
-  if (typeof navigator.deviceMemory === "number") {
-    ctx.mem = String(navigator.deviceMemory);
-  }
-  if (typeof navigator.hardwareConcurrency === "number") {
-    ctx.cores = String(navigator.hardwareConcurrency);
-  }
-
   try {
     const info = await chrome.runtime.getPlatformInfo();
     ctx.os = info.os;
