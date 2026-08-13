@@ -38,7 +38,6 @@ export function shouldUseDisplayMediaForScreen(settings = {}) {
     disabled: settings.macSystemAudioCapture === false,
   });
 }
-<<<<<<< HEAD
 
 // Chrome's "Share this tab instead" button; on by default, with
 // disableSurfaceSwitching as a storage kill-switch. Not gated on mac/systemAudio
@@ -47,5 +46,3 @@ export function shouldUseDisplayMediaForScreen(settings = {}) {
 export function screenSurfaceSwitching(settings = {}) {
   return settings.disableSurfaceSwitching === true ? "exclude" : "include";
 }
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)

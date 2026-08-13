@@ -10,16 +10,10 @@ import { ReactSVG } from "react-svg";
 
 import * as ToastEl from "@radix-ui/react-toast";
 
-<<<<<<< HEAD:src/pages/Components/Warning.jsx
 import { shouldUseDisplayMediaForScreen } from "../utils/screenCaptureMode";
 
 // shared between CloudRecorder and Recorder; alwaysInteractive keeps the viewport clickable (CloudRecorder) vs pass-through-until-open (Recorder)
 const Warning = ({ alwaysInteractive = false }) => {
-=======
-import { shouldUseDisplayMediaForScreen } from "../../utils/screenCaptureMode";
-
-const Warning = () => {
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix):src/pages/Recorder/warning/Warning.jsx
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("Record computer audio");
   const [description, setDescription] = useState("");
@@ -33,13 +27,7 @@ const Warning = () => {
   }, []);
 
   useEffect(() => {
-<<<<<<< HEAD:src/pages/Components/Warning.jsx
     // macOS + Chrome 141+ captures system audio via getDisplayMedia, so show Windows-style guidance; read the same flags the capture path uses
-=======
-    // macOS + Chrome 141+ captures system audio via getDisplayMedia, so show
-    // Windows-style guidance. Read the same flags the capture path uses so the
-    // warning can't disagree with what actually happens.
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix):src/pages/Recorder/warning/Warning.jsx
     const isMac = navigator.userAgent.indexOf("Mac") !== -1;
     chrome.storage.local.get(
       ["forceDisplayMediaScreen", "macSystemAudioCapture"],

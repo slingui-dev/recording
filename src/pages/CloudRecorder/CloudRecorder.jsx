@@ -19,15 +19,11 @@ import {
 } from "../utils/tabKeepalive";
 import { traceStep } from "../utils/startFlowTrace";
 import { IS_OFFSCREEN_HOST } from "../utils/recordingHost";
-<<<<<<< HEAD
 import { sendSystemAudioGuidanceToast } from "../utils/systemAudioGuidance";
 import {
   shouldUseDisplayMediaForScreen,
   screenSurfaceSwitching,
 } from "../utils/screenCaptureMode";
-=======
-import { shouldUseDisplayMediaForScreen } from "../utils/screenCaptureMode";
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
 import { acquireDisplayMediaWithFocusRetry } from "../utils/acquireDisplayMedia";
 import { startPrewarm, stopPrewarm } from "../Recorder/streamWarmup";
 import { preloadWebCodecsModules } from "../Recorder/webcodecs/WebCodecsRecorder";
@@ -356,13 +352,10 @@ const CloudRecorder = () => {
   const recoveryExportedRef = useRef(false);
   const screenTrackLostRef = useRef(false);
   const screenTrackMonitor = useRef(null);
-<<<<<<< HEAD
   // null = not muted; the reported flag keeps the breadcrumb to one per
   // mute stretch.
   const screenTrackMutedSinceRef = useRef(null);
   const screenTrackMuteReportedRef = useRef(false);
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
   // Capture identity (recordingType/surface enums only, no labels/URLs) for
   // forensic telemetry, so a frozen session's capture mechanism is known.
   const captureContextRef = useRef(null);
@@ -424,12 +417,9 @@ const CloudRecorder = () => {
   const isInit = useRef(false);
 
   const aCtx = useRef(null);
-<<<<<<< HEAD
   // audioCtxWallMs minus audioCtxTimeMs growing = the mix bus underran
   // (samples never rendered, the drift source).
   const aCtxCreatedAtRef = useRef(null);
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
   // Live AudioContext interruption stats from attachAudioContextWatchdog,
   // folded into the audio diag snapshot at finalize for upload telemetry.
   const audioHealthRef = useRef(null);
@@ -878,18 +868,14 @@ const CloudRecorder = () => {
         // event types (recording_heartbeat, recording_stop_diag,
         // recording_failed_bundle); null otherwise. The server
         // sanitizer drops them cleanly when absent.
-<<<<<<< HEAD
         // In `event`, not at the request root: nested objects here are a
         // shape the server sanitizes, an unknown root key risks the body.
         encodeStats: eventPayload.encodeStats || null,
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
         screenDiag: eventPayload.screenDiag || null,
         cameraDiag: eventPayload.cameraDiag || null,
         audioDiag: eventPayload.audioDiag || null,
         lifecycleBundle: eventPayload.lifecycleBundle || null,
         status: eventPayload.status || null,
-<<<<<<< HEAD
         // Finalize reconciliation from bunnyTusUploader: tail bytes lost to a
         // truncated prefix, prior-session bytes recovered from the server
         // offset. Undefined on normal events; truncatedBytes > 0 means loss.
@@ -901,8 +887,6 @@ const CloudRecorder = () => {
           typeof eventPayload.recoveredBytes === "number"
             ? eventPayload.recoveredBytes
             : null,
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
       },
     };
   };
@@ -1420,7 +1404,6 @@ const CloudRecorder = () => {
   const bindScreenTrack = (track) => {
     if (!track) return;
     screenTrackLostRef.current = false;
-<<<<<<< HEAD
     screenTrackMutedSinceRef.current = null;
     screenTrackMuteReportedRef.current = false;
     // Capture identity from the bound track (fires on every acquisition path).
@@ -1431,14 +1414,6 @@ const CloudRecorder = () => {
         recordingType: recordingType.current || null,
         displaySurface: trackSettings.displaySurface || null,
         screenSurface: trackSettings.displaySurface || null,
-=======
-    // Capture identity from the bound track (fires on every acquisition path).
-    // Enums and booleans only, no track.label/title/URL.
-    try {
-      captureContextRef.current = {
-        recordingType: recordingType.current || null,
-        displaySurface: track.getSettings?.().displaySurface || null,
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
         isTab: !!isTab.current,
         region: Boolean(regionRef.current),
       };
@@ -2279,29 +2254,14 @@ const CloudRecorder = () => {
     return true;
   };
 
-<<<<<<< HEAD
   // MediaRecorder has no getDiagSnapshot(), so assemble the equivalent from
   // sessionTrackState plus the live mic track. Null only when the mic wasn't
   // part of the recording; zero bytes still returns a snapshot.
-=======
-  // Audio (mic) diagnostic snapshot for the MediaRecorder audio path.
-  // The WebCodecs recorders expose getDiagSnapshot(); MediaRecorder does
-  // not, so we assemble an equivalent from the existing sessionTrackState
-  // counters plus the live mic-track + intent state. This is the one path
-  // the WebCodecs telemetry never covered, which is exactly where the
-  // silent empty-audio failures live.
-  //
-  // Returns null ONLY when the mic was not part of this recording (nothing
-  // to observe). When the user chose the mic we always return a snapshot,
-  // even at zero bytes, so an empty audio track stays observable. Pure
-  // reads — never mutates state, never throws.
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
   const getAudioDiagSnapshot = () => {
     try {
       const micChosen = audioIntent.current?.micActive === true;
       const hasUploader = Boolean(audioUploader.current);
       const hasRecorder = Boolean(audioRecorder.current);
-<<<<<<< HEAD
       // System-audio-only sessions have no mic/uploader/recorder but still carry
       // audio via the screen (or camera, camera-only mode) WebCodecs recorder;
       // null there means the MediaRecorder fallback.
@@ -2312,19 +2272,12 @@ const CloudRecorder = () => {
       if (!micChosen && !hasUploader && !hasRecorder && !muxAudioDiag) {
         return null;
       }
-=======
-      if (!micChosen && !hasUploader && !hasRecorder) return null;
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
 
       const track = rawMicStream.current?.getAudioTracks?.()[0] || null;
       const audioState = sessionTrackState.current?.audio || {};
       const uploaderMeta = audioUploader.current?.getMeta?.() || null;
       return {
-<<<<<<< HEAD
         // Authoritative user intent, the disambiguator that keeps a
-=======
-        // Authoritative user intent — the disambiguator that keeps a
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
         // user-disabled mic from ever being read as a failure.
         micChosen,
         encoderKind: encoderKinds.audio || null,
@@ -2356,7 +2309,6 @@ const CloudRecorder = () => {
         audioInterruptedCount: audioHealthRef.current?.interruptedCount ?? 0,
         audioInterruptedMs: audioHealthRef.current?.interruptedTotalMs ?? 0,
         audioSawInterrupted: audioHealthRef.current?.sawInterrupted ?? false,
-<<<<<<< HEAD
         // Loss-stage discriminator: ctxTime lagging wall = mix-bus underrun.
         // ctxTime tracking wall while receivedMs lags = reader loss after the bus.
         audioCtxTimeMs: aCtx.current
@@ -2366,8 +2318,6 @@ const CloudRecorder = () => {
           ? Date.now() - aCtxCreatedAtRef.current
           : null,
         ...(muxAudioDiag || {}),
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
       };
     } catch {
       return null;
@@ -2389,19 +2339,9 @@ const CloudRecorder = () => {
       const cameraDiag = cameraRecorder.current?.getDiagSnapshot?.() || null;
       const audioDiag = getAudioDiagSnapshot();
       if (screenDiag || cameraDiag || audioDiag) {
-<<<<<<< HEAD
         // Silent-audio failure: mic chosen, zero audio bytes, another track
         // fine. Reads from sessionTrackState not the WebCodecs diags, so it
         // still fires on MediaRecorder, and skips fully-failed recordings.
-=======
-        // Mic was chosen but the audio track produced zero bytes while
-        // another track recorded fine — the silent-audio failure. We read
-        // "did another track record" from sessionTrackState (populated for
-        // every encoder kind) rather than the WebCodecs diags, so this
-        // still fires when screen/camera run on MediaRecorder (no diag).
-        // Requiring otherTrackRecorded keeps trivially-short / fully-failed
-        // recordings from being flagged here.
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
         const otherTrackRecorded =
           (sessionTrackState.current.screen?.bytesRecorded || 0) > 0 ||
           (sessionTrackState.current.camera?.bytesRecorded || 0) > 0;
@@ -4028,13 +3968,10 @@ const CloudRecorder = () => {
       // Opus-in-webm is the floor for audio; nothing safer to fall to.
       return null;
     }
-<<<<<<< HEAD
     // Don't fall from MP4 to WebM: the container was already sent as the TUS
     // filetype and drives the editor's <video> type, so WebM bytes here play as
     // a mislabelled MP4. Surface the error instead, like the VP8 floor below.
     if (m.includes("mp4") || m.includes("avc1")) return null;
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
     if (m.includes("vp8") || m === "video/webm") return null;
     return "video/webm;codecs=vp8,opus";
   };
@@ -4119,21 +4056,9 @@ const CloudRecorder = () => {
           return;
         }
 
-<<<<<<< HEAD
         // Encoder passed isTypeSupported() but failed on real frames (older
         // Android H.264, high-res getDisplayMedia init). With no bytes yet,
         // rebuild on VP8; once data has flowed, stop gracefully and keep it.
-=======
-        // EncodingError: the encoder passed isTypeSupported() at construction
-        // but failed once real frames arrived (known on older Android H.264
-        // and high-res getDisplayMedia encoder init). Chrome surfaces it as
-        // EncodingError or one of these messages. If no bytes were captured
-        // yet, transparently rebuild on VP8 and restart on the same stream —
-        // nothing was recorded or uploaded, so the swap loses nothing and the
-        // user barely notices. If data already flowed, we do NOT restart
-        // (that would discard it); we fall through to the normal surface +
-        // graceful stop, keeping what was recorded.
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
         const isEncodingError =
           errName === "EncodingError" ||
           errMsg.includes("video encoding failed") ||
@@ -5435,7 +5360,6 @@ const CloudRecorder = () => {
         const camera = cameraRecorder.current?.getDiagSnapshot?.();
         const audio = getAudioDiagSnapshot();
         if (!screen && !camera && !audio) return;
-<<<<<<< HEAD
         // offsetBytes used to stay 0 all session then jump at finalize, leaving
         // mid-recording upload behaviour unreconstructable.
         const uploadedBytes =
@@ -5451,13 +5375,10 @@ const CloudRecorder = () => {
         const screenStats = screenRecorder.current?.getEncodeStats?.() || null;
         const cameraStats = cameraRecorder.current?.getEncodeStats?.() || null;
         const writeStats = localWriteStatsRef.current || {};
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
         void emitUploadTelemetry("recording_heartbeat", {
           screenDiag: screen || null,
           cameraDiag: camera || null,
           audioDiag: audio || null,
-<<<<<<< HEAD
           offset: uploadedBytes,
           totalBytes: recordedBytes,
           // Polled, not live: at most STORAGE_CHECK_INTERVAL_MS stale.
@@ -5488,8 +5409,6 @@ const CloudRecorder = () => {
                 backend: storageBackends.screen || "unknown",
               }
             : null,
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
         });
       } catch {}
     }, 30_000);
@@ -6778,7 +6697,6 @@ const CloudRecorder = () => {
               audio: data.systemAudio ? true : false,
               video: {
                 frameRate: { ideal: targetFps, max: targetFps },
-<<<<<<< HEAD
                 // Not oversampling (region, or the kill-switch): keep the tier as
                 // `ideal` so those requests look exactly like they always did.
                 width: cloudCap.oversampled
@@ -6787,34 +6705,20 @@ const CloudRecorder = () => {
                 height: cloudCap.oversampled
                   ? { max: cloudCap.height }
                   : { ideal: cloudCap.height, max: cloudCap.height },
-=======
-                width: { ideal: targetWidth, max: targetWidth },
-                height: { ideal: targetHeight, max: targetHeight },
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
                 // Open the picker on Entire Screen for screen, Chrome Tab for
                 // tab/region. Hint only; the user can still switch panes.
                 displaySurface: isTabModeRequest ? "browser" : "monitor",
               },
-<<<<<<< HEAD
               // systemAudio:"include" (default may hide the toggle).
               // surfaceSwitching keeps Chrome's "Share this tab instead" button.
               // Screen-only; these throw TypeError w/ preferCurrentTab.
-=======
-              // systemAudio:"include" (default may hide the toggle);
-              // surfaceSwitching:"exclude" dodges crbug 344876285 (switch ends
-              // mac audio). Screen-only; these throw TypeError w/ preferCurrentTab.
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
               ...(isTabModeRequest
                 ? {}
                 : {
                     systemAudio: "include",
-<<<<<<< HEAD
                     surfaceSwitching: screenSurfaceSwitching({
                       disableSurfaceSwitching,
                     }),
-=======
-                    surfaceSwitching: "exclude",
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
                     selfBrowserSurface: "exclude",
                   }),
             };
@@ -7246,10 +7150,7 @@ const CloudRecorder = () => {
         // Some platforms reject hint sampleRates; fall back to default.
         aCtx.current = new AudioContext();
       }
-<<<<<<< HEAD
       aCtxCreatedAtRef.current = Date.now();
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
       audioHealthRef.current = attachAudioContextWatchdog(
         aCtx.current,
         "CloudRecorder",

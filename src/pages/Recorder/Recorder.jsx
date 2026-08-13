@@ -38,15 +38,11 @@ import { shouldAcquireMicAtStart } from "../utils/micAcquisitionPolicy";
 import { attachAudioContextWatchdog } from "../utils/audioContextWatchdog";
 import { beginFinalizeHeartbeat } from "../utils/finalizeHeartbeat";
 import { IS_OFFSCREEN_HOST } from "../utils/recordingHost";
-<<<<<<< HEAD
 import { sendSystemAudioGuidanceToast } from "../utils/systemAudioGuidance";
 import {
   shouldUseDisplayMediaForScreen,
   screenSurfaceSwitching,
 } from "../utils/screenCaptureMode";
-=======
-import { shouldUseDisplayMediaForScreen } from "../utils/screenCaptureMode";
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
 import { acquireDisplayMediaWithFocusRetry } from "../utils/acquireDisplayMedia";
 import { chooseWriter } from "./recorderStorage/chooseWriter";
 import { chooseReader } from "./recorderStorage/chooseReader";
@@ -3476,12 +3472,9 @@ const Recorder = () => {
 
   async function startStream(data, id, options, permissions, permissions2, streamOpts = {}) {
     const useDisplayMedia = !!streamOpts.useDisplayMedia;
-<<<<<<< HEAD
     // Only the screen/desktop branches supersample; clear it so a camera-only
     // take can't inherit a previous screen recording's value.
     captureCapRef.current = null;
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
     perfMark("Recorder startStream.enter", {
       recordingType: data?.recordingType,
       hasId: Boolean(id),
@@ -3684,7 +3677,6 @@ const Recorder = () => {
     } else if (useDisplayMedia) {
       // macOS + Chrome 141+ screen path: getDisplayMedia for system audio.
       // Falls through to the shared mixing/recorder setup below.
-<<<<<<< HEAD
       const { disableSurfaceSwitching } = await chrome.storage.local.get([
         "disableSurfaceSwitching",
       ]);
@@ -3696,13 +3688,10 @@ const Recorder = () => {
           disabled: await isOversampleDisabled(),
         }) || { width, height, oversampled: false };
       captureCapRef.current = captureCap;
-=======
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
       const displayConstraints = {
         audio: data.systemAudio ? true : false,
         video: {
           frameRate: { ideal: fps, max: fps },
-<<<<<<< HEAD
           width: { max: captureCap.width },
           height: { max: captureCap.height },
           displaySurface: "monitor",
@@ -3712,17 +3701,6 @@ const Recorder = () => {
         // throw TypeError w/ preferCurrentTab.
         systemAudio: "include",
         surfaceSwitching: screenSurfaceSwitching({ disableSurfaceSwitching }),
-=======
-          width: { ideal: width, max: width },
-          height: { ideal: height, max: height },
-          displaySurface: "monitor",
-        },
-        // systemAudio:"include" (default may hide the toggle);
-        // surfaceSwitching:"exclude" dodges crbug 344876285 (switch ends mac
-        // audio). Screen-only; these throw TypeError w/ preferCurrentTab.
-        systemAudio: "include",
-        surfaceSwitching: "exclude",
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
         selfBrowserSurface: "exclude",
       };
       debug("getDisplayMedia screen constraints", displayConstraints);
@@ -4061,15 +4039,8 @@ const Recorder = () => {
                     elapsedRecordingMs: recordingStartTime.current
                       ? Date.now() - recordingStartTime.current
                       : null,
-<<<<<<< HEAD
                     hasMic,
                     hasSystemAudio,
-=======
-                    hasMic: !!helperAudioStream.current?.getAudioTracks?.()
-                      ?.length,
-                    hasSystemAudio:
-                      sysTracks.length > 0 && data.systemAudio,
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
                     audioContextState: aCtx.current?.state ?? null,
                     docVisibility:
                       typeof document !== "undefined"
@@ -4237,17 +4208,12 @@ const Recorder = () => {
         !isTab.current &&
         data.recordingType !== "region"
       ) {
-<<<<<<< HEAD
         if (IS_OFFSCREEN_HOST || screenDisplayMediaMode) {
           // Offscreen docs can't consume a chrome.desktopCapture streamId
           // (AbortError "Error starting tab capture", esp. on Windows), so the
           // offscreen recorder always uses getDisplayMedia for screen capture,
           // matching CloudRecorder. mac+141 also uses it for system audio.
           debug("screen capture via getDisplayMedia (offscreen or mac+141)");
-=======
-        if (screenDisplayMediaMode) {
-          debug("screen capture via getDisplayMedia (mac+141)");
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
           slLog("getDisplayMedia-screen-route");
           chrome.storage.local.set({ lastScreenCaptureApi: "getDisplayMedia" });
           startStream(data, null, null, permissions, permissions2, {

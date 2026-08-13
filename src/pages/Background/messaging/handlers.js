@@ -1858,7 +1858,6 @@ export const setupHandlers = () => {
       // The popup mount opts out so a fresh install doesn't silently revive
       // auth from a leftover website cookie (it would flash the paid welcome
       // screen at a returning user who should just see "Log in").
-<<<<<<< HEAD
       const force = message?.force !== false;
       if (force) return await loginWithWebsite({ force: true });
       // Every content script sends this on mount, so an install/update backfill
@@ -1872,9 +1871,6 @@ export const setupHandlers = () => {
         });
       }
       return await inFlightUnforcedAuth;
-=======
-      return await loginWithWebsite({ force: message?.force !== false });
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
     },
   );
   registerMessage(

@@ -3,11 +3,7 @@
   "name": "__MSG_extName__",
   "description": "__MSG_extDesc__",
   "default_locale": "en",
-<<<<<<< HEAD
   "version": "4.6.5",
-=======
-  "version": "4.4.14",
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
   "background": {
     "service_worker": "background.bundle.js"
   },

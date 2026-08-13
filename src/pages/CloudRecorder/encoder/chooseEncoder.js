@@ -234,16 +234,12 @@ export const chooseTrackEncoder = async ({
     }
     return {
       ...plan,
-<<<<<<< HEAD
       recorder: createMediaRecorder(
         stream,
         { mimeType: planMime || mimeType },
         onDataAvailable,
         track,
       ),
-=======
-      recorder: createMediaRecorder(stream, { mimeType }, onDataAvailable, track),
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
     };
   }
 

@@ -312,11 +312,7 @@ const resolveEditorTabForTargetImpl = async ({
     return { tabId: null, reused: false, opened: false };
   }
 
-<<<<<<< HEAD
   const createdTab = await createTab(targetUrl, focus);
-=======
-  const createdTab = await createTab(targetUrl, true);
->>>>>>> a49795c (macOS system audio via getDisplayMedia, WebCodecs stall recovery, and off-thread editor duration fix)
   if (!createdTab?.id) {
     console.warn("[Screenity][BG] Failed to open fallback editor tab", {
       reason,
