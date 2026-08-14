@@ -50,6 +50,31 @@ if (process.env.SCREENITY_SKIP_ENV) {
       );
     }
   }
+  // Production builds are also usable from a clean checkout. The public
+  // Slingui endpoints are safe to embed; secrets are never taken from here.
+  // Local and self-hosted release builds remain opt-in and must keep their
+  // existing environment semantics.
+  if (
+    !isDev &&
+    process.env.SCREENITY_USE_LOCAL_ENV !== "1" &&
+    !process.env.SCREENITY_APP_BASE
+  ) {
+    process.env.SCREENITY_APP_BASE = "https://slingui.com";
+  }
+  if (
+    !isDev &&
+    process.env.SCREENITY_USE_LOCAL_ENV !== "1" &&
+    !process.env.SCREENITY_API_BASE_URL
+  ) {
+    process.env.SCREENITY_API_BASE_URL = "https://api.slingui.com";
+  }
+  if (
+    !isDev &&
+    process.env.SCREENITY_USE_LOCAL_ENV !== "1" &&
+    process.env.SCREENITY_ENABLE_CLOUD_FEATURES === undefined
+  ) {
+    process.env.SCREENITY_ENABLE_CLOUD_FEATURES = "true";
+  }
   console.log(
     `[screenity] env: ${envFile}  SCREENITY_APP_BASE=${
       process.env.SCREENITY_APP_BASE || "(unset)"

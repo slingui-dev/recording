@@ -682,6 +682,22 @@ const SettingsMenu = (props) => {
               </DropdownMenu.Portal>
             </DropdownMenu.Sub>
           )}
+          {DEV_MODE && (
+            <DropdownMenu.Item
+              className="DropdownMenuItem"
+              onSelect={() => {
+                setContentState((prevContentState) => ({
+                  ...prevContentState,
+                  recordingType: "screen",
+                }));
+                chrome.storage.local.set({ recordingType: "screen" });
+                chrome.runtime.sendMessage({ type: "screen-update" });
+              }}
+            >
+              {(chrome.i18n.getMessage("screenType") || "Screen") +
+                " (advanced)"}
+            </DropdownMenu.Item>
+          )}
           <DropdownMenu.CheckboxItem
             className="DropdownMenuItem"
             onSelect={(e) => {

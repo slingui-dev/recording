@@ -375,6 +375,7 @@ const ContentState = (props) => {
   const opfsReadInFlightRef = useRef(false);
   const diagHeartbeatCountRef = useRef(0);
   const meetingAudioChunksApplyStartedRef = useRef(false);
+  const meetingAudioChunksLoadGenerationRef = useRef(0);
 
   const setContentState = useCallback((updater) => {
     _setContentState((prev) => {
@@ -393,6 +394,10 @@ const ContentState = (props) => {
   }, []);
 
   const retryMeetingAudioChunks = useCallback(() => {
+    // Invalidate an older auth wait/list request before starting the retry.
+    // This prevents the original editor-open attempt from racing the login
+    // retry and issuing a duplicate chunks request.
+    meetingAudioChunksLoadGenerationRef.current += 1;
     setContentState((prev) => ({
       ...prev,
       meetingAudioChunksRetry: (prev.meetingAudioChunksRetry || 0) + 1,
@@ -414,6 +419,10 @@ const ContentState = (props) => {
     if (window.top !== window.self) return;
 
     let cancelled = false;
+    const loadGeneration = meetingAudioChunksLoadGenerationRef.current;
+    const isCurrentLoad = () =>
+      !cancelled &&
+      loadGeneration === meetingAudioChunksLoadGenerationRef.current;
 
     const loadMeetingAudioChunks = async () => {
       const startedAt = Date.now();
@@ -437,6 +446,8 @@ const ContentState = (props) => {
           "lastCompletedRecordingBackendRef",
           "postStopRecordingId",
         ]);
+        if (!isCurrentLoad()) return;
+
         const meetingContext =
           recordingMeta?.meetingContext ||
           screenityMeetingState ||
@@ -480,7 +491,7 @@ const ContentState = (props) => {
         const token = await waitForAccessToken({
           onStatus: ({ status, elapsedMs }) => {
             console.info("[MeetingAudioChunks] auth status", { status, elapsedMs });
-            if (cancelled) return;
+            if (!isCurrentLoad()) return;
             setContentState((prev) => ({
               ...prev,
               meetingAudioChunksStatus: status,
@@ -489,7 +500,7 @@ const ContentState = (props) => {
             }));
           },
         });
-        if (cancelled) return;
+        if (!isCurrentLoad()) return;
 
         setContentState((prev) => ({
           ...prev,
@@ -505,7 +516,7 @@ const ContentState = (props) => {
           warn: (message, payload) =>
             console.warn(`[MeetingAudioChunks] ${message}`, payload || ""),
         });
-        if (cancelled) return;
+        if (!isCurrentLoad()) return;
         if (!audioChunks?.chunks?.length) {
           console.info("[MeetingAudioChunks] list completed with no chunks", {
             recordingId: persistedRecordingId,
@@ -535,14 +546,26 @@ const ContentState = (props) => {
           meetingAudioChunksFinishedAt: Date.now(),
         }));
       } catch (error) {
-        if (!cancelled) {
+        if (isCurrentLoad()) {
           const errorMessage = error?.message || String(error);
           const isAuthTimeout = /authentication not ready/i.test(errorMessage);
-          console.warn("[MeetingAudioChunks] Failed to load chunks", error);
+          if (isAuthTimeout) {
+            // Missing auth is an expected branch for meetings opened before the
+            // user logs in. Keep it out of the generic failure path: the dialog
+            // offers login/retry and the request must not be attempted without
+            // a confirmed token.
+            console.info(
+              "[MeetingAudioChunks] Authentication required before loading chunks",
+            );
+          } else {
+            console.warn("[MeetingAudioChunks] Failed to load chunks", error);
+          }
           setContentState((prev) => ({
             ...prev,
-            meetingAudioChunksError: isAuthTimeout ? "authentication-timeout" : errorMessage,
-            meetingAudioChunksStatus: isAuthTimeout ? "auth-timeout" : "failed",
+            meetingAudioChunksError: isAuthTimeout
+              ? "authentication-required"
+              : errorMessage,
+            meetingAudioChunksStatus: isAuthTimeout ? "auth-required" : "failed",
             meetingAudioChunksFinishedAt: Date.now(),
           }));
         }

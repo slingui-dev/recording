@@ -33,8 +33,12 @@ function getRedirectUrl() {
   if (typeof chrome !== 'undefined' && chrome.identity) {
     return chrome.identity.getRedirectURL('callback.html');
   }
-  // Fallback for development
-  return 'http://localhost:3000/callback.html';
+  // The extension path above is used in Chrome. Keep the fallback origin-based
+  // so production bundles never contain a development-server URL.
+  if (typeof globalThis !== 'undefined' && globalThis.location?.origin) {
+    return `${globalThis.location.origin}/callback.html`;
+  }
+  return '/callback.html';
 }
 
 function parseJwt(token) {

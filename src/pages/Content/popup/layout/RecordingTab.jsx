@@ -3,14 +3,10 @@ import * as Tabs from "@radix-ui/react-tabs";
 
 import RecordingType from "./RecordingType";
 import {
-  ScreenTabOn,
-  ScreenTabOff,
   RegionTabOn,
   RegionTabOff,
   MockupTabOn,
   MockupTabOff,
-  CameraTabIconOn,
-  CameraTabIconOff,
   CheckWhiteIcon,
   CloseWhiteIcon,
 } from "../../images/popup/images";
@@ -92,7 +88,7 @@ const RecordingTab = (props) => {
     <div className="recording-ui">
       <Tabs.Root
         className="TabsRoot"
-        defaultValue="screen"
+        defaultValue="region"
         onValueChange={onValueChange}
         value={
           contentState.recordingType === "tab"
@@ -149,20 +145,6 @@ const RecordingTab = (props) => {
           aria-label="Manage your account"
           tabIndex={0}
         >
-          <Tabs.Trigger className="TabsTrigger" value="screen" tabIndex={0}>
-            <div className="TabsTriggerLabel">
-              <div className="TabsTriggerIcon">
-                <img
-                  src={
-                    contentState.recordingType === "screen"
-                      ? ScreenTabOn
-                      : ScreenTabOff
-                  }
-                />
-              </div>
-              <span>{chrome.i18n.getMessage("screenType")}</span>
-            </div>
-          </Tabs.Trigger>
           <TooltipWrap
             content={
               tabRecordingDisabled
@@ -203,22 +185,8 @@ const RecordingTab = (props) => {
               </div>
             </Tabs.Trigger>
           </TooltipWrap>
-          <Tabs.Trigger className="TabsTrigger" value="camera" tabIndex={0}>
-            <div className="TabsTriggerLabel">
-              <div className="TabsTriggerIcon">
-                <img
-                  src={
-                    contentState.recordingType === "camera"
-                      ? CameraTabIconOn
-                      : CameraTabIconOff
-                  }
-                />
-              </div>
-              <span>{chrome.i18n.getMessage("cameraType")}</span>
-            </div>
-          </Tabs.Trigger>
-          <div className="TabsTriggerSpacer"></div>
-          <div className="TabsTrigger">
+          <div className="TabsTriggerSpacer" style={{ display: "none" }}></div>
+          <div className="TabsTrigger" style={{ display: "none" }}>
             <TooltipWrap
               content={
                 !contentState.isLoggedIn

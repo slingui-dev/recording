@@ -6,10 +6,14 @@ const AuthRequiredDialog = ({ contentState, onSkipSync }) => {
   const [loginState, setLoginState] = useState("idle");
 
   const status = contentState.meetingAudioChunksStatus;
-  const hasMeeting = Boolean(
-    contentState.recordingMeta?.meetingContext?.meetingId,
-  );
-  const needsAuth = status === "waiting-auth" || status === "auth-timeout";
+  // ContentState already validated that a meeting context exists. Do not
+  // require one particular identifier here: the chunks API also accepts
+  // callId, roomId, classroomId, and other legacy context shapes.
+  const hasMeeting = Boolean(contentState.recordingMeta?.meetingContext);
+  const needsAuth =
+    status === "waiting-auth" ||
+    status === "auth-timeout" ||
+    status === "auth-required";
 
   useEffect(() => {
     if (!hasMeeting || !needsAuth) {
@@ -20,7 +24,7 @@ const AuthRequiredDialog = ({ contentState, onSkipSync }) => {
       return undefined;
     }
 
-    if (status === "auth-timeout") {
+    if (status === "auth-timeout" || status === "auth-required") {
       setVisible(true);
       return undefined;
     }
@@ -40,7 +44,10 @@ const AuthRequiredDialog = ({ contentState, onSkipSync }) => {
       // The OIDC callback resolves after exchanging the code, but wait for the
       // storage write as well. Chunk requests must never start without this token.
       await waitForAccessToken({ timeoutMs: 15_000 });
-      setLoginState("success");
+      // Hide the dialog before retrying. The retry will put the editor back in
+      // its loading state and will show the dialog again only if auth fails.
+      setVisible(false);
+      setLoginState("idle");
       contentState.retryMeetingAudioChunks?.();
     } catch (error) {
       console.warn("[MeetingAudioChunks] Login requested by editor failed", error);

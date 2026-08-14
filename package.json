@@ -1,6 +1,6 @@
 {
   "name": "slingui-recording",
-  "version": "4.6.5",
+  "version": "4.6.6",
   "description": "Slingui Recording extension for recording and saving classroom videos.",
   "scripts": {
     "build": "cross-env NODE_ENV=production node utils/build.js",
@@ -15,8 +15,8 @@
     "hot-reload": "cross-env NODE_ENV=development webpack serve --hot",
     "prettier": "prettier --write '**/*.{js,jsx,ts,tsx,json,css,scss,md}'",
     "postinstall": "patch-package && node scripts/patch-radix.js",
-    "package": "npm run build:prod && cd build && zip -r ../extension.zip . && cd ..",
-    "package:release": "npm run build:release && cd build && zip -r ../extension.zip . && cd ..",
+    "package": "npm run build:prod && rm -f extension.zip && cd build && zip -rq ../extension.zip . && cd ..",
+    "package:release": "npm run build:release && rm -f extension.zip && cd build && zip -rq ../extension.zip . && cd ..",
     "build:cws": "npm run build:prod && cd build && zip -r ../build-cws.zip . && cd ..",
     "preflight:cws": "node scripts/assert-no-dev-env.mjs --require-prod-origin && node scripts/cws-preflight.mjs",
     "preflight:cws:bless": "node scripts/cws-preflight.mjs --bless",

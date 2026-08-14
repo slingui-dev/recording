@@ -94,6 +94,7 @@ const ContentState = (props) => {
   const timerReadSeqRef = useRef(0);
   const lastBeepStartTimeRef = useRef(null);
   const recordingBeepTabIdRef = useRef(null);
+  const meetingRecordingStateRef = useRef(false);
   const verifyDebounceRef = useRef(null);
 
   const isTargetTab = useCallback(() => {
@@ -1105,8 +1106,17 @@ const ContentState = (props) => {
     const requestMeetingState = () => {
       // The meeting page may publish its state before this content script is
       // mounted (or while the extension is being reloaded). Ask the page to
-      // replay both meeting and microphone state.
+      // replay both meeting and microphone state. The pong is also replayed
+      // here because the Meeting page may attach its extension-detection
+      // listener after the first content-script message.
       const targetOrigin = window.location.origin;
+      window.postMessage(
+        {
+          type: "screenity-pong",
+          source: "slingui-recording",
+        },
+        targetOrigin,
+      );
       window.postMessage(
         {
           type: "screenity-request-meeting-state",
@@ -1128,13 +1138,32 @@ const ContentState = (props) => {
       const isTrustedPageMessage =
         event.source === window && event.origin === window.location.origin;
 
+      if (!isTrustedPageMessage) return;
+
+      if (messageType === "ping-screenity") {
+        window.postMessage(
+          {
+            type: "screenity-pong",
+            source: "slingui-recording",
+          },
+          event.origin,
+        );
+        return;
+      }
+
+      if (messageType === "open-screenity-popup") {
+        chrome.runtime
+          .sendMessage({ type: "toggle-popup" })
+          .catch(() => {});
+        return;
+      }
+
       if (
-        isTrustedPageMessage &&
-        (messageType === "mute-microphone" ||
-          messageType === "unmute-microphone" ||
-          messageType === "microphone-muted" ||
-          messageType === "microphone-unmuted" ||
-          messageType === "screenity-microphone-state")
+        messageType === "mute-microphone" ||
+        messageType === "unmute-microphone" ||
+        messageType === "microphone-muted" ||
+        messageType === "microphone-unmuted" ||
+        messageType === "screenity-microphone-state"
       ) {
         const mutedFromState = event.data?.microphone?.muted;
         const active =
@@ -1380,7 +1409,7 @@ const ContentState = (props) => {
     showExtension: false,
     showPopup: false,
     blurMode: false,
-    recordingType: "screen",
+    recordingType: "region",
     customRegion: false,
     regionWidth: 800,
     surface: "default",
@@ -1732,6 +1761,40 @@ const ContentState = (props) => {
   }, [contentState.recording, isTargetTab]);
 
   useEffect(() => {
+    const isRecording = Boolean(contentState.recording);
+    const wasRecording = meetingRecordingStateRef.current;
+
+    // Keep the Meeting's shared recording state tied to the actual recording
+    // lifecycle, not to popup visibility. During restart, the recorder briefly
+    // drops the storage flag but the same session is still alive, so keep the
+    // remote indicator active until recording resumes.
+    if (!isRecording && contentState.restartingRecording) {
+      meetingRecordingStateRef.current = true;
+      return;
+    }
+
+    if (isRecording !== wasRecording && isTargetTab()) {
+      window.postMessage(
+        {
+          type: isRecording ? "recording-started" : "recording-stopped",
+          source: "slingui-recording",
+          timestamp: Date.now(),
+          recordingType: contentState.recordingType || null,
+          recordingStartTime: recordingStartTimeRef.current || null,
+        },
+        window.location.origin,
+      );
+    }
+
+    meetingRecordingStateRef.current = isRecording;
+  }, [
+    contentState.recording,
+    contentState.recordingType,
+    contentState.restartingRecording,
+    isTargetTab,
+  ]);
+
+  useEffect(() => {
     const version = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
 
     const MIN_CHROME_VERSION = 109;
@@ -1991,14 +2054,11 @@ const ContentState = (props) => {
           changes.recording.newValue === false
         ) {
           setContentState((prev) =>
-            prev.preparingRecording ||
-            prev.pendingRecording ||
-            prev.restartingRecording
+            prev.preparingRecording || prev.pendingRecording
               ? {
                   ...prev,
                   preparingRecording: false,
                   pendingRecording: false,
-                  restartingRecording: false,
                 }
               : prev,
           );
