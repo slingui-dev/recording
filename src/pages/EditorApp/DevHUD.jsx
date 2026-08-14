@@ -21,6 +21,12 @@ const DevHUD = ({
   contentState,
 }) => {
   const [collapsed, setCollapsed] = useState(true);
+  const audioChunks = Array.isArray(contentState?.meetingAudioChunks?.chunks)
+    ? contentState.meetingAudioChunks.chunks
+    : [];
+  const downloadedAudioChunks = audioChunks.filter(
+    (chunk) => Number.isFinite(chunk?.audioBlob?.size) && chunk.audioBlob.size > 0,
+  ).length;
 
   if (collapsed) {
     return (
@@ -273,7 +279,7 @@ const DevHUD = ({
         <div>Meeting ID: {contentState?.recordingMeta?.meetingContext?.meetingId || "—"}</div>
         <div>Recording ID: {contentState?.recordingMeta?.recordingId || "—"}</div>
         <div>
-          Audio chunks: {contentState?.meetingAudioChunks?.chunks?.length || 0} / {contentState?.chunkCount || 0}
+          Audio chunks: {downloadedAudioChunks} downloaded / {audioChunks.length} found
         </div>
         <div>Chunk status: {contentState?.meetingAudioChunksStatus || "—"}</div>
         <div>Recovery: {contentState?.ready ? "ready" : "loading"}</div>

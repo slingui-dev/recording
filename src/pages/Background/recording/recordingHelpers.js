@@ -146,9 +146,13 @@ export const handleRecordingError = async (request) => {
   if (isWarningOnly) {
     sendMessageTab(activeTab, {
       type: "stream-ended-warning",
-      message: request.why || chrome.i18n.getMessage("streamEndedWarningToast"),
+      message:
+        request.why || chrome.i18n.getMessage("streamEndedWarningToast"),
     }).catch((err) => {
-      diagEvent("warning", { note: "stream-ended-warning undelivered", err: String(err).slice(0, 80) });
+      diagEvent("warning", {
+        note: "stream-ended-warning undelivered",
+        err: String(err).slice(0, 80),
+      });
     });
     return;
   }
@@ -157,59 +161,59 @@ export const handleRecordingError = async (request) => {
 
   // mirrors discardRecording: 1+ scenes saved -> preserve project for retry
   const {
-    multiMode,
-    multiSceneCount,
-    projectId: projectIdBeforeClear,
-    sceneId: sceneIdBeforeClear,
-    recordingAttemptId: attemptIdAtClear,
-  } = await chrome.storage.local.get([
-    "multiMode",
-    "multiSceneCount",
-    "projectId",
-    "sceneId",
-    "recordingAttemptId",
-  ]);
-  const preserveMultiProject =
-    Boolean(multiMode) && Number(multiSceneCount) > 0;
-  // Clear scene state when projectId clears so retries don't inherit it.
-  // pendingSceneIndex must be [], not null (defaults don't fire on null).
-  const multiState = preserveMultiProject
-    ? {}
-    : {
-        multiMode: false,
-        multiSceneCount: 0,
-        multiProjectId: null,
-        multiLastSceneId: null,
-        recordingToScene: false,
-        projectId: null,
-        activeSceneId: null,
-        sceneId: null,
-        sceneIdStatus: null,
-        pendingSceneIndex: [],
-      };
+      multiMode,
+      multiSceneCount,
+      projectId: projectIdBeforeClear,
+      sceneId: sceneIdBeforeClear,
+      recordingAttemptId: attemptIdAtClear,
+    } = await chrome.storage.local.get([
+      "multiMode",
+      "multiSceneCount",
+      "projectId",
+      "sceneId",
+      "recordingAttemptId",
+    ]);
+    const preserveMultiProject =
+      Boolean(multiMode) && Number(multiSceneCount) > 0;
+    // Clear scene state when projectId clears so retries don't inherit it.
+    // pendingSceneIndex must be [], not null (defaults don't fire on null).
+    const multiState = preserveMultiProject
+      ? {}
+      : {
+          multiMode: false,
+          multiSceneCount: 0,
+          multiProjectId: null,
+          multiLastSceneId: null,
+          recordingToScene: false,
+          projectId: null,
+          activeSceneId: null,
+          sceneId: null,
+          sceneIdStatus: null,
+          pendingSceneIndex: [],
+        };
 
-  clearInMemoryEditorLock();
-  await chrome.storage.local.set({
-    recording: false,
-    // Clear pendingRecording at stop. countdownEverShown is per-tab
-    // React state, so a tab that wasn't the recorder reads stale
-    // pendingRecording:true and the "Preparing…" loader sticks.
-    pendingRecording: false,
-    recordingUiTabId: null,
-    tabRecordedID: null,
-    offscreen: false,
-    postStopEditorOpened: false,
-    // releases the editor-opening lock; otherwise next stopRecording refuses to open editor
-    postStopEditorOpening: false,
-    region: false,
-    customRegion: false,
-    // PiP + pause must follow recording down; otherwise next session inherits paused=true
-    pipForceClose: Date.now(),
-    paused: false,
-    pausedAt: null,
-    totalPausedMs: 0,
-    ...multiState,
-  });
+    clearInMemoryEditorLock();
+    await chrome.storage.local.set({
+      recording: false,
+      // Clear pendingRecording at stop. countdownEverShown is per-tab
+      // React state, so a tab that wasn't the recorder reads stale
+      // pendingRecording:true and the "Preparing…" loader sticks.
+      pendingRecording: false,
+      recordingUiTabId: null,
+      tabRecordedID: null,
+      offscreen: false,
+      postStopEditorOpened: false,
+      // releases the editor-opening lock; otherwise next stopRecording refuses to open editor
+      postStopEditorOpening: false,
+      region: false,
+      customRegion: false,
+      // PiP + pause must follow recording down; otherwise next session inherits paused=true
+      pipForceClose: Date.now(),
+      paused: false,
+      pausedAt: null,
+      totalPausedMs: 0,
+      ...multiState,
+    });
 
   if (!preserveMultiProject && projectIdBeforeClear) {
     void appendBgUploadTelemetryEvent({
@@ -233,38 +237,42 @@ export const handleRecordingError = async (request) => {
       reason: "recording-error-terminal",
     })
     .catch((err) => {
-      diagEvent("warning", { note: "clear-session-safe undelivered", err: String(err).slice(0, 80) });
+      diagEvent("warning", {
+        note: "clear-session-safe undelivered",
+        err: String(err).slice(0, 80),
+      });
     });
 
   // sandboxed editor: runtime.onMessage unreliable, storage.onChanged fires.
-  // try message first, ALWAYS write the storage flag.
-  const { sandboxTab } = await chrome.storage.local.get(["sandboxTab"]);
-  let sandboxAlive = false;
-  if (Number.isInteger(sandboxTab)) {
+    // try message first, ALWAYS write the storage flag.
+    const { sandboxTab } = await chrome.storage.local.get(["sandboxTab"]);
+    let sandboxAlive = false;
+    if (Number.isInteger(sandboxTab)) {
+      try {
+        await chrome.tabs.get(sandboxTab);
+        sandboxAlive = true;
+        sendMessageTab(sandboxTab, {
+          type: "recording-error",
+          error: request?.error || null,
+          why: request?.why || null,
+          errorCode,
+        }).catch(() => {});
+      } catch {}
+    }
+    // a later-mounting editor reads this on boot to surface the modal;
+    // sandboxTab filters stale entries from prior sessions
     try {
-      await chrome.tabs.get(sandboxTab);
-      sandboxAlive = true;
-      sendMessageTab(sandboxTab, {
-        type: "recording-error",
-        error: request?.error || null,
-        why: request?.why || null,
-        errorCode,
-      }).catch(() => {});
+      await chrome.storage.local.set({
+        editorRecordingError: {
+          ts: Date.now(),
+          sandboxTab: Number.isInteger(sandboxTab) ? sandboxTab : null,
+          error: request?.error || null,
+          why: request?.why || null,
+          errorCode,
+          recordingAttemptId: attemptIdAtClear || null,
+        },
+      });
     } catch {}
-  }
-  // a later-mounting editor reads this on boot to surface the modal;
-  // sandboxTab filters stale entries from prior sessions
-  try {
-    await chrome.storage.local.set({
-      editorRecordingError: {
-        ts: Date.now(),
-        sandboxTab: Number.isInteger(sandboxTab) ? sandboxTab : null,
-        error: request?.error || null,
-        why: request?.why || null,
-        errorCode,
-      },
-    });
-  } catch {}
 
   sendMessageRecord({ type: "recording-error" }).then(() => {
     const candidateTabs = [activeTab, recordingUiTabId, tabRecordedID].filter(

@@ -716,6 +716,11 @@ export const setupHandlers = () => {
       // countdownCancelled is cleared in startStreaming, so not stale here.
       state.startRecordingAfterCountdown();
     }
+
+    // Let resetActiveTab serialize the no-countdown handoff before it sends
+    // start-recording-tab to the recorder. Without an explicit acknowledgement,
+    // the background could race that state update on the first attempt.
+    return { ok: true, countdown: Boolean(storedCountdown) };
   });
 
   registerMessage("stop-recording-tab", () => {

@@ -7575,7 +7575,8 @@ const CloudRecorder = () => {
       // tabCapture token (single-use). Just re-pull streaming-data.
       if (isInit.current) {
         chrome.runtime.sendMessage({ type: "get-streaming-data" });
-        return;
+        sendResponse?.({ ok: true, alreadyInitialized: true });
+        return true;
       }
       setInitProject(false);
       // offscreen has no visible Warning; surface system-audio guidance as a toast
@@ -7587,6 +7588,8 @@ const CloudRecorder = () => {
         if (request.region && request._targetHost !== "offscreen") {
           isInit.current = true;
           chrome.runtime.sendMessage({ type: "get-streaming-data" });
+          sendResponse?.({ ok: true });
+          return true;
         }
       } else if (!request.region || (IS_OFFSCREEN_HOST && request.isTab)) {
         // Apply tabPreferred synchronously: chrome.storage.local.get races against
@@ -7612,7 +7615,11 @@ const CloudRecorder = () => {
         }
         isInit.current = true;
         chrome.runtime.sendMessage({ type: "get-streaming-data" });
+        sendResponse?.({ ok: true });
+        return true;
       }
+      sendResponse?.({ ok: false, ignored: true });
+      return true;
     } else if (request.type === "streaming-data") {
       if (!isInit.current) return;
       // Dedup: SW push + tab pull both deliver this by design.

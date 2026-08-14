@@ -29,5 +29,5 @@ export const desktopCapture = async (request) => {
       ? request.initiatingTabId
       : null;
 
-  startRecorderSession(request, initiatingTabId);
+  await startRecorderSession(request, initiatingTabId);
 };

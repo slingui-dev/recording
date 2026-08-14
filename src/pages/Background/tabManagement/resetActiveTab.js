@@ -15,7 +15,14 @@ export const restartActiveTab = async (message = {}) => {
     const currentTab = await getCurrentTab();
     const targetTabId = preferredTabId || currentTab?.id || null;
     if (targetTabId) {
-      sendMessageTab(targetTabId, { type: "ready-to-record" });
+      try {
+        await sendMessageTab(targetTabId, { type: "ready-to-record" });
+      } catch (error) {
+        console.warn(
+          "[Slingui][restartActiveTab] ready-to-record handoff failed",
+          String(error?.message || error).slice(0, 160),
+        );
+      }
 
       const { countdown } = await chrome.storage.local.get(["countdown"]);
 
@@ -116,7 +123,19 @@ export const resetActiveTab = async (forceRestart = false, message = {}) => {
 
       if (targetTabId) {
         perfMark("BG.resetActiveTab ready-to-record.sent", { targetTabId });
-        sendMessageTab(targetTabId, { type: "ready-to-record" }).catch(() => {});
+        // Without a countdown, startRecording used to run in parallel with
+        // ready-to-record. The recorder command could therefore arrive before
+        // the content script had finished preparing its state on the first
+        // attempt. Await the handoff; transient messaging failures are still
+        // non-fatal because the background start must be allowed to recover.
+        try {
+          await sendMessageTab(targetTabId, { type: "ready-to-record" });
+        } catch (error) {
+          console.warn(
+            "[Slingui][resetActiveTab] ready-to-record handoff failed",
+            String(error?.message || error).slice(0, 160),
+          );
+        }
 
         const { countdown } = await chrome.storage.local.get(["countdown"]);
 

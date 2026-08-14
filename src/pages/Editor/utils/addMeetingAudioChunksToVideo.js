@@ -3,8 +3,12 @@ import { VideoAudioMixer } from "../mediabunny/lib/videoAudioMixer.ts";
 const LOG_PREFIX = "[EditorWebCodecs][MeetingAudioChunks][Normalize]";
 
 const isAudioBlob = (value) =>
-  value instanceof Blob ||
-  Boolean(value && typeof value.arrayBuffer === "function" && Number.isFinite(value.size));
+  Boolean(
+    value &&
+      typeof value.arrayBuffer === "function" &&
+      Number.isFinite(value.size) &&
+      value.size > 0,
+  );
 
 const logInfo = (message, payload = null) => {
   if (payload == null) {
@@ -459,6 +463,27 @@ async function addMeetingAudioChunksToVideo(
   );
 
   if (!chunks.length) {
+    // The storage list can contain chunks for the wider meeting that do not
+    // overlap this particular recording. They were downloaded successfully,
+    // but normalization excluded them using the recording's time window; this
+    // is a valid no-op, not a failed mix.
+    if (downloadedChunkCount) {
+      const fallbackReason = "no-meeting-audio-overlaps-recording";
+      logInfo("apply completed summary", {
+        ok: true,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        videoInputSize: videoBlob?.size ?? null,
+        videoInputType: videoBlob?.type ?? null,
+        inputChunkCount: inputChunks.length,
+        downloadedChunkCount,
+        normalizedChunkCount: 0,
+        outputBlobSize: videoBlob?.size ?? null,
+        outputBlobType: videoBlob?.type ?? null,
+        fallbackReason,
+      });
+      return videoBlob;
+    }
+
     const error = new Error("No downloaded meeting audio chunks to mix");
     logInfo("apply completed summary", {
       ok: false,

@@ -4533,6 +4533,8 @@ const Recorder = () => {
       // streaming-data is pulled on mount (see the mount effect), not
       // here; `loaded` can be lost to the cold-start race and must not
       // be the sole trigger for the pull.
+      sendResponse?.({ ok: true });
+      return true;
     } else if (request.type === "streaming-data") {
       // Push path; the pull response usually wins. applyStreamingData
       // dedupes whichever arrives second.

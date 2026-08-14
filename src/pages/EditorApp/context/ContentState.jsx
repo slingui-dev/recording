@@ -33,8 +33,12 @@ import { waitForAccessToken } from "../../../utils/slingui-auth";
 import { listMeetingAudioChunks } from "../../../utils/meetingAudioChunks";
 
 const isAudioBlob = (value) =>
-  value instanceof Blob ||
-  Boolean(value && typeof value.arrayBuffer === "function" && Number.isFinite(value.size));
+  Boolean(
+    value &&
+      typeof value.arrayBuffer === "function" &&
+      Number.isFinite(value.size) &&
+      value.size > 0,
+  );
 // mediabunny is ~630KB, only used by export/remux/conversion on user action.
 // Lazy-load to keep parse cost off editor mount. Cached promise.
 let _mbPromise = null;
@@ -530,6 +534,35 @@ const ContentState = (props) => {
             },
             meetingAudioChunksError: "no-chunks-found",
             meetingAudioChunksStatus: "empty",
+            meetingAudioChunksFinishedAt: Date.now(),
+          }));
+          return;
+        }
+
+        const downloadedChunks = audioChunks.chunks.filter((chunk) =>
+          isAudioBlob(chunk?.audioBlob),
+        );
+        if (!downloadedChunks.length) {
+          const failedChunks = audioChunks.chunks.filter((chunk) => chunk?.downloadError);
+          const error = failedChunks.length
+            ? `failed-to-download-audio-chunks (${failedChunks.length}/${audioChunks.chunks.length})`
+            : "no-downloaded-audio-chunks";
+          console.warn("[MeetingAudioChunks] list completed without usable audio", {
+            recordingId: persistedRecordingId,
+            meetingId: audioChunks.meetingId || meetingContext?.meetingId || null,
+            found: audioChunks.chunks.length,
+            downloaded: 0,
+            failed: failedChunks.length,
+          });
+          setContentState((prev) => ({
+            ...prev,
+            meetingAudioChunks: audioChunks,
+            recordingMeta: recordingMeta || prev.recordingMeta || {
+              type: "meeting",
+              meetingContext,
+            },
+            meetingAudioChunksError: error,
+            meetingAudioChunksStatus: "failed",
             meetingAudioChunksFinishedAt: Date.now(),
           }));
           return;
@@ -3013,9 +3046,12 @@ const ContentState = (props) => {
     if (current.isFfmpegRunning || !current.blob || !downloadedChunks.length) {
       setContentState((prev) => ({
         ...prev,
+        applyingMeetingAudioChunks: false,
+        meetingAudioChunksStatus: "failed",
         meetingAudioChunksError: !current.blob
           ? "missing-video"
-          : "missing-audio",
+          : "no-downloaded-audio-chunks",
+        meetingAudioChunksFinishedAt: Date.now(),
       }));
       return false;
     }
@@ -3046,6 +3082,7 @@ const ContentState = (props) => {
     if (meetingAudioChunksApplyStartedRef.current) return;
     if (!contentState.ready || !contentState.mp4ready || !contentState.blob) return;
     if (!contentState.meetingAudioChunks || contentState.meetingAudioChunksApplied) return;
+    if (contentState.meetingAudioChunksStatus !== "loaded") return;
     if (contentState.isFfmpegRunning) return;
 
     meetingAudioChunksApplyStartedRef.current = true;
@@ -3056,6 +3093,7 @@ const ContentState = (props) => {
     contentState.blob,
     contentState.meetingAudioChunks,
     contentState.meetingAudioChunksApplied,
+    contentState.meetingAudioChunksStatus,
     contentState.isFfmpegRunning,
   ]);
 

@@ -80,9 +80,11 @@ const openRecorderTab = async (
     await chrome.storage.local.get(["useOffscreenCloud", "recordingType", "customRegion"]);
   const recordingType = request?.recordingType ?? storedRecordingType ?? null;
   const customRegion = request?.customRegion ?? storedCustomRegion ?? false;
-  // all modes run offscreen except customRegion: its track.cropTo(CropTarget)
-  // needs an iframe inside the recorded tab and can't run in an offscreen doc.
-  const willUseOffscreen = useOffscreenCloud !== false && !customRegion;
+  // Region/tab capture needs the recorder tab to call tabCapture in the
+  // correct tab context; an offscreen document cannot own that capture.
+  const isTabCapture = recordingType === "tab" || isRegion;
+  const willUseOffscreen =
+    useOffscreenCloud !== false && !customRegion && !isTabCapture;
   perfMark("BG.openRecorderTab offscreen-decision", {
     isCloudRecorder,
     isRegion,
@@ -112,7 +114,6 @@ const openRecorderTab = async (
     // offscreen:true routes sendMessageRecord to the offscreen doc; set before
     // the loaded push. tab/region need a tabCapture streamId, but offscreen can't
     // call chrome.tabCapture so it requests one from the SW via the tabID below.
-    const isTabCapture = recordingType === "tab" || isRegion;
     await chrome.storage.local.set({
       recordingTab: null,
       offscreen: true,
@@ -137,8 +138,10 @@ const openRecorderTab = async (
           await new Promise((r) => setTimeout(r, backoffMs[attempt]));
         }
         try {
-          await sendMessageRecord(loadedMsg);
-          return;
+          const response = await sendMessageRecord(loadedMsg);
+          if (response?.ok) return;
+          // The target may exist but have mounted after the message arrived.
+          // Only an explicit acknowledgement means the handoff was received.
         } catch {
           // offscreen recorder not ready yet; retry
         }
@@ -307,8 +310,10 @@ const openRecorderTab = async (
             await new Promise((r) => setTimeout(r, backoffMs[attempt]));
           }
           try {
-            await sendMessageRecord(loadedMsg);
-            return;
+            const response = await sendMessageRecord(loadedMsg);
+            if (response?.ok) return;
+            // A resolved send without an acknowledgement is still a lost
+            // handoff (for example, a listener mounted between retries).
           } catch {
             // recorder tab not ready yet; retry
           }

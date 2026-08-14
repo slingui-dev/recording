@@ -861,6 +861,7 @@ const ContentState = (props) => {
           sendRegionCropTarget();
           chrome.runtime.sendMessage({
             type: "desktop-capture",
+            recordingType: contentStateRef.current.recordingType,
             region:
               contentStateRef.current.recordingType === "region" ? true : false,
             customRegion: contentStateRef.current.customRegion,
@@ -911,6 +912,7 @@ const ContentState = (props) => {
       });
       chrome.runtime.sendMessage({
         type: "desktop-capture",
+        recordingType: contentStateRef.current.recordingType,
         region:
           contentStateRef.current.recordingType === "region" ? true : false,
         customRegion: contentStateRef.current.customRegion,

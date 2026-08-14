@@ -5,6 +5,14 @@ export const MEETING_AUDIO_CHUNKS_ENDPOINT = "/storage/audio/chunks";
 
 const noop = () => {};
 const DEFAULT_CHUNK_DOWNLOAD_CONCURRENCY = 4;
+
+const hasAudioData = (value) =>
+  Boolean(
+    value &&
+      typeof value.arrayBuffer === "function" &&
+      Number.isFinite(value.size) &&
+      value.size > 0,
+  );
 const CHUNK_REQUEST_TIMEOUT_MS = 15_000;
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = CHUNK_REQUEST_TIMEOUT_MS) => {
@@ -265,7 +273,7 @@ export const downloadMeetingAudioChunk = async (
 
   if (inlinePayload != null) {
     const audioBlob = await toAudioBlob(inlinePayload, contentType);
-    if (audioBlob) {
+    if (hasAudioData(audioBlob)) {
       log("download chunk converted inline payload", {
         fileName: chunk?.fileName || null,
         payloadType: typeof inlinePayload,
@@ -286,7 +294,7 @@ export const downloadMeetingAudioChunk = async (
     chunk: summarizeMeetingAudioChunk({ ...chunk, metadata }),
   });
 
-  if (chunk?.audioBlob instanceof Blob) {
+  if (hasAudioData(chunk?.audioBlob)) {
     log("download chunk skipped: already in memory", {
       chunk: summarizeMeetingAudioChunk({ ...chunk, metadata }),
     });
@@ -331,6 +339,10 @@ export const downloadMeetingAudioChunk = async (
     }
 
     const audioBlob = await response.blob();
+    if (!hasAudioData(audioBlob)) {
+      throw new Error("Downloaded audio chunk is empty");
+    }
+
     const responseContentType = response.headers.get("content-type") || "";
     const audioBlobType =
       audioBlob.type ||
@@ -463,8 +475,8 @@ export const listMeetingAudioChunks = async ({
       )
     : chunks;
 
-  const downloadedCount = resolvedChunks.filter(
-    (chunk) => chunk.audioBlob instanceof Blob || chunk.audioBlob?.size > 0,
+  const downloadedCount = resolvedChunks.filter((chunk) =>
+    hasAudioData(chunk.audioBlob),
   ).length;
   const failedChunks = resolvedChunks.filter((chunk) => chunk.downloadError);
   const missingUrlCount = resolvedChunks.filter(

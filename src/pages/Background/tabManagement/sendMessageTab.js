@@ -19,17 +19,34 @@ export const sendMessageTab = async (
     return Promise.reject("Tab ID or message is null");
 
   try {
-    const tab = await new Promise((resolve, reject) => {
-      chrome.tabs.get(tabId, (tab) => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError.message);
-        } else {
-          resolve(tab);
-        }
-      });
-    });
-
+    let tab;
     const extOrigin = chrome.runtime.getURL("").replace(/\/$/, "");
+    const urlBackoffMs = [0, 100, 300, 700];
+    for (let attempt = 0; attempt < urlBackoffMs.length; attempt += 1) {
+      if (urlBackoffMs[attempt] > 0) {
+        await new Promise((resolve) => setTimeout(resolve, urlBackoffMs[attempt]));
+      }
+      tab = await new Promise((resolve, reject) => {
+        chrome.tabs.get(tabId, (currentTab) => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError.message);
+          } else {
+            resolve(currentTab);
+          }
+        });
+      });
+
+      const url = tab?.url || "";
+      const isTemporaryUrl = !tab || url === "" || url === "about:blank";
+      const isProtectedUrl =
+        url.startsWith("chrome://") ||
+        url.startsWith("chromewebstore.google.com") ||
+        url.startsWith("chrome.google.com/webstore");
+      const isPendingExtUrl =
+        tab?.pendingUrl && tab.pendingUrl.startsWith(extOrigin);
+      if (!isTemporaryUrl || isProtectedUrl || isPendingExtUrl) break;
+    }
+
     const isExtUrl = tab?.url && tab.url.startsWith(extOrigin);
     const isPendingExtUrl =
       tab?.pendingUrl && tab.pendingUrl.startsWith(extOrigin);
