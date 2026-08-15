@@ -34,8 +34,40 @@ function getUploadContentType(blob, signedContentType) {
   return 'application/octet-stream';
 }
 
-export async function sendFile(uploadUrl, blob, contentType) {
+export async function sendFile(uploadUrl, blob, contentType, onProgress) {
   const uploadContentType = getUploadContentType(blob, contentType);
+
+  if (onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', uploadUrl);
+      xhr.setRequestHeader('Content-Type', uploadContentType);
+
+      if (xhr.upload) {
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = (event.loaded / event.total) * 100;
+            onProgress(percentComplete);
+          }
+        });
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          reject(new Error(`Falha ao enviar arquivo para a URL assinada: ${xhr.status} ${xhr.statusText}`));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Erro de rede ao enviar arquivo para a URL assinada'));
+      };
+
+      xhr.send(blob);
+    });
+  }
+
   const res = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
@@ -53,10 +85,10 @@ export async function sendFile(uploadUrl, blob, contentType) {
   }
 }
 
-export async function upload(data, blob, token) {
+export async function upload(data, blob, token, onProgress) {
   const result = await getSignedUrl(data, token);
   console.log('result', result);
-  await sendFile(result.uploadURL, blob, result.contentType);
+  await sendFile(result.uploadURL, blob, result.contentType, onProgress);
   return result;
 }
 

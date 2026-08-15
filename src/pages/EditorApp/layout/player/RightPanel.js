@@ -54,6 +54,7 @@ const RightPanel = () => {
   const [contentState, setContentState] = useContext(ContentStateContext);
   const [slingUser, setSlingUser] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState(null);
   const contentStateRef = useRef(contentState);
   const consoleErrorRef = useRef([]);
@@ -948,6 +949,7 @@ const RightPanel = () => {
 
                       setUploadResult(null);
                       setIsUploading(true);
+                      setUploadProgress(0);
                       try {
                         const {
                           recordingMeta = null,
@@ -995,6 +997,9 @@ const RightPanel = () => {
                           },
                           blobToUpload,
                           slingUser.access_token,
+                          (progress) => {
+                            setUploadProgress(progress);
+                          }
                         );
 
                         const recordingName =
@@ -1037,7 +1042,13 @@ const RightPanel = () => {
                     </div>
                     <div className={styles.buttonMiddle}>
                       <div className={styles.buttonTitle}>
-                        {isUploading ? "Uploading…" : "Save to Slingui"}
+                        {isUploading
+                          ? uploadProgress > 0 && uploadProgress < 100
+                            ? `Uploading (${Math.round(uploadProgress)}%)…`
+                            : uploadProgress === 100
+                              ? "Saving…"
+                              : "Uploading…"
+                          : "Save to Slingui"}
                       </div>
                       <div className={styles.buttonDescription}>
                         {contentState.mp4ready

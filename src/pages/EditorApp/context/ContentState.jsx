@@ -3876,39 +3876,6 @@ const ContentState = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentState.ready, contentState.blob]);
 
-  const downloadRawRecording = async () => {
-    const latest = contentStateRef.current || contentState;
-    const rawBlob =
-      latest.rawBlob || latest.originalBlob || latest.webm || latest.blob;
-
-    if (!(rawBlob instanceof Blob) || rawBlob.size <= 0) {
-      return false;
-    }
-
-    const rawType = String(rawBlob.type || "");
-    const ext = rawType.includes("webm")
-      ? ".webm"
-      : rawType.includes("mp4")
-        ? ".mp4"
-        : ".bin";
-
-    diagForward("editor-download-raw-start", {
-      bytes: rawBlob.size,
-      type: rawBlob.type || null,
-      meetingAudioStatus: latest.meetingAudioChunksStatus || null,
-    });
-
-    try {
-      await requestDownload(URL.createObjectURL(rawBlob), ext);
-      setContentState((prev) => ({ ...prev, saved: true }));
-      return true;
-    } catch (error) {
-      diagForward("editor-download-raw-fail", {
-        reason: String(error?.message || error).slice(0, 100),
-      });
-      return false;
-    }
-  };
 
   const download = async () => {
     // ref: rapid clicks fire before state propagates
@@ -4281,7 +4248,6 @@ const ContentState = (props) => {
   contentState.handleTrim = handleTrim;
   contentState.handleMute = handleMute;
   contentState.download = download;
-  contentState.downloadRawRecording = downloadRawRecording;
   contentState.cancelDownload = cancelDownload;
   contentState.handleCrop = handleCrop;
   contentState.handleReencode = handleReencode;

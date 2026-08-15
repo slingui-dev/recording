@@ -45,13 +45,6 @@ const EditorApp = () => {
     !["empty", "failed", "missing-context", "ready"].includes(
       meetingAudioStatus,
     );
-  const rawRecordingBlob =
-    contentState.rawBlob ||
-    contentState.originalBlob ||
-    contentState.webm ||
-    contentState.blob;
-  const hasRawRecordingBlob =
-    rawRecordingBlob instanceof Blob && rawRecordingBlob.size > 0;
   const editorLoading =
     !contentState.ready ||
     (meetingAudioSyncPending && !syncOverlayDismissed);
@@ -59,8 +52,7 @@ const EditorApp = () => {
   useEffect(() => {
     if (
       !meetingAudioSyncPending ||
-      !contentState.ready ||
-      !hasRawRecordingBlob
+      !contentState.ready
     ) {
       setSyncEscapeAvailable(false);
       setSyncOverlayDismissed(false);
@@ -69,14 +61,9 @@ const EditorApp = () => {
 
     setSyncEscapeAvailable(false);
     setSyncOverlayDismissed(false);
-    const timer = setTimeout(() => setSyncEscapeAvailable(true), 10_000);
+    const timer = setTimeout(() => setSyncEscapeAvailable(true), 50_000);
     return () => clearTimeout(timer);
-  }, [
-    meetingAudioSyncPending,
-    contentState.ready,
-    hasRawRecordingBlob,
-    rawRecordingBlob,
-  ]);
+  }, [meetingAudioSyncPending, contentState.ready]);
 
   const getChromeVersion = () => {
     var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
@@ -307,43 +294,45 @@ const EditorApp = () => {
             </div>
             {contentState.ready &&
               meetingAudioSyncPending &&
-              syncEscapeAvailable &&
-              hasRawRecordingBlob && (
+              syncEscapeAvailable && (
                 <div className="sync-escape" role="status" aria-live="polite">
                   <div className="sync-escape-message">
-                    A sincronização está demorando mais que o esperado. Você pode
-                    continuar ou baixar o vídeo original agora. A sincronização
-                    continuará em segundo plano.
+                    <p>A sincronização está demorando mais do que o esperado.</p>
+                    <p>
+                      Isso acontece quando é necessário processar o áudio do
+                      compartilhamento de tela no modo &quot;Janela&quot; ou &quot;Tela
+                      inteira&quot;.
+                    </p>
+                    <p>O que você pode fazer:</p>
+                    <ul>
+                      <li>
+                        <strong>Deixar essa aba aberta e aguardar o processamento:</strong>{" "}
+                        Assim, você garante que todos os áudios serão reproduzidos
+                        corretamente na sua gravação.
+                      </li>
+                      <li>
+                        <strong>Iniciar o carregamento novamente em outro momento:</strong>{" "}
+                        Você pode usar a opção de &quot;Recuperar a última gravação&quot;
+                        no menu da extensão, para iniciar esse mesmo carregamento
+                        em outro momento. Atenção: caso seja feita uma nova
+                        gravação, essa será perdida.
+                      </li>
+                      <li><strong>Reportar ao suporte.</strong></li>
+                    </ul>
                   </div>
                   <div className="sync-escape-actions">
                     <button
                       type="button"
-                      className="sync-escape-secondary"
+                      className="sync-escape-primary"
                       onClick={() => {
                         diagForward("meeting-audio-sync-overlay-dismissed", {
-                          action: "continue",
+                          action: "ok",
                           status: meetingAudioStatus || null,
-                          rawBytes: rawRecordingBlob.size,
                         });
                         setSyncOverlayDismissed(true);
                       }}
                     >
-                      Continuar com vídeo original
-                    </button>
-                    <button
-                      type="button"
-                      className="sync-escape-primary"
-                      onClick={async () => {
-                        diagForward("meeting-audio-sync-overlay-dismissed", {
-                          action: "download-original",
-                          status: meetingAudioStatus || null,
-                          rawBytes: rawRecordingBlob.size,
-                        });
-                        setSyncOverlayDismissed(true);
-                        await contentState.downloadRawRecording?.();
-                      }}
-                    >
-                      Baixar vídeo original
+                      OK
                     </button>
                   </div>
                 </div>
