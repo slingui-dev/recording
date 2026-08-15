@@ -228,7 +228,6 @@ export const stopRecording = async () => {
 
   if (isSubscribed) {
     chrome.alarms.clear("recording-alarm");
-    discardOffscreenDocuments();
     // Keep the recording metadata until the editor is closed/discarded. The
     // editor can be reloaded, and it needs meetingContext to recover call audio.
   } else if (
@@ -444,7 +443,11 @@ export const stopRecording = async () => {
   chrome.storage.local.set({ postStopEditorOpened: false });
 
   chrome.alarms.clear("recording-alarm");
-  discardOffscreenDocuments();
+  // Finalize/flush exactly once. Previously subscribed recordings called this
+  // both above and here, racing two recorder finalization requests.
+  discardOffscreenDocuments({ reason: "recording-stop" }).catch((error) => {
+    console.warn("[Slingui][BG] offscreen stop cleanup failed", error);
+  });
 };
 
 export const handleStopRecordingTab = async (request) => {

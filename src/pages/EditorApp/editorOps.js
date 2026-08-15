@@ -113,10 +113,37 @@ export async function runEditorOp(message, reply, { viewer = false } = {}) {
       }
 
       case "apply-meeting-audio-chunks": {
+        const inputChunks = Array.isArray(message.audioChunks?.chunks)
+          ? message.audioChunks.chunks
+          : [];
+        const usableChunks = inputChunks.filter(
+          (chunk) =>
+            chunk?.audioBlob &&
+            typeof chunk.audioBlob.arrayBuffer === "function" &&
+            Number.isFinite(chunk.audioBlob.size) &&
+            chunk.audioBlob.size > 0,
+        );
+
+        // ContentState normally prevents this. Keep the op boundary defensive:
+        // a stale/direct caller with no downloaded bytes is a no-op, not an
+        // FFmpeg failure. The normal loader still reports download/auth errors.
+        if (!usableChunks.length) {
+          console.warn("[MeetingAudioChunks][Editor] skipped empty mix request", {
+            inputChunkCount: inputChunks.length,
+            _opId: message._opId,
+          });
+          reply({
+            type: "meeting-audio-chunks-result",
+            blob: message.blob,
+            _opId: message._opId,
+          });
+          break;
+        }
+
         const blob = await addMeetingAudioChunksToVideo(
           null,
           message.blob,
-          message.audioChunks,
+          { ...message.audioChunks, chunks: usableChunks },
           message.recordingMeta,
           message.recordingDuration,
           (progress) => reply({ type: "ffmpeg-progress", progress }),

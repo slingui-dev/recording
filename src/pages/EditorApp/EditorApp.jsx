@@ -1,7 +1,14 @@
 import "./styles/edit/_VideoPlayer.scss";
 import "./styles/global/_app.scss";
 
-import React, { useEffect, useRef, useContext, Suspense, lazy } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useContext,
+  useState,
+  Suspense,
+  lazy,
+} from "react";
 // Editor (trim/cut/timeline UI) only mounts when user enters edit mode.
 // Initial open is "player" mode; defer Editor + its TrimUI dependencies.
 const Editor = lazy(() => import("./layout/editor/Editor"));
@@ -24,6 +31,8 @@ const EditorApp = () => {
   const [contentState, setContentState] = useContext(ContentStateContext);
   const parentRef = useRef(null);
   const progress = useRef("");
+  const [syncEscapeAvailable, setSyncEscapeAvailable] = useState(false);
+  const [syncOverlayDismissed, setSyncOverlayDismissed] = useState(false);
 
   // `ready` means that a playable video exists, not that the recording is
   // fully recovered. Keep the editor covered while auth, chunk download, or
@@ -36,7 +45,38 @@ const EditorApp = () => {
     !["empty", "failed", "missing-context", "ready"].includes(
       meetingAudioStatus,
     );
-  const editorLoading = !contentState.ready || meetingAudioSyncPending;
+  const rawRecordingBlob =
+    contentState.rawBlob ||
+    contentState.originalBlob ||
+    contentState.webm ||
+    contentState.blob;
+  const hasRawRecordingBlob =
+    rawRecordingBlob instanceof Blob && rawRecordingBlob.size > 0;
+  const editorLoading =
+    !contentState.ready ||
+    (meetingAudioSyncPending && !syncOverlayDismissed);
+
+  useEffect(() => {
+    if (
+      !meetingAudioSyncPending ||
+      !contentState.ready ||
+      !hasRawRecordingBlob
+    ) {
+      setSyncEscapeAvailable(false);
+      setSyncOverlayDismissed(false);
+      return undefined;
+    }
+
+    setSyncEscapeAvailable(false);
+    setSyncOverlayDismissed(false);
+    const timer = setTimeout(() => setSyncEscapeAvailable(true), 10_000);
+    return () => clearTimeout(timer);
+  }, [
+    meetingAudioSyncPending,
+    contentState.ready,
+    hasRawRecordingBlob,
+    rawRecordingBlob,
+  ]);
 
   const getChromeVersion = () => {
     var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
@@ -265,6 +305,49 @@ const EditorApp = () => {
                 ? "Aguarde enquanto carregamos os dados da aula e o áudio da reunião. O editor será liberado quando tudo estiver pronto."
                 : chrome.i18n.getMessage("sandboxProgressDescription")}
             </div>
+            {contentState.ready &&
+              meetingAudioSyncPending &&
+              syncEscapeAvailable &&
+              hasRawRecordingBlob && (
+                <div className="sync-escape" role="status" aria-live="polite">
+                  <div className="sync-escape-message">
+                    A sincronização está demorando mais que o esperado. Você pode
+                    continuar ou baixar o vídeo original agora. A sincronização
+                    continuará em segundo plano.
+                  </div>
+                  <div className="sync-escape-actions">
+                    <button
+                      type="button"
+                      className="sync-escape-secondary"
+                      onClick={() => {
+                        diagForward("meeting-audio-sync-overlay-dismissed", {
+                          action: "continue",
+                          status: meetingAudioStatus || null,
+                          rawBytes: rawRecordingBlob.size,
+                        });
+                        setSyncOverlayDismissed(true);
+                      }}
+                    >
+                      Continuar com vídeo original
+                    </button>
+                    <button
+                      type="button"
+                      className="sync-escape-primary"
+                      onClick={async () => {
+                        diagForward("meeting-audio-sync-overlay-dismissed", {
+                          action: "download-original",
+                          status: meetingAudioStatus || null,
+                          rawBytes: rawRecordingBlob.size,
+                        });
+                        setSyncOverlayDismissed(true);
+                        await contentState.downloadRawRecording?.();
+                      }}
+                    >
+                      Baixar vídeo original
+                    </button>
+                  </div>
+                </div>
+              )}
             {typeof contentState.openModal === "function" && (
               <div
                 className="button-stop"
@@ -391,6 +474,44 @@ const EditorApp = () => {
           .wrap {
 					overflow: hidden;
 				}
+          .sync-escape {
+            width: min(440px, calc(100% - 40px));
+            margin: -8px auto 16px;
+            padding: 14px;
+            border: 1px solid #dce4df;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 8px 24px rgba(25, 65, 42, .12);
+            color: #526074;
+            font-size: 13px;
+            line-height: 1.45;
+            text-align: center;
+            pointer-events: auto;
+          }
+          .sync-escape-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+          }
+          .sync-escape-actions button {
+            border-radius: 9px;
+            padding: 9px 12px;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+          }
+          .sync-escape-primary {
+            border: 1px solid #16834b;
+            background: #16834b;
+            color: #fff;
+          }
+          .sync-escape-secondary {
+            border: 1px solid #d4dbe5;
+            background: #fff;
+            color: #526074;
+          }
 				.button-stop {
 					padding: 10px 20px;
 					background: #FFF;

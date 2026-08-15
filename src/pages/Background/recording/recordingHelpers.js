@@ -285,8 +285,15 @@ export const handleRecordingError = async (request) => {
     if (!sandboxAlive) {
       focusTab(activeTab);
     }
-    if (request.error === "stream-error") {
-      sendMessageTab(activeTab, { type: "stream-error", errorCode });
+    if (request.error === "stream-error" && Number.isInteger(activeTab)) {
+      sendMessageTab(activeTab, { type: "stream-error", errorCode }).catch(
+        (error) => {
+          console.debug("[Slingui][Recording] stream-error message skipped", {
+            tabId: activeTab,
+            error: String(error?.message || error),
+          });
+        },
+      );
     }
   });
 
