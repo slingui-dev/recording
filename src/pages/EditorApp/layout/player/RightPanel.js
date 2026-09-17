@@ -941,7 +941,7 @@ const RightPanel = () => {
                     className={styles.button}
                     onClick={async () => {
                       if (isUploading) return;
-                      const blobToUpload =
+                      let blobToUpload =
                         contentState.mp4ready && contentState.blob
                           ? contentState.blob
                           : contentState.webm;
@@ -951,6 +951,24 @@ const RightPanel = () => {
                       setIsUploading(true);
                       setUploadProgress(0);
                       try {
+                        if (
+                          contentState.mp4ready &&
+                          contentState.blob &&
+                          typeof contentState.ensureStandardMp4 === "function"
+                        ) {
+                          try {
+                            const res = await contentState.ensureStandardMp4();
+                            if (res?.blob instanceof Blob) {
+                              blobToUpload = res.blob;
+                            }
+                          } catch (err) {
+                            console.warn(
+                              "Failed to remux MP4 before upload, using raw blob",
+                              err,
+                            );
+                          }
+                        }
+
                         const {
                           recordingMeta = null,
                           screenityMeetingState = null,

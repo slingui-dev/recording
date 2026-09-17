@@ -4248,6 +4248,7 @@ const ContentState = (props) => {
   contentState.handleTrim = handleTrim;
   contentState.handleMute = handleMute;
   contentState.download = download;
+  contentState.ensureStandardMp4 = ensureStandardMp4;
   contentState.cancelDownload = cancelDownload;
   contentState.handleCrop = handleCrop;
   contentState.handleReencode = handleReencode;
