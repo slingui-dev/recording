@@ -1,6 +1,6 @@
 {
   "name": "slingui-recording",
-  "version": "4.6.7",
+  "version": "4.6.8",
   "description": "Slingui Recording extension for recording and saving classroom videos.",
   "scripts": {
     "build": "cross-env NODE_ENV=production node utils/build.js",
