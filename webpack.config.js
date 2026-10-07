@@ -313,9 +313,9 @@ const config = {
   },
   resolve: {
     alias: {
-      react: path.resolve("./node_modules/react"),
-      "react-dom": path.resolve("./node_modules/react-dom"),
-      "react/jsx-runtime": path.resolve("./node_modules/react/jsx-runtime"),
+      "react$": require.resolve("react"),
+      "react-dom$": require.resolve("react-dom"),
+      "react/jsx-runtime$": require.resolve("react/jsx-runtime"),
     },
     // Code extensions first; image/font extensions are only needed for explicit imports with extensions
     extensions: [".js", ".jsx", ".ts", ".tsx", ".css"],
